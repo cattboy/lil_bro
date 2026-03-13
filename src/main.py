@@ -63,7 +63,7 @@ def run_optimization_pipeline():
 
     print_header("Phase 3: Baseline Benchmark")
     cb = CinebenchOrchestrator()
-    baseline = cb.run_benchmark(run_all=True)
+    baseline = cb.run_benchmark(run_all=False)
     if baseline.get("status") == "success":
         print_success("Baseline Benchmark Complete!")
         print_info(f"Scores: {baseline.get('scores', {})}")
@@ -101,6 +101,7 @@ def run_optimization_pipeline():
     if final.get("status") == "success":
         print_success("Final Benchmark Complete!")
         print_info(f"Scores: {final.get('scores', {})}")
+        print_info(f"Scores: {baseline.get('scores', {})}")
         
     print_header("Optimization Pipeline Complete")
 

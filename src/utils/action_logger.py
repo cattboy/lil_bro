@@ -2,8 +2,8 @@ import os
 from datetime import datetime
 
 class ActionLogger:
-    def __init__(self, log_path: str = "C:\\Temp\\lil_bro_actions.log"):
-        self.log_path = log_path
+    def __init__(self, log_path: str = (repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))):
+        self.log_path = os.path.join(repo_root, "logs", "lil_bro_actions.log")
         
         # Ensure directory exists if not running on Linux dummy environment
         if not self.log_path.startswith('/'):

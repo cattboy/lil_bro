@@ -52,7 +52,7 @@ class CinebenchOrchestrator:
         if run_all:
             args.append("g_CinebenchAllTests=true")
         else:
-            args.append("g_CinebenchCpuXTest=true")
+            args.append("g_CinebenchCpu1Test=true")
             
         try:
             # On Windows, we need 'start /b /wait "parentconsole" ...' to capture CLI output.
