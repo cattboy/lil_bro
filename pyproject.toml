@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lil_bro"
+version = "0.1.0"
+description = "A local, privacy-first AI agent that optimizes your gaming PC for peak performance."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Antigravity", email = "antigravity@example.com" }
+]
+dependencies = [
+    "wmi>=1.5.1; sys_platform == 'win32'",
+    "psutil>=5.9.8",
+    "colorama>=0.4.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pyinstaller>=6.4.0",
+]
+
+[project.scripts]
+lil_bro = "src.main:main"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.uv]
+required-environments = [
+    "sys_platform == 'win32'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]

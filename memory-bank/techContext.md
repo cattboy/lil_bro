@@ -1,0 +1,46 @@
+# Tech Context
+
+## Technologies Used
+| Category | Technology | Version/Notes |
+|----------|-----------|---------------|
+| Language | Python 3 | Core orchestrator |
+| LLM Runtime | `llama-cpp-python` | Runs GGUF models in-process |
+| LLM Model | `Qwen2.5-Coder-7B-Instruct.Q4_K_M.gguf` | ~4.5 GB, bundled with installer |
+| System Info | WMI (`wmi` package) | Windows Management Instrumentation queries |
+| System Info | `dxdiag` | DirectX Diagnostic Tool (built-in) |
+| GPU Profiling | NvidiaProfileInspector | Bundled executable |
+| Thermal Monitoring | LibreHardwareMonitor | Bundled executable, open-source |
+| UI | Terminal / PyQt | Terminal-first, PyQt optional upgrade |
+| Bundler | PyInstaller | Compiles Python to standalone `.exe` |
+| Installer | Inno Setup or NSIS | Creates Windows installer package |
+
+## Development Setup
+- **OS:** Windows 10/11 (target platform)
+- **Python:** 3.11+ recommended
+- **IDE:** Any (VS Code recommended)
+- **Admin rights:** Required for testing system modification features
+
+## Technical Constraints
+- **Fully offline** — no cloud APIs, no telemetry, no network calls except driver version checks
+- **Single installer** — user must not need to install Python, Docker, Ollama, or any other dependency
+- **Admin required** — System Restore Point and many optimizations need elevated privileges
+- **GPU VRAM** — Qwen2.5-Coder-7B Q4 needs ~4.5 GB; system must have enough RAM/VRAM
+- **Windows only** — WMI, registry, dxdiag, PowerShell are all Windows-specific
+
+## Dependencies (Python Packages)
+- `llama-cpp-python` — local LLM inference
+- `wmi` — Windows Management Instrumentation
+- `psutil` — system resource monitoring
+- `pyinstaller` — bundling (dev dependency)
+- `pyqt5` or `pyqt6` — optional GUI (future phase)
+
+## External Tools (Bundled)
+- `LibreHardwareMonitor` — hardware sensor monitoring
+- `NvidiaProfileInspector` — NVIDIA profile import/export
+- `dxdiag` — system-provided DirectX diagnostics
+
+## Tool Usage Patterns
+- **PowerShell** — System Restore Point creation, registry modifications
+- **WMI** — querying `Win32_VideoController`, memory speed, display settings
+- **Registry** — checking Game Mode, EDID keys, refresh rate overrides
+- **Win32 API** — `GetMouseMovePointsEx` for mouse polling rate detection
