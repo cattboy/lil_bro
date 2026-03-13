@@ -40,7 +40,7 @@ def menu_loop():
         elif choice == '2':
             run_speed_up()
         elif choice == '3':
-            print_info("Shutting down lil_bro. Stay sweaty.")
+            print_info("shutting down, stay sweaty lil_bro.")
             sys.exit(0)
         else:
             print_error("Invalid choice. Try again.")
