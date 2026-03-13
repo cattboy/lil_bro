@@ -62,8 +62,8 @@ def run_speed_up():
     
     # 1. System Safety Create Restore Point
     try:
-        if not prompt_approval("This sequence will modify system settings and delete temp files. CREATE A SYSTEM RESTORE POINT first? (Highly Recommended)"):
-             print_warning("Proceeding AT YOUR OWN RISK without a restore point.")
+        if not prompt_approval("CREATE A SYSTEM RESTORE POINT first? (Highly Recommended), if you don't like what happens, just restore to this point and uninstall lil_bro."):
+             print_warning("Proceeding AT YOUR OWN RISK without a restore point. YOU WERE WARNED MY GUY")
         else:
             create_restore_point()
     except LilBroError as e:

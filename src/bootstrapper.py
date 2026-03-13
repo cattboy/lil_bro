@@ -17,11 +17,55 @@ def check_admin():
     if not is_admin():
         raise AdminRequiredError("lil_bro requires Administrator privileges to create restore points and modify system settings. Please restart the application as Administrator.")
 
-def create_restore_point(description: str = "Antigravity Pre-Tuning Backup"):
+def is_system_restore_enabled() -> bool:
+    """Checks if System Restore is enabled on the C: drive."""
+    ps_command = (
+        "$val = Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SystemRestore' -ErrorAction SilentlyContinue; "
+        "if ($val -ne $null -and $val.RPSessionInterval -eq 1) { Write-Output 'TRUE' } else { Write-Output 'FALSE' }"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell", "-Command", ps_command],
+            capture_output=True, text=True, check=False
+        )
+        return "TRUE" in result.stdout
+    except Exception:
+        return False
+
+def enable_system_restore() -> bool:
+    """Enables System Restore on the C: drive."""
+    ps_command = 'Enable-ComputerRestore -Drive "C:\\"'
+    try:
+        result = subprocess.run(
+            ["powershell", "-Command", ps_command],
+            capture_output=True, text=True, check=False
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+def create_restore_point(description: str = "LIL' BROS Pre-Tuning Backup"):
     """
     Creates a Windows System Restore point via PowerShell.
     Require human-in-the-loop approval before executing.
     """
+    if not is_system_restore_enabled():
+        print_error("System Restore is currently disabled.")
+        print_step("To manually enable: Click Start -> 'Create a restore point' -> Configure -> Turn on system protection.")
+        if prompt_approval("Would you like lil_bro to automatically enable System Restore on the C: drive now?"):
+            print_step("Enabling System Restore on C: drive...")
+            if enable_system_restore():
+                print_step_done(success=True)
+                print_success("System Restore enabled successfully.")
+            else:
+                print_step_done(success=False)
+                print_error("Failed to enable System Restore automatically (Administrative privileges may be required).")
+                print_error("Please enable it manually and try again.")
+                return False
+        else:
+            print_error("Cannot create a system restore point while System Protection is disabled.")
+            return False
+
     if not prompt_approval(f"Create a System Restore Point ('{description}')? This is highly recommended before any system changes."):
         print_error("System Restore Point creation bypassed by user.")
         return False
