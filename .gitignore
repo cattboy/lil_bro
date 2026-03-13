@@ -1,0 +1,11 @@
+/node-modules/*
+.env
+.clinerules
+
+/lil_bro.egg-info/*
+.venv
+/src/__pycache__/*
+**/__pycache__/*
+uv.lock
+
+# .gitignore
