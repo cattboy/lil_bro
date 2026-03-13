@@ -1,5 +1,6 @@
 import os
 from ..utils.formatting import print_step, print_step_done, print_info, print_warning
+from ..utils.action_logger import action_logger
 
 def scan_dir_size(path: str) -> tuple[int, int]:
     """Returns (total_bytes, file_count) for a given directory path."""
@@ -138,4 +139,8 @@ def clean_temp_folders(details: dict) -> tuple[int, int]:
     print_step_done(True)
     freed_formatted = _format_size(bytes_freed)
     print_info(f"Successfully cleaned {freed_formatted} across {files_deleted} files.")
+    
+    if files_deleted > 0:
+        action_logger.log_action("Temp Cleaner", f"Deleted {files_deleted} files, recovered {freed_formatted}", "Dirs: " + ", ".join(details.keys()))
+        
     return bytes_freed, files_deleted

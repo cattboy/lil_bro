@@ -2,6 +2,7 @@ import subprocess
 import re
 from ..utils.errors import ScannerError
 from ..utils.formatting import print_step, print_step_done, print_warning, print_success, print_error, print_info, prompt_approval
+from ..utils.action_logger import action_logger
 
 # Common Windows Power Plan GUIDs
 KNOWN_PLANS = {
@@ -95,6 +96,7 @@ def set_active_plan(guid: str) -> None:
             text=True,
             check=True
         )
+        action_logger.log_action("PowerCfg", f"Switched active power plan to {guid}", f"Execution: powercfg /setactive {guid}")
     except subprocess.CalledProcessError as e:
         raise ScannerError(f"Failed to activate power plan: {e.stderr}")
 
@@ -118,6 +120,7 @@ def create_high_performance_plan() -> tuple[str, str]:
              raise ScannerError(f"Could not parse duplicatescheme output: {result.stdout}")
         
         guid = match.group(1).lower()
+        action_logger.log_action("PowerCfg", f"Created new High Performance plan {guid}", f"Execution: powercfg /duplicatescheme {template_guid}")
         return guid, "High performance"
     except subprocess.CalledProcessError as e:
         raise ScannerError(f"Failed to create new power plan: {e.stderr}")

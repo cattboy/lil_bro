@@ -4,6 +4,7 @@ import sys
 import subprocess
 from .utils.errors import AdminRequiredError, RestorePointError
 from .utils.formatting import prompt_approval, print_step, print_step_done, print_error, print_success
+from .utils.action_logger import action_logger
 
 def is_admin() -> bool:
     """Check if the current process has administrative privileges."""
@@ -40,7 +41,10 @@ def enable_system_restore() -> bool:
             ["powershell", "-Command", ps_command],
             capture_output=True, text=True, check=False
         )
-        return result.returncode == 0
+        if result.returncode == 0:
+            action_logger.log_action("System Restore", "Enabled System Restore on C: drive", f"Execution: {ps_command}")
+            return True
+        return False
     except Exception:
         return False
 
@@ -87,6 +91,7 @@ def create_restore_point(description: str = "LIL' BROS Pre-Tuning Backup"):
             print_step_done(success=True)
             print_success(f"Restore point '{description}' created successfully.")
             print_success("If anything goes wrong, you can boot into Windows Recovery Environment and restore this snapshot.")
+            action_logger.log_action("System Restore", f"Created Restore Point: {description}", f"Execution: {ps_command}")
             return True
         else:
             print_step_done(success=False)
