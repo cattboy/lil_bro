@@ -5,19 +5,23 @@ from typing import Optional, Dict
 from ..utils.formatting import print_step, print_step_done, print_error, print_info, prompt_approval
 
 class CinebenchOrchestrator:
-    def __init__(self, executable_path: str = "C:\\Program Files\\Maxon Cinema 4D 2026\\Cinebench.exe"):
-        self.executable_path = executable_path
-        
+    def __init__(self, executable_path: Optional[str] = None):
+        # Default to the local bench-exe folder in the repo (CWD/lil_bro/src/bench-exe).
+        # This makes it easy to run a "dummy" Cinebench binary during development.
+        if executable_path:
+            self.executable_path = executable_path
+        else:
+            repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            self.executable_path = os.path.join(repo_root, "bench-exe", "Cinebench.exe")
+
     def is_installed(self) -> bool:
         """Checks if Cinebench is available at the expected path."""
-        # For development on Linux we fake this
-        if not self.executable_path.startswith('/'):
-            return os.path.exists(self.executable_path)
-        return True
-        
+        return os.path.exists(self.executable_path)
+
     def find_cinebench(self):
         """Attempts to locate Cinebench if not in default path."""
         common_paths = [
+            os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")), "bench-exe", "Cinebench.exe"),
             "C:\\Program Files\\Maxon Cinema 4D 2026\\Cinebench.exe",
             "C:\\Program Files\\Maxon Cinema 4D 2024\\Cinebench.exe",
             "C:\\Users\\Public\\Desktop\\Cinebench.exe"
