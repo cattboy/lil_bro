@@ -44,11 +44,41 @@ def scan_temp_folders() -> dict:
     
     # 3. Software Distribution Download (Windows Update cache)
     sw_dist = os.environ.get('WINDIR', 'C:\\Windows') + '\\SoftwareDistribution\\Download'
+
+    # 4. NVIDIA Shader Cache Locations taken from https://www.reddit.com/r/thedivision/comments/r0s4qx/comment/hlwbda8/
+    nv_cache = os.environ.get('PROGRAMDATA', 'C:\\ProgramData') + '\\NVIDIA Corporation\\NV_Cache'
+    nv_glcache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\NVIDIA\\GLCache'
+    nv_dxcache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\NVIDIA\\DXCache'
+    d3d_cache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\D3DSCache'
+    nv_computecache = os.environ.get('APPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Roaming') + '\\NVIDIA\\ComputeCache'
+    nv_perdriverversion_dxcache = os.environ.get('USERPROFILE', 'C:\\Users\\%USERNAME%') + '\\AppData\\LocalLow\\NVIDIA\\PerDriverVersion\\DXCache'
+    
+    # 5. AMD Shader Cache
+    amd_dxcache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\AMD\\DxCache'
+    amd_dx9cache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\AMD\\DX9Cache'
+    amd_dxcache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\AMD\\DxcCache'
+    amd_oglcache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\OglCache'
+
+    # 6. Intel Shader Cache
+    intel_d3dcache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\Microsoft\\D3DSCache'
+    
+    # 7. 
     
     targets = {
         "User Temp": user_temp,
         "Windows Temp": win_temp,
-        "Update Cache": sw_dist
+        "Update Cache": sw_dist,
+        "NVIDIA Shader Cache": nv_cache,
+        "NVIDIA GL Cache": nv_glcache,
+        "NVIDIA DX Cache": nv_dxcache,
+        "NVIDIA Compute Cache": nv_computecache,
+        "D3D Cache": d3d_cache,
+        "NVIDIA Per Driver Version DX Cache": nv_perdriverversion_dxcache,
+        "AMD DX Cache": amd_dxcache,
+        "AMD DX9 Cache": amd_dx9cache,
+        "AMD Dxc Cache": amd_dxcache,
+        "AMD Ogl Cache": amd_oglcache,
+        "Intel D3D Cache": intel_d3dcache
     }
     
     results = {}
