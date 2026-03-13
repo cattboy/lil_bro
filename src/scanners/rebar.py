@@ -1,23 +1,52 @@
 import wmi
+import subprocess
 from ..utils.errors import ScannerError
 from ..utils.formatting import print_step, print_step_done, print_warning, print_success, print_error, print_info
 
-def check_rebar() -> dict:
+def check_nvidia_rebar() -> tuple[bool | None, str]:
     """
-    Checks if Resizable BAR (Large Memory Range) is enabled
-    by scanning Win32_DeviceMemoryAddress for ranges > 256MB.
+    Checks ReBAR status using nvidia-smi.
+    Returns (True/False, message) or (None, error_message) if not applicable.
     """
-    print_step("Scanning Resizable BAR (ReBAR) Status")
+    try:
+        result = subprocess.run([
+            "nvidia-smi",
+            "--query-gpu=name,memory.total,bar1.memory.total,bar1.memory.used",
+            "--format=csv,noheader,nounits"
+        ], capture_output=True, text=True, check=True)
+        
+        # Parse first GPU
+        lines = result.stdout.strip().splitlines()
+        if not lines:
+            return None, "No output from nvidia-smi."
+            
+        name, vram, bar1_total, bar1_used = [x.strip() for x in lines[0].split(",")]
+        
+        # If BAR1 is > 256 MiB (often matches total VRAM or is very large)
+        if int(bar1_total) > 256:
+            return True, f"Resizable BAR is ENABLED ({name}, BAR1: {bar1_total} MiB)."
+        else:
+            return False, f"Resizable BAR is DISABLED ({name}, BAR1: {bar1_total} MiB)."
+            
+    except FileNotFoundError:
+        return None, "nvidia-smi not found."
+    except subprocess.CalledProcessError as e:
+        return None, f"nvidia-smi failed: {e.stderr}"
+    except Exception as e:
+        return None, f"nvidia-smi error: {str(e)}"
+
+def check_wmi_rebar() -> tuple[bool, float, str]:
+    """
+    Fallback method using WMI Win32_DeviceMemoryAddress to find large memory ranges.
+    Returns (is_enabled, max_size_mb, message)
+    """
+    rebar_enabled = False
+    max_size_mb = 0.0
     
     try:
         c = wmi.WMI()
-        # Look for any memory range mapped to a device that is > 256 MB
-        rebar_enabled = False
-        max_size_mb = 0
-        
         for mem in c.Win32_DeviceMemoryAddress():
             try:
-                # WMI returns these as strings
                 start = int(mem.StartingAddress)
                 end = int(mem.EndingAddress)
                 size_mb = (end - start + 1) / (1024 * 1024)
@@ -31,25 +60,66 @@ def check_rebar() -> dict:
             except (ValueError, TypeError, AttributeError):
                 continue
                 
+        if rebar_enabled:
+            return True, max_size_mb, f"Resizable BAR is ENABLED (Large Memory Range detected: {max_size_mb:.0f} MB)."
+        else:
+            return False, max_size_mb, "Resizable BAR appears to be DISABLED. No device memory range > 256 MB found."
+            
+    except Exception as e:
+        raise ScannerError(f"WMI error checking Resizable BAR: {e}")
+
+def check_rebar() -> dict:
+    """
+    Checks if Resizable BAR is enabled using multiple heuristic methods.
+    """
+    print_step("Scanning Resizable BAR (ReBAR) Status")
+    
+    # 1. Try NVIDIA SMI (Most precise for NVIDIA)
+    nv_status, nv_msg = check_nvidia_rebar()
+    if nv_status is not None:
         print_step_done(True)
         
         result = {
-            "rebar_enabled": rebar_enabled,
-            "max_range_mb": max_size_mb,
-            "status": "OK"
+            "rebar_enabled": nv_status,
+            "max_range_mb": 0.0,
+            "status": "OK" if nv_status else "WARNING",
+            "message": nv_msg
         }
         
-        if rebar_enabled:
-            result["message"] = f"Resizable BAR is ENABLED (Large Memory Range detected: {max_size_mb:.0f} MB)."
+        if nv_status:
+           print_success(result["message"])
+        else:
+           result["message"] = nv_msg + " Enable 'Above 4G Decoding' and 'Re-Size BAR Support' in your motherboard BIOS."
+           print_warning(result["message"])
+           
+        return result
+        
+    # 2. Try WMI Device Memory Address fallback
+    try:
+        wmi_status, wmi_max_mb, wmi_msg = check_wmi_rebar()
+        print_step_done(True)
+        
+        result = {
+            "rebar_enabled": wmi_status,
+            "max_range_mb": wmi_max_mb,
+            "status": "OK" if wmi_status else "WARNING",
+            "message": wmi_msg
+        }
+        
+        if wmi_status:
             print_success(result["message"])
         else:
-            result["status"] = "WARNING"
-            result["message"] = f"Resizable BAR appears to be DISABLED. No device memory range > 256 MB found. Enable 'Above 4G Decoding' and 'Re-Size BAR Support' in your motherboard BIOS for better gaming performance."
+            result["message"] = wmi_msg + " Enable 'Above 4G Decoding' and 'Re-Size BAR Support' in your motherboard BIOS."
             print_warning(result["message"])
             
         return result
         
-    except Exception as e:
+    except ScannerError as e:
         print_step_done(False)
-        print_error(f"Error checking Resizable BAR: {e}")
-        return {"rebar_enabled": False, "max_range_mb": 0, "status": "ERROR", "message": str(e)}
+        print_error(str(e))
+        return {
+            "rebar_enabled": False,
+            "max_range_mb": 0.0,
+            "status": "ERROR",
+            "message": str(e)
+        }
