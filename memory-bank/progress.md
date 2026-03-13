@@ -23,9 +23,9 @@
 #### Configuration Check ("Esports Check")
 - [x] Monitor refresh rate detection (WMI + EDID)
 - [x] Mouse polling rate detection (`GetMouseMovePointsEx`)
-- [ ] Windows Game Mode check (registry)
-- [ ] Power plan check (Ultimate Performance)
-- [ ] XMP/EXPO detection (WMI memory speed)
+- [x] Windows Game Mode check (registry)
+- [x] Power plan check (Ultimate Performance)
+- [x] XMP/EXPO detection (WMI memory speed)
 
 #### Speed Up My PC (ReAct Loop)
 - [ ] Benchmark orchestration (detect installed benchmarks, fallback CPU test)

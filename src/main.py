@@ -6,7 +6,11 @@ from src.bootstrapper import check_admin, create_restore_point
 from src.scanners.display import check_refresh_rate
 from src.scanners.mouse import check_polling_rate
 from src.scanners.temp_audit import scan_temp_folders
+from src.scanners.game_mode import check_game_mode
+from src.scanners.power_plan import check_power_plan
+from src.scanners.xmp_check import check_xmp_status
 from src.utils.formatting import print_header, print_info, print_error, prompt_approval
+from src.utils.errors import LilBroError, AdminRequiredError
 from src.utils.errors import LilBroError, AdminRequiredError
 
 def print_banner():
@@ -54,6 +58,18 @@ def run_esports_check():
     print(f"{Fore.YELLOW}PREPARE TO WIGGLE THE MOUSE FOR 3 SECONDS...{Style.RESET_ALL}")
     input("Press Enter to begin tracking...")
     check_polling_rate()
+    
+    # 3. Game Mode
+    print()
+    check_game_mode()
+    
+    # 4. Power Plan
+    print()
+    check_power_plan()
+    
+    # 5. XMP/EXPO
+    print()
+    check_xmp_status()
     
     print_header("Configuration Check Complete")
 

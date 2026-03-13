@@ -51,7 +51,7 @@ def create_restore_point(description: str = "LIL' BROS Pre-Tuning Backup"):
     """
     if not is_system_restore_enabled():
         print_error("System Restore is currently disabled.")
-        print_step("To manually enable: Click Start -> 'Create a restore point' -> Configure -> Turn on system protection.")
+        print_step("To manually enable: Click Start Button -> Type 'Create a restore point' -> Click Configure -> Turn on system protection. -> Click OK & OK -> Rerun script and try again")
         if prompt_approval("Would you like lil_bro to automatically enable System Restore on the C: drive now?"):
             print_step("Enabling System Restore on C: drive...")
             if enable_system_restore():

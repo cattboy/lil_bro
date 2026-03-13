@@ -9,12 +9,22 @@ def test_format_size():
 
 @patch('src.scanners.temp_audit.scan_dir_size')
 def test_scan_temp_folders(mock_scan_dir):
-    # Mocking (size_bytes, item_count)
-    # Simulate User Temp returning 50MB, others 0
+    # Mocking (size_bytes, item_count) for 14 targets
     mock_scan_dir.side_effect = [
         (1048576 * 50, 100), # User Temp
         (0, 0),             # Win Temp
-        (0, 0)              # Win Update
+        (0, 0),             # Update Cache
+        (0, 0),             # NVIDIA Shader Cache
+        (0, 0),             # NVIDIA GL Cache
+        (0, 0),             # NVIDIA DX Cache
+        (0, 0),             # NVIDIA Compute Cache
+        (0, 0),             # D3D Cache
+        (0, 0),             # NVIDIA Per Driver Version DX Cache
+        (0, 0),             # AMD DX Cache
+        (0, 0),             # AMD DX9 Cache
+        (0, 0),             # AMD Dxc Cache
+        (0, 0),             # AMD Ogl Cache
+        (0, 0),             # Intel D3D Cache
     ]
     
     result = scan_temp_folders()

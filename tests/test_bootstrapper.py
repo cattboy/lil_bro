@@ -19,9 +19,11 @@ def test_check_admin_raises(mock_is_admin):
     with pytest.raises(AdminRequiredError):
         check_admin()
 
+@patch('src.bootstrapper.is_system_restore_enabled')
 @patch('src.bootstrapper.prompt_approval')
 @patch('src.bootstrapper.subprocess.run')
-def test_create_restore_point_success(mock_run, mock_prompt):
+def test_create_restore_point_success(mock_run, mock_prompt, mock_is_enabled):
+    mock_is_enabled.return_value = True
     mock_prompt.return_value = True
     
     mock_result = MagicMock()
@@ -32,8 +34,10 @@ def test_create_restore_point_success(mock_run, mock_prompt):
     assert result is True
     mock_run.assert_called_once()
 
+@patch('src.bootstrapper.is_system_restore_enabled')
 @patch('src.bootstrapper.prompt_approval')
-def test_create_restore_point_rejected(mock_prompt):
+def test_create_restore_point_rejected(mock_prompt, mock_is_enabled):
+    mock_is_enabled.return_value = True
     mock_prompt.return_value = False
     result = create_restore_point()
     assert result is False

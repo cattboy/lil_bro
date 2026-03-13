@@ -9,13 +9,16 @@
 - Established project structure under `c:\1_Coding\1_lil_bro`
 
 ## Next Steps
-1. Scaffold the Python project structure inside `src/`
+1. Scaffold the Python project structure inside `src/` (Completed)
 2. Implement Phase 1 / Week 1 PoC:
-   - System Restore Point creation via PowerShell
-   - Monitor refresh rate detection (WMI + EDID)
-   - Mouse polling rate detection
-   - Temp folder size audit
-3. Set up `llama-cpp-python` integration (Week 2)
+   - System Restore Point creation via PowerShell (Completed)
+   - Monitor refresh rate and Mouse polling rate (Completed)
+   - 'Esports Check' modules: Game Mode, Power Plan, XMP/EXPO (Completed)
+   - Temp folder size audit (Completed)
+3. Proceed to "Speed Up My PC" (ReAct Loop) implementation:
+   - Benchmark orchestration
+   - Debloating engine
+4. Set up `llama-cpp-python` integration (Week 2)
 4. Integrate LibreHardwareMonitor for thermal readings (Week 3)
 5. Package with PyInstaller + Inno Setup (Week 4)
 
