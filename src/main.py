@@ -9,8 +9,8 @@ from src.scanners.temp_audit import scan_temp_folders
 from src.scanners.game_mode import check_game_mode
 from src.scanners.power_plan import check_power_plan
 from src.scanners.xmp_check import check_xmp_status
-from src.utils.formatting import print_header, print_info, print_error, prompt_approval
-from src.utils.errors import LilBroError, AdminRequiredError
+from src.scanners.rebar import check_rebar
+from src.utils.formatting import print_header, print_info, print_warning, print_error, prompt_approval
 from src.utils.errors import LilBroError, AdminRequiredError
 
 def print_banner():
@@ -70,6 +70,10 @@ def run_esports_check():
     # 5. XMP/EXPO
     print()
     check_xmp_status()
+    
+    # 6. Resizable BAR (ReBAR)
+    print()
+    check_rebar()
     
     print_header("Configuration Check Complete")
 

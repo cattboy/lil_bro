@@ -26,6 +26,7 @@
 - [x] Windows Game Mode check (registry)
 - [x] Power plan check (Ultimate Performance)
 - [x] XMP/EXPO detection (WMI memory speed)
+- [x] Resizable BAR (ReBAR) detection (WMI memory range)
 
 #### Speed Up My PC (ReAct Loop)
 - [ ] Benchmark orchestration (detect installed benchmarks, fallback CPU test)

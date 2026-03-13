@@ -13,7 +13,7 @@
 2. Implement Phase 1 / Week 1 PoC:
    - System Restore Point creation via PowerShell (Completed)
    - Monitor refresh rate and Mouse polling rate (Completed)
-   - 'Esports Check' modules: Game Mode, Power Plan, XMP/EXPO (Completed)
+   - 'Esports Check' modules: Game Mode, Power Plan, XMP/EXPO, ReBAR (Completed)
    - Temp folder size audit (Completed)
 3. Proceed to "Speed Up My PC" (ReAct Loop) implementation:
    - Benchmark orchestration
