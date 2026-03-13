@@ -30,3 +30,26 @@ def test_scan_temp_folders(mock_scan_dir):
     result = scan_temp_folders()
     assert result["total_bytes"] == 1048576 * 50
     assert result["details"]["User Temp"]["file_count"] == 100
+
+@patch('src.scanners.temp_audit.os.walk')
+@patch('src.scanners.temp_audit.os.path.exists')
+@patch('src.scanners.temp_audit.os.path.getsize')
+@patch('src.scanners.temp_audit.os.remove')
+def test_clean_temp_folders(mock_remove, mock_getsize, mock_exists, mock_walk):
+    from src.scanners.temp_audit import clean_temp_folders
+    
+    mock_exists.return_value = True
+    # Simulate os.walk yielding one file
+    mock_walk.return_value = [('/fake/dir', [], ['file1.tmp'])]
+    mock_getsize.return_value = 1024 # 1 KB per file
+    
+    details = {
+        "User Temp": {"path": "/fake/dir", "size_bytes": 1024, "file_count": 1},
+        "Win Temp": {"path": "/fake/win", "size_bytes": 0, "file_count": 0}
+    }
+    
+    bytes_freed, files_deleted = clean_temp_folders(details)
+    
+    assert bytes_freed == 1024
+    assert files_deleted == 1
+    mock_remove.assert_called_once_with('/fake/dir/file1.tmp')

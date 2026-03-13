@@ -94,8 +94,9 @@ def run_speed_up():
     if results['total_bytes'] > 0:
         MB = results['total_bytes'] / (1024*1024)
         print()
-        if prompt_approval(f"Would you like me to clean {MB:.2f} MB of temp files? (Not implemented in Week 1 PoC)"):
-            print_info("Cleaning feature will be implemented in a future phase!")
+        if prompt_approval(f"Would you like me to clean {MB:.2f} MB of temp files?"):
+            from src.scanners.temp_audit import clean_temp_folders
+            clean_temp_folders(results['details'])
             
     print_header("Speed Up Sequence Complete")
 

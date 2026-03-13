@@ -104,3 +104,38 @@ def scan_temp_folders() -> dict:
             print_info(f"  - {name}: {_format_size(data['size_bytes'])} ({data['file_count']} files) -> {data['path']}")
             
     return {"total_bytes": total_bloat_bytes, "details": results}
+
+def clean_temp_folders(details: dict) -> tuple[int, int]:
+    """
+    Deletes files from the directories specified in the scan details.
+    Returns (bytes_freed, files_deleted).
+    """
+    print_step("Cleaning Temporary Folders")
+    bytes_freed = 0
+    files_deleted = 0
+    
+    for name, data in details.items():
+        if data['size_bytes'] == 0:
+            continue
+            
+        path = data['path']
+        if not os.path.exists(path):
+            continue
+            
+        for dirpath, _, filenames in os.walk(path):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                if not os.path.islink(fp):
+                    try:
+                        size = os.path.getsize(fp)
+                        os.remove(fp)
+                        bytes_freed += size
+                        files_deleted += 1
+                    except (OSError, FileNotFoundError):
+                        # Skip files we cannot access or delete
+                        continue
+                        
+    print_step_done(True)
+    freed_formatted = _format_size(bytes_freed)
+    print_info(f"Successfully cleaned {freed_formatted} across {files_deleted} files.")
+    return bytes_freed, files_deleted
