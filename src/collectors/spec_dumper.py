@@ -1,3 +1,4 @@
+from logging import root
 import platform
 import subprocess
 import time
@@ -69,25 +70,28 @@ def get_nvidia_smi() -> list | str:
     try:
         result = subprocess.run([
             "nvidia-smi",
-            "--query-gpu=name,memory.total,bar1.memory.total,temperature.gpu,driver_version",
-            "--format=csv,noheader,nounits"
-        ], capture_output=True, text=True, check=True)
-        
+            "-x",
+            "-q"
+        ], capture_output=True, text=True)
+
+        root = ET.fromstring(result.stdout)
         rows = []
-        for line in result.stdout.strip().splitlines():
-            parts = [x.strip() for x in line.split(",")]
-            if len(parts) >= 5:
-                n, vram, bar1, temp, drv = parts[:5]
-                # If BAR1 is extremely large (> 256MB usually), ReBAR is likely enabled
-                rebar_enabled = "Enabled" if bar1.isdigit() and int(bar1) > 256 else "Disabled"
-                
-                rows.append({
-                    "GPU": n, 
-                    "VRAM_MiB": vram, 
-                    "BAR1_MiB": bar1,
-                    "Temp_C": temp, 
-                    "Driver": drv,
-                    "ReBAR": rebar_enabled
+        for gpu in root.findall("gpu"):
+            n = gpu.findtext("product_name")
+            drv = gpu.findtext("driver_version")
+            bar1_used = gpu.findtext("bar1_memory_usage/used")
+            pcie_max = gpu.findtext("pci/link_widths/max_link_width")
+            pcie_current = gpu.findtext("pci/link_widths/current_link_width")
+            # If BAR1 is extremely large (> 256MB usually), ReBAR is likely enabled
+            rebar_enabled = "Enabled" if bar1_used.isdigit() and int(bar1_used) > 256 else "Disabled"
+            
+            rows.append({
+                "GPU": n,
+                "Driver": drv, 
+                "BAR1 Used MiB": bar1_used,
+                "Link Width Max": pcie_max, 
+                "Link Width Current": pcie_current, 
+                "ReBAR": rebar_enabled
                 })
         return rows
     except FileNotFoundError:

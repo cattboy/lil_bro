@@ -47,10 +47,7 @@ def menu_loop():
 def run_optimization_pipeline():
     print_header("Phase 1: Bootstrapping & Safety")
     try:
-        if not prompt_approval("CREATE A SYSTEM RESTORE POINT first? (Highly Recommended)"):
-             print_warning("Proceeding AT YOUR OWN RISK without a restore point.")
-        else:
-            create_restore_point()
+        create_restore_point()
     except LilBroError as e:
         print_error(str(e))
         if not prompt_approval("Restore point creation failed. Continue anyway?"):
