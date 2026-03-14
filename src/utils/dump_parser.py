@@ -3,7 +3,7 @@ from logging import root
 
 def cleanup(input_path: str = "full_specs.json") -> str:
     """
-    Reads the json file from spec_dummper, starts to save only the relevant info for the scanners, and saves a new cleaned json file that the scanners will read from.
+    Reads the json file from spec_dummper, starts to save only the relevant info for the scanners to read.
     """
     ## TO DO
 

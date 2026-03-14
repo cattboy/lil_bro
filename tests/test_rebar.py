@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from src.scanners.rebar import check_rebar, check_nvidia_rebar, check_wmi_rebar
+from src.agent_tools.rebar import check_rebar, check_nvidia_rebar, check_wmi_rebar
 
 @patch('src.scanners.rebar.subprocess.run')
 def test_check_nvidia_rebar_enabled(mock_run):

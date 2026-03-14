@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from src.scanners.mouse import check_polling_rate
+from src.agent_tools.mouse import check_polling_rate
 
 @patch('src.scanners.mouse._fallback_measure_rate')
 def test_check_polling_rate_optimal(mock_measure):

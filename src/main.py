@@ -3,13 +3,13 @@ import colorama
 from colorama import Fore, Style
 
 from src.bootstrapper import check_admin, create_restore_point
-from src.scanners.display import check_refresh_rate
-from src.scanners.mouse import check_polling_rate
-from src.scanners.temp_audit import scan_temp_folders, clean_temp_folders
-from src.scanners.game_mode import check_game_mode
-from src.scanners.power_plan import check_power_plan
-from src.scanners.xmp_check import check_xmp_status
-from src.scanners.rebar import check_rebar
+from src.agent_tools.display import check_refresh_rate
+from src.agent_tools.mouse import check_polling_rate
+from src.agent_tools.temp_audit import scan_temp_folders, clean_temp_folders
+from src.agent_tools.game_mode import check_game_mode
+from src.agent_tools.power_plan import check_power_plan
+from src.agent_tools.xmp_check import check_xmp_status
+from src.agent_tools.rebar import check_rebar
 from src.collectors.spec_dumper import dump_system_specs
 from src.benchmarks.cinebench import CinebenchOrchestrator
 from src.utils.formatting import print_header, print_info, print_warning, print_error, print_success, prompt_approval

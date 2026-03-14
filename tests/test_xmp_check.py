@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from src.scanners.xmp_check import get_memory_speeds, check_xmp_status
+from src.agent_tools.xmp_check import get_memory_speeds, check_xmp_status
 from src.utils.errors import ScannerError
 
 @patch('src.scanners.xmp_check.wmi.WMI')

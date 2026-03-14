@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch
-from src.scanners.temp_audit import _format_size, scan_temp_folders
+from src.agent_tools.temp_audit import _format_size, scan_temp_folders
 
 def test_format_size():
     assert _format_size(1048576) == "1.00 MB" # 1 MB
@@ -36,7 +36,7 @@ def test_scan_temp_folders(mock_scan_dir):
 @patch('src.scanners.temp_audit.os.path.getsize')
 @patch('src.scanners.temp_audit.os.remove')
 def test_clean_temp_folders(mock_remove, mock_getsize, mock_exists, mock_walk):
-    from src.scanners.temp_audit import clean_temp_folders
+    from src.agent_tools.temp_audit import clean_temp_folders
     
     mock_exists.return_value = True
     # Simulate os.walk yielding one file

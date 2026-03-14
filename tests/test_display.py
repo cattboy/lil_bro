@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from src.scanners.display import get_current_refresh_rate, check_refresh_rate
+from src.agent_tools.display import get_current_refresh_rate, check_refresh_rate
 from src.utils.errors import ScannerError
 
 @patch('src.scanners.display.wmi.WMI')

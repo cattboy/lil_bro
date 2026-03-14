@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from src.scanners.game_mode import get_game_mode_status, check_game_mode
+from src.agent_tools.game_mode import get_game_mode_status, check_game_mode
 from src.utils.errors import ScannerError
 
 @patch('src.scanners.game_mode.winreg')

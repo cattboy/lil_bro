@@ -1,7 +1,7 @@
 import pytest
 import subprocess
 from unittest.mock import patch, MagicMock
-from src.scanners.power_plan import (
+from src.agent_tools.power_plan import (
     get_active_power_plan, 
     check_power_plan, 
     list_available_plans, 
