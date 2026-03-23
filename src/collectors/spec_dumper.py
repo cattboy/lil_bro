@@ -1,4 +1,6 @@
-from pathlib import Path
+import json
+from datetime import datetime
+
 from .sub.amd_smi_dumper import get_amd_smi
 from .sub.dxdiag_dumper import get_dxdiag
 from .sub.libra_hm_dumper import get_lhm_data
@@ -8,12 +10,8 @@ from .sub.wmi_dumper import get_wmi_specs
 from ..agent_tools.power_plan import get_active_power_plan
 from ..agent_tools.game_mode import get_game_mode_status
 from ..agent_tools.temp_audit import get_temp_sizes
-import json
-from datetime import datetime
 from ..utils.formatting import print_step, print_step_done, print_error, print_warning
-
-# Stable output path: <project_root>/logs/full_specs.json
-_DEFAULT_OUTPUT = Path(__file__).parent.parent.parent / "logs" / "full_specs.json"
+from ..utils.paths import get_specs_path
 
 
 def _collect_power_plan() -> dict:
@@ -37,8 +35,7 @@ def dump_system_specs(output_path: str | None = None) -> str:
     Defaults to <project_root>/logs/full_specs.json.
     """
     if output_path is None:
-        output_path = str(_DEFAULT_OUTPUT)
-        _DEFAULT_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+        output_path = str(get_specs_path())
 
     print_step("Collecting Unified System Specifications")
 

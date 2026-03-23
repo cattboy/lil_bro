@@ -1,8 +1,11 @@
 import pytest
 from src.agent_tools.thermal_guidance import (
     analyze_thermals,
+    check_idle_thermals,
     CPU_WARN_THRESHOLD,
     GPU_WARN_THRESHOLD,
+    CPU_IDLE_WARN,
+    GPU_IDLE_WARN,
 )
 
 
@@ -143,3 +146,81 @@ def test_finding_dict_structure():
     assert "message" in result
     assert "can_auto_fix" in result
     assert result["can_auto_fix"] is False  # thermal issues are never auto-fixable
+
+
+# ── Pre-benchmark idle thermal check ─────────────────────────────────────────
+
+def test_idle_check_no_data():
+    """Empty temps dict → safe (no data to judge)."""
+    result = check_idle_thermals({})
+    assert result["safe"] is True
+    assert result["cpu_temp"] is None
+    assert result["gpu_temp"] is None
+
+
+def test_idle_check_cool_system():
+    """Temps well below idle thresholds → safe."""
+    temps = {"Intel Core i7 > CPU Package": 45.0, "NVIDIA RTX 3080 > GPU Core": 38.0}
+    result = check_idle_thermals(temps)
+    assert result["safe"] is True
+    assert "safe to benchmark" in result["message"].lower()
+
+
+def test_idle_check_hot_cpu():
+    """CPU above idle threshold → not safe."""
+    temps = {"Intel Core i7 > CPU Package": 78.0, "NVIDIA RTX 3080 > GPU Core": 40.0}
+    result = check_idle_thermals(temps)
+    assert result["safe"] is False
+    assert result["cpu_temp"] == 78.0
+    assert "78°C" in result["message"]
+    assert "cool down" in result["message"].lower()
+
+
+def test_idle_check_hot_gpu():
+    """GPU above idle threshold → not safe."""
+    temps = {"Intel Core i7 > CPU Package": 45.0, "NVIDIA RTX 3080 > GPU Core": 82.0}
+    result = check_idle_thermals(temps)
+    assert result["safe"] is False
+    assert result["gpu_temp"] == 82.0
+    assert "82°C" in result["message"]
+
+
+def test_idle_check_both_hot():
+    """Both CPU and GPU above idle thresholds → not safe, both mentioned."""
+    temps = {"Intel Core i7 > CPU Package": 76.0, "NVIDIA RTX 3080 > GPU Core": 81.0}
+    result = check_idle_thermals(temps)
+    assert result["safe"] is False
+    assert "76°C" in result["message"]
+    assert "81°C" in result["message"]
+
+
+def test_idle_check_exactly_at_threshold():
+    """Exactly at idle threshold → not safe (≥ comparison)."""
+    temps = {"Intel Core i7 > CPU Package": CPU_IDLE_WARN}
+    result = check_idle_thermals(temps)
+    assert result["safe"] is False
+
+
+def test_idle_check_just_below_threshold():
+    """Just below idle threshold → safe."""
+    temps = {"Intel Core i7 > CPU Package": CPU_IDLE_WARN - 0.1}
+    result = check_idle_thermals(temps)
+    assert result["safe"] is True
+
+
+def test_idle_check_explicit_overrides():
+    """Explicit cpu_temp/gpu_temp override the derived values."""
+    temps = {"Intel Core i7 > CPU Package": 45.0}  # cool in the dict
+    result = check_idle_thermals(temps, cpu_temp=80.0, gpu_temp=85.0)
+    assert result["safe"] is False
+    assert result["cpu_temp"] == 80.0
+    assert result["gpu_temp"] == 85.0
+
+
+def test_idle_check_return_structure():
+    """Verify all expected keys are present."""
+    result = check_idle_thermals({"CPU Package": 50.0})
+    assert "safe" in result
+    assert "cpu_temp" in result
+    assert "gpu_temp" in result
+    assert "message" in result

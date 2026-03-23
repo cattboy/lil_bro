@@ -29,7 +29,8 @@
 - [x] Resizable BAR (ReBAR) detection (WMI memory range)
 
 #### Speed Up My PC (ReAct Loop)
-- [ ] Benchmark orchestration (detect installed benchmarks, fallback CPU test)
+- [x] Benchmark orchestration — BenchmarkRunner with Cinebench auto-detection (12 paths) + CPU stress fallback (multiprocessing)
+- [x] Pre-benchmark thermal safety gate — idle temp check before stressing system (CPU ≥75°C / GPU ≥80°C = warning)
 - [ ] Debloating engine (temp cleanup, NVIDIA profile tweaks, service disabling)
 - [x] Thermal verification & guidance (LibreHardwareMonitor integration)
 
@@ -45,7 +46,7 @@
 - [ ] Friendly LLM-generated explanations
 
 ## Current Status
-🟢 **Week 3 in progress** — LHM sidecar, thermal monitor, thermal guidance all implemented. 112 tests passing
+🟢 **Week 3 complete** — LHM sidecar, thermal monitor, thermal guidance, benchmark orchestration, pre-benchmark safety gate. 150 tests passing
 
 ## Known Issues
 - llama-cpp-python not yet tested with PyInstaller bundling (hard gate deferred to RTX 3080 dev machine)
@@ -61,3 +62,6 @@
 | 2026-03-23 | NvidiaProfileInspector deferred | No v1 auto-fix requires GPU profile changes |
 | 2026-03-23 | Staged model download | Installer ships without GGUF; first-run download from HuggingFace |
 | 2026-03-23 | LHM sidecar + thermal monitoring | Full pipeline: sidecar launch, background temp polling during Cinebench, thermal guidance in Phase 4 |
+| 2026-03-23 | Pre-benchmark thermal gate | Idle temp check before benchmark; CPU ≥75°C / GPU ≥80°C = warn and offer to skip |
+| 2026-03-23 | BenchmarkRunner replaces CinebenchOrchestrator | Cinebench auto-detect (12 paths) + CPU stress fallback via multiprocessing when not installed |
+| 2026-03-23 | RawValue sensor parsing | LHM JSON parser prefers numeric RawValue over string Value — more robust across locales |

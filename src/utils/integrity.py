@@ -1,0 +1,68 @@
+"""
+SHA-256 file integrity verification for frozen builds.
+
+Reads ``integrity.json`` from next to the .exe and verifies the exe hash.
+Only runs when frozen (PyInstaller ``onefile`` mode).  Silently returns
+True in dev mode or when no manifest is present.
+"""
+
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+
+def _get_exe_dir() -> Path:
+    """Return the directory containing the .exe (frozen) or project root (dev)."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent.parent.parent
+
+
+def verify_integrity(silent_pass: bool = True) -> bool:
+    """
+    Verify the executable hash against the build manifest.
+
+    Returns True if verification passes or is skipped.
+    Prints warnings for mismatches but never blocks execution.
+    """
+    if not getattr(sys, "frozen", False):
+        return True  # Dev mode — skip
+
+    exe_dir = _get_exe_dir()
+    manifest_path = exe_dir / "integrity.json"
+
+    if not manifest_path.exists():
+        return True  # No manifest — skip
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception:
+        return True  # Corrupted manifest — skip rather than block
+
+    expected_hash = manifest.get("exe_hash")
+    if not expected_hash:
+        return True
+
+    # Hash the .exe itself
+    exe_path = Path(sys.executable)
+    try:
+        actual = hashlib.sha256(exe_path.read_bytes()).hexdigest()
+    except Exception:
+        return True  # Can't read own exe — skip
+
+    if actual != expected_hash:
+        try:
+            from .formatting import print_warning
+        except ImportError:
+            print_warning = lambda m: print(f"WARNING: {m}")
+
+        print_warning(
+            "Integrity check failed — lil_bro.exe may have been modified or corrupted."
+        )
+        print_warning(
+            f"  Expected: {expected_hash[:16]}...  Got: {actual[:16]}..."
+        )
+        return False
+
+    return True

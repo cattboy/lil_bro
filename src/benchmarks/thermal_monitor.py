@@ -3,6 +3,8 @@ Background thermal monitor — polls LibreHardwareMonitor during benchmarks.
 
 Runs a daemon thread that samples CPU/GPU temperatures at a fixed interval,
 tracking peak values. Start before a benchmark, stop after, then read peaks.
+
+Also provides a single-shot ``fetch_snapshot()`` for pre-benchmark idle checks.
 """
 
 import json
@@ -16,11 +18,42 @@ from src.collectors.sub.lhm_sidecar import LHM_URL
 _DEFAULT_POLL_INTERVAL = 1.0  # seconds between temp samples
 
 
+def _extract_sensor_temp(child: dict) -> Optional[float]:
+    """
+    Extract a temperature value from an LHM sensor node.
+
+    Prefers the numeric ``RawValue`` field (added by LHM's HttpServer for
+    external consumers) over string-parsing the formatted ``Value`` field.
+    Returns None if the sensor is inactive or unparseable.
+    """
+    # Prefer RawValue — a plain float, no locale issues
+    raw = child.get("RawValue")
+    if raw is not None:
+        try:
+            val = float(raw)
+            # LHM uses 0.0 or very small negatives for inactive sensors
+            if val > 0.0:
+                return val
+        except (ValueError, TypeError):
+            pass
+
+    # Fallback: parse the formatted Value string ("72.3 °C", "- °C", "72,5 °C")
+    value_str = child.get("Value", "")
+    try:
+        cleaned = value_str.replace("°C", "").replace(",", ".").strip()
+        if cleaned and cleaned != "-":
+            return float(cleaned)
+    except (ValueError, AttributeError):
+        pass
+
+    return None
+
+
 def _parse_temps_from_lhm(data: dict) -> dict[str, float]:
     """
     Recursively walk the LHM JSON tree and extract all temperature sensor values.
 
-    Returns e.g. {"CPU Package": 72.0, "GPU Core": 65.5, "CPU Core #1": 71.0, ...}
+    Returns e.g. ``{"Intel Core i7 > CPU Package": 72.0, ...}``
     """
     temps: dict[str, float] = {}
 
@@ -35,20 +68,15 @@ def _parse_temps_from_lhm(data: dict) -> dict[str, float]:
         label = node.get("Text", "")
         children = node.get("Children", [])
 
-        # LHM groups sensors under a "Temperatures" node
+        # LHM groups sensors under a "Temperatures" type node
         if label == "Temperatures":
             for child in children:
                 name = child.get("Text", "Unknown")
-                value_str = child.get("Value", "")
-                try:
-                    # Values look like "72.3 °C" or "- °C" when inactive
-                    cleaned = value_str.replace("°C", "").replace(",", ".").strip()
-                    if cleaned and cleaned != "-":
-                        temps[f"{parent_label}{name}"] = float(cleaned)
-                except (ValueError, AttributeError):
-                    pass
+                temp = _extract_sensor_temp(child)
+                if temp is not None:
+                    temps[f"{parent_label}{name}"] = temp
         else:
-            # Recurse into children, passing the hardware component label
+            # Recurse into children, carrying the hardware component label
             next_label = f"{label} > " if label else parent_label
             for child in children:
                 _walk(child, next_label)
@@ -66,6 +94,16 @@ def _fetch_temps() -> dict[str, float]:
             return _parse_temps_from_lhm(data)
     except Exception:
         return {}
+
+
+def fetch_snapshot() -> dict[str, float]:
+    """
+    Take a single thermal reading from LHM.
+
+    Public entry point for one-shot checks (e.g. pre-benchmark idle temp
+    verification).  Returns ``{}`` if LHM is unreachable.
+    """
+    return _fetch_temps()
 
 
 class ThermalMonitor:
