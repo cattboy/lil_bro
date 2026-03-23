@@ -8,7 +8,10 @@
       "Bash(find /c/1_Coding/2026/lil_bro/docs -type f -name *.md)",
       "Bash(source .venv/Scripts/activate)",
       "Bash(python -m pytest tests/ -v)",
-      "Bash(.venv/Scripts/python -m pytest tests/ -v --tb=short)"
+      "Bash(.venv/Scripts/python -m pytest tests/ -v --tb=short)",
+      "Bash(.venv/Scripts/activate)",
+      "Bash(python -m pytest tests/test_game_mode.py tests/test_thermal_guidance.py tests/test_display.py tests/test_spec_dumper.py tests/test_temp_audit.py tests/test_mouse.py tests/test_progress_bar.py -v)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -v)"
     ]
   }
 }
