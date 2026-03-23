@@ -18,6 +18,10 @@
 
 ### Documentation
 - **Always save progress docs, notes, plans, and reports into `./docs/`** (project root `docs/` folder). Do not scatter docs elsewhere.
+- **`docs/vendor-supplied/` contains system-specific reference docs** — consult these before modifying the relevant collectors:
+  - `nvidia_smi.txt` — nvidia-smi XML output schema; reference for `get_nvidia_smi()` in `spec_dumper.py`
+  - `ami_smi.txt` — AMD SMI output schema; reference for `get_amd_smi()` in `spec_dumper.py`
+  - `cinebench.md` — Cinebench CLI flags and result file format; reference for `benchmarks/cinebench.py`
 
 ### Safety & User Trust
 - Every system modification must call `prompt_approval()` before executing — no silent changes, ever.
