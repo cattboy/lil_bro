@@ -7,7 +7,7 @@ def test_format_size():
     assert _format_size(1048576 * 500) == "500.00 MB" # 500 MB
     assert _format_size(1073741824 * 2) == "2.00 GB" # 2 GB
 
-@patch('src.scanners.temp_audit.scan_dir_size')
+@patch('src.agent_tools.temp_audit.scan_dir_size')
 def test_scan_temp_folders(mock_scan_dir):
     # Mocking (size_bytes, item_count) for 14 targets
     mock_scan_dir.side_effect = [
@@ -31,10 +31,10 @@ def test_scan_temp_folders(mock_scan_dir):
     assert result["total_bytes"] == 1048576 * 50
     assert result["details"]["User Temp"]["file_count"] == 100
 
-@patch('src.scanners.temp_audit.os.walk')
-@patch('src.scanners.temp_audit.os.path.exists')
-@patch('src.scanners.temp_audit.os.path.getsize')
-@patch('src.scanners.temp_audit.os.remove')
+@patch('src.agent_tools.temp_audit.os.walk')
+@patch('src.agent_tools.temp_audit.os.path.exists')
+@patch('src.agent_tools.temp_audit.os.path.getsize')
+@patch('src.agent_tools.temp_audit.os.remove')
 def test_clean_temp_folders(mock_remove, mock_getsize, mock_exists, mock_walk):
     from src.agent_tools.temp_audit import clean_temp_folders
     
