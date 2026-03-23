@@ -10,3 +10,4 @@ uv.lock
 
 # .gitignore
 .claude/skills/gstack/
+.claude/skills/browse/dist/
