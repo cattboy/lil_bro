@@ -1,20 +1,14 @@
-import os
 from datetime import datetime
+
+from .paths import get_action_log_path
+
 
 class ActionLogger:
     def __init__(self, log_path: str = None):
         if log_path:
             self.log_path = log_path
         else:
-            repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-            self.log_path = os.path.join(repo_root, "logs", "lil_bro_actions.log")
-
-        log_dir = os.path.dirname(self.log_path)
-        if log_dir:
-            try:
-                os.makedirs(log_dir, exist_ok=True)
-            except Exception:
-                pass
+            self.log_path = str(get_action_log_path())
                     
     def log_action(self, component: str, action: str, details: str = ""):
         """

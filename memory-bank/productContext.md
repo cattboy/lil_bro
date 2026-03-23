@@ -12,7 +12,7 @@ Most gamers own powerful hardware but unknowingly leave performance on the table
 - **Driver staleness** — outdated GPU drivers missing critical gaming optimizations
 
 ## How It Should Work
-1. User downloads and runs a single `.exe` installer — no Python, Docker, or Ollama required
+1. User downloads and runs a single portable `.exe` — no installer, no Python, Docker, or Ollama required
 2. App requests admin privileges, creates a System Restore Point for safety
 3. Performs a deep system scan (dxdiag, NVIDIA profile, thermal baselines)
 4. Presents two pathways:
@@ -25,4 +25,4 @@ Most gamers own powerful hardware but unknowingly leave performance on the table
 - **Safety first** — System Restore Point before any changes; clear rollback instructions
 - **Approachable** — friendly language, clear explanations, no jargon walls
 - **Transparent** — every proposed change is explained and requires user approval
-- **One-click simplicity** — single installer, single executable, no dependencies
+- **One-click simplicity** — single portable .exe, no installer, no dependencies

@@ -1,0 +1,79 @@
+# -*- mode: python ; coding: utf-8 -*-
+"""
+lil_bro.spec — PyInstaller build specification.
+
+Produces a single portable .exe (onefile mode).
+Run via: python -m PyInstaller lil_bro.spec --noconfirm
+Or use: python build.py
+"""
+
+import os
+import sys
+
+block_cipher = None
+ROOT = os.path.abspath('.')
+
+a = Analysis(
+    [os.path.join(ROOT, 'src', 'main.py')],
+    pathex=[ROOT],
+    binaries=[],
+    datas=[],
+    hiddenimports=[
+        # WMI + pywin32 COM machinery (PyInstaller misses the COM dispatch)
+        'wmi',
+        'win32com',
+        'win32com.client',
+        'pythoncom',
+        'pywintypes',
+        # colorama
+        'colorama',
+        # psutil
+        'psutil',
+        # multiprocessing on Windows — Pool needs these explicitly
+        'multiprocessing',
+        'multiprocessing.pool',
+        'multiprocessing.reduction',
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[
+        # Dev/test tools — not needed in the build
+        'pytest',
+        'unittest',
+        'tkinter',
+        '_tkinter',
+        'PIL',
+    ],
+    noarchive=False,
+)
+
+# Conditionally include llama_cpp if installed at build time
+try:
+    import llama_cpp
+    a.hiddenimports.append('llama_cpp')
+except ImportError:
+    pass
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name='lil_bro',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,          # UPX triggers antivirus false positives
+    console=True,       # Terminal app — keep the console window
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    uac_admin=True,     # Embeds requireAdministrator manifest
+    icon=None,          # TODO: Add icon when ready
+)

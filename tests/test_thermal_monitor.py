@@ -5,7 +5,9 @@ from unittest.mock import patch, MagicMock
 from src.benchmarks.thermal_monitor import (
     ThermalMonitor,
     _parse_temps_from_lhm,
+    _extract_sensor_temp,
     _fetch_temps,
+    fetch_snapshot,
 )
 
 
@@ -163,3 +165,93 @@ def test_monitor_start_stop_idempotent():
     monitor.start()  # should be a no-op
     monitor.stop()
     monitor.stop()  # should not raise
+
+
+# ── _extract_sensor_temp tests ────────────────────────────────────────────────
+
+def test_extract_raw_value_preferred():
+    """RawValue (numeric) should be used over the formatted Value string."""
+    child = {"Text": "CPU Package", "Value": "72.3 °C", "RawValue": 72.3}
+    assert _extract_sensor_temp(child) == pytest.approx(72.3)
+
+
+def test_extract_raw_value_as_string():
+    """RawValue might arrive as a string — should still parse."""
+    child = {"Text": "CPU Package", "Value": "72.3 °C", "RawValue": "72.3"}
+    assert _extract_sensor_temp(child) == pytest.approx(72.3)
+
+
+def test_extract_fallback_to_value_string():
+    """If RawValue is missing, fall back to parsing the Value string."""
+    child = {"Text": "CPU Package", "Value": "72.3 °C"}
+    assert _extract_sensor_temp(child) == pytest.approx(72.3)
+
+
+def test_extract_raw_value_zero_uses_fallback():
+    """RawValue of 0.0 (inactive sensor) → fall back to Value string."""
+    child = {"Text": "CPU Package", "Value": "72.3 °C", "RawValue": 0.0}
+    assert _extract_sensor_temp(child) == pytest.approx(72.3)
+
+
+def test_extract_inactive_sensor():
+    """Both RawValue=0.0 and Value='- °C' → None."""
+    child = {"Text": "CPU Core #2", "Value": "- °C", "RawValue": 0.0}
+    assert _extract_sensor_temp(child) is None
+
+
+def test_extract_inactive_no_raw():
+    """Value='- °C', no RawValue → None."""
+    child = {"Text": "CPU Core #2", "Value": "- °C"}
+    assert _extract_sensor_temp(child) is None
+
+
+def test_extract_comma_decimal_fallback():
+    """Locale with comma decimal separator in Value, no RawValue."""
+    child = {"Text": "CPU Package", "Value": "72,5 °C"}
+    assert _extract_sensor_temp(child) == pytest.approx(72.5)
+
+
+def test_extract_empty_child():
+    """Empty dict → None."""
+    assert _extract_sensor_temp({}) is None
+
+
+# ── _parse_temps_from_lhm with RawValue ──────────────────────────────────────
+
+def test_parse_temps_prefers_raw_value():
+    """Parser should use RawValue when available in the sensor tree."""
+    tree = {
+        "Text": "Sensor",
+        "Children": [
+            {
+                "Text": "Intel Core i7",
+                "Children": [
+                    {
+                        "Text": "Temperatures",
+                        "Children": [
+                            {"Text": "CPU Package", "Value": "72.3 °C", "RawValue": 72.3},
+                        ],
+                    },
+                ],
+            },
+        ],
+    }
+    temps = _parse_temps_from_lhm(tree)
+    assert temps["Intel Core i7 > CPU Package"] == pytest.approx(72.3)
+
+
+# ── fetch_snapshot ────────────────────────────────────────────────────────────
+
+@patch("src.benchmarks.thermal_monitor._fetch_temps")
+def test_fetch_snapshot_delegates(mock_fetch):
+    """fetch_snapshot() is a public alias for _fetch_temps()."""
+    mock_fetch.return_value = {"CPU Package": 55.0}
+    result = fetch_snapshot()
+    assert result == {"CPU Package": 55.0}
+    mock_fetch.assert_called_once()
+
+
+@patch("src.benchmarks.thermal_monitor._fetch_temps", return_value={})
+def test_fetch_snapshot_empty(mock_fetch):
+    """fetch_snapshot() returns {} when LHM is unreachable."""
+    assert fetch_snapshot() == {}

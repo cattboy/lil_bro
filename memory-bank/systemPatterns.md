@@ -3,16 +3,16 @@
 ## Architecture Overview
 ```
 ┌─────────────────────────────────────────────┐
-│              Inno Setup Installer            │
-│  (bundles Python env, GGUF model, tools)     │
+│        PyInstaller Portable .exe             │
+│  (single lil_bro.exe + integrity.json)       │
 └──────────────────┬──────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────┐
 │           Python Orchestrator                │
 │  ┌──────────┐  ┌──────────┐  ┌───────────┐  │
 │  │BootStrapper│  │ Scanner  │  │ UI Layer  │  │
-│  │(UAC, SRP)  │  │(dxdiag,  │  │(Terminal/ │  │
-│  │           │  │ WMI, NPI)│  │  PyQt)    │  │
+│  │(UAC, SRP)  │  │(dxdiag,  │  │(Terminal) │  │
+│  │           │  │ WMI, LHM)│  │           │  │
 │  └──────────┘  └──────────┘  └───────────┘  │
 │              ┌──────────┐                    │
 │              │ LLM Brain │                   │
@@ -20,7 +20,7 @@
 │              └──────────┘                    │
 │  ┌──────────┐  ┌──────────┐  ┌───────────┐  │
 │  │Benchmark  │  │ Debloater│  │ Thermal   │  │
-│  │Module     │  │ Module   │  │ Monitor   │  │
+│  │Runner     │  │ Module   │  │ Monitor   │  │
 │  └──────────┘  └──────────┘  └───────────┘  │
 └─────────────────────────────────────────────┘
 ```
@@ -31,7 +31,7 @@
 | LLM Runtime | `llama-cpp-python` | Run GGUF models natively in Python, no external server |
 | Model | `Qwen2.5-Coder-7B-Instruct.Q4_K_M` | Small (~4.5 GB), strong at JSON/logic/code tasks |
 | UI Framework | Terminal + optional PyQt | Keep simple, upgrade path available |
-| Installer | Inno Setup / NSIS | Industry-standard Windows installer creation |
+| Packaging | PyInstaller (onefile) | Portable .exe — double-click and go, no installer |
 | Bundler | PyInstaller | Compile Python to standalone executable |
 | Temp Monitoring | LibreHardwareMonitor | Open-source, no licensing issues |
 | GPU Profiling | NvidiaProfileInspector | Community-standard NVIDIA tweaking tool |

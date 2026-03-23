@@ -93,7 +93,7 @@ def load_and_parse(specs_path: str | Path) -> dict:
 
 
 if __name__ == "__main__":
-    from pathlib import Path
-    default = Path(__file__).parent.parent.parent / "logs" / "full_specs.json"
+    from .paths import get_specs_path
+    default = get_specs_path()
     summary = load_and_parse(default)
     print(json.dumps(summary, indent=2))

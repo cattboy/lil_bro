@@ -1,23 +1,25 @@
 # Active Context
 
 ## Current Work Focus
-- **Week 3 LHM + thermal integration** — sidecar manager, thermal monitor, thermal guidance
-- LHM launches as background process in Phase 2, temps sampled during Cinebench in Phase 3
-- Thermal guidance added to Phase 4 findings (CPU >85°C / GPU >90°C thresholds)
+- **Week 4 packaging in progress** — portable .exe via PyInstaller onefile + integrity check
+- All pre-packaging code fixes done: paths relocated to %APPDATA%, freeze_support() added
 
-## Recent Changes
-- Added `src/collectors/sub/lhm_sidecar.py` — LHM process lifecycle (port probe, launch, teardown)
-- Added `src/benchmarks/thermal_monitor.py` — background thread polls LHM during benchmark
-- Added `src/agent_tools/thermal_guidance.py` — threshold analysis + plain-English guidance
-- Updated `src/collectors/sub/libra_hm_dumper.py` — uses shared LHM_URL constant
-- Updated `src/main.py` — LHM sidecar in Phase 2, thermal polling in Phase 3/5, guidance in Phase 4
-- Added `__init__.py` to `collectors/`, `collectors/sub/`, `benchmarks/`
-- 43 new tests across 3 test files (112/112 total passing)
+## Recent Changes (Week 4)
+- Created `src/utils/paths.py` — centralized %APPDATA%\lil_bro\ path helper
+- Created `src/_version.py` — single source of truth for version string
+- Created `src/utils/integrity.py` — SHA-256 exe hash verification (frozen builds only)
+- Created `lil_bro.spec` — PyInstaller onefile spec (console, UAC admin, no UPX)
+- Created `build.py` — automated build pipeline (PyInstaller + manifest generation)
+- Updated `src/utils/action_logger.py` — logs to %APPDATA%\lil_bro\logs\ instead of repo root
+- Updated `src/collectors/spec_dumper.py` — specs to %APPDATA%\lil_bro\logs\ instead of repo root
+- Updated `src/main.py` — added multiprocessing.freeze_support() + integrity check on startup
+- Added `tests/test_paths.py` (6 tests) + `tests/test_integrity.py` (8 tests)
+- 164 tests total, all passing
 
 ## Next Steps
-1. Validate llama-cpp-python on RTX 3080 dev machine (hard gate deferred from current machine)
-2. Benchmark Qwen2.5-3B vs 7B on reference hardware for 60-second SLA
-3. PyInstaller bundling + Inno Setup installer (Week 4)
+1. Build the .exe with `python build.py` and smoke test on target machine
+2. Validate llama-cpp-python on RTX 3080 dev machine (hard gate)
+3. Benchmark Qwen2.5-3B vs 7B on reference hardware for 60-second SLA
 
 ## Active Decisions
 - Terminal UI only; PyQt deferred

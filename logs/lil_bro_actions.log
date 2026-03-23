@@ -17,3 +17,17 @@
 [2026-03-23 20:11:45] [PowerCfg] Switched active power plan to 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c | Execution: powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
 [2026-03-23 20:11:45] [PowerCfg] Created new High Performance plan 12345678-1234-1234-1234-123456789abc | Execution: powercfg /duplicatescheme 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
 [2026-03-23 20:11:45] [Temp Cleaner] Deleted 1 files, recovered 0.00 MB | Dirs: User Temp, Win Temp
+[2026-03-23 21:09:39] [System Restore] Created Restore Point: LIL' BROS Pre-Tuning Backup | Execution: Checkpoint-Computer -Description "LIL' BROS Pre-Tuning Backup" -RestorePointType "MODIFY_SETTINGS"
+[2026-03-23 21:09:39] [LHM Sidecar] Launched (PID 12345) | Port 8085
+[2026-03-23 21:09:39] [LHM Sidecar] Stopped
+[2026-03-23 21:09:39] [LHM Sidecar] Stopped
+[2026-03-23 21:09:39] [PowerCfg] Switched active power plan to 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c | Execution: powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+[2026-03-23 21:09:39] [PowerCfg] Created new High Performance plan 12345678-1234-1234-1234-123456789abc | Execution: powercfg /duplicatescheme 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+[2026-03-23 21:09:40] [Temp Cleaner] Deleted 1 files, recovered 0.00 MB | Dirs: User Temp, Win Temp
+[2026-03-23 21:11:20] [System Restore] Created Restore Point: LIL' BROS Pre-Tuning Backup | Execution: Checkpoint-Computer -Description "LIL' BROS Pre-Tuning Backup" -RestorePointType "MODIFY_SETTINGS"
+[2026-03-23 21:11:20] [LHM Sidecar] Launched (PID 12345) | Port 8085
+[2026-03-23 21:11:20] [LHM Sidecar] Stopped
+[2026-03-23 21:11:20] [LHM Sidecar] Stopped
+[2026-03-23 21:11:20] [PowerCfg] Switched active power plan to 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c | Execution: powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+[2026-03-23 21:11:20] [PowerCfg] Created new High Performance plan 12345678-1234-1234-1234-123456789abc | Execution: powercfg /duplicatescheme 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+[2026-03-23 21:11:20] [Temp Cleaner] Deleted 1 files, recovered 0.00 MB | Dirs: User Temp, Win Temp

@@ -1,3 +1,4 @@
+import multiprocessing
 import sys
 import json
 import colorama
@@ -20,10 +21,10 @@ from src.agent_tools.mouse import check_polling_rate
 from src.agent_tools.display_setter import find_best_mode, apply_display_mode
 from src.collectors.spec_dumper import dump_system_specs
 from src.collectors.sub.monitor_dumper import get_all_displays
-from src.benchmarks.cinebench import CinebenchOrchestrator
-from src.benchmarks.thermal_monitor import ThermalMonitor
+from src.benchmarks.cinebench import BenchmarkRunner
+from src.benchmarks.thermal_monitor import ThermalMonitor, fetch_snapshot
 from src.collectors.sub.lhm_sidecar import LHMSidecar
-from src.agent_tools.thermal_guidance import analyze_thermals
+from src.agent_tools.thermal_guidance import analyze_thermals, check_idle_thermals
 from src.utils.dump_parser import extract_hardware_summary
 from src.llm.model_loader import load_model, get_model_status
 from src.llm.action_proposer import propose_actions
@@ -346,34 +347,57 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
 
     print_header("Phase 3: Baseline Benchmark")
 
-    # Start thermal polling before benchmark (if LHM is running)
-    if lhm_available:
-        thermal.start()
-        print_info("Thermal monitoring active — sampling temperatures during benchmark.")
+    runner = BenchmarkRunner()
 
-    cb = CinebenchOrchestrator()
-    baseline = cb.run_benchmark(run_all=False)
-    if baseline.get("status") == "success":
-        print_success("Baseline Benchmark Complete!")
-        print_info(f"Scores: {baseline.get('scores', {})}")
-
-    # Stop thermal polling and capture peak temps
-    peak_temps: dict[str, float] = {}
+    # Pre-benchmark thermal safety gate
+    benchmark_skipped = False
     if lhm_available:
-        thermal.stop()
-        peak_temps = thermal.get_peak_temps()
-        if peak_temps:
-            cpu_peak = thermal.get_cpu_peak()
-            gpu_peak = thermal.get_gpu_peak()
-            parts = []
-            if cpu_peak is not None:
-                parts.append(f"CPU: {cpu_peak:.1f}°C")
-            if gpu_peak is not None:
-                parts.append(f"GPU: {gpu_peak:.1f}°C")
-            if parts:
-                print_info(f"Peak temps during benchmark: {', '.join(parts)} ({thermal.sample_count} samples)")
+        print_info("Checking idle temperatures before benchmark...")
+        idle_temps = fetch_snapshot()
+        idle_check = check_idle_thermals(idle_temps)
+
+        if idle_check["safe"]:
+            print_success(idle_check["message"])
         else:
-            print_warning("Thermal monitor ran but captured no temperature data.")
+            print_warning(idle_check["message"])
+            if not prompt_approval("Temperatures are elevated. Run the benchmark anyway?"):
+                print_info("Skipping benchmark — let your PC cool down and try again.")
+                benchmark_skipped = True
+
+    # Run benchmark with thermal monitoring (unless skipped)
+    baseline: dict = {"status": "skipped", "message": "Skipped due to high idle temps"}
+    peak_temps: dict[str, float] = {}
+
+    if not benchmark_skipped:
+        if lhm_available:
+            thermal.start()
+            print_info("Thermal monitoring active — sampling temperatures during benchmark.")
+
+        baseline = runner.run_benchmark(full_suite=False)
+
+        if baseline.get("status") == "success":
+            print_success("Baseline Benchmark Complete!")
+            print_info(f"Scores: {baseline.get('scores', {})}")
+
+        # Stop thermal polling and capture peak temps
+        if lhm_available:
+            thermal.stop()
+            peak_temps = thermal.get_peak_temps()
+            if peak_temps:
+                cpu_peak = thermal.get_cpu_peak()
+                gpu_peak = thermal.get_gpu_peak()
+                parts = []
+                if cpu_peak is not None:
+                    parts.append(f"CPU: {cpu_peak:.1f}°C")
+                if gpu_peak is not None:
+                    parts.append(f"GPU: {gpu_peak:.1f}°C")
+                if parts:
+                    print_info(
+                        f"Peak temps during benchmark: {', '.join(parts)} "
+                        f"({thermal.sample_count} samples)"
+                    )
+            else:
+                print_warning("Thermal monitor ran but captured no temperature data.")
 
     print_header("Phase 4: Apply Esports Configurations")
 
@@ -452,26 +476,50 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
 
     print_header("Phase 5: Final Verification Benchmark")
 
-    # Restart thermal monitoring for the final benchmark
+    # Pre-benchmark thermal gate (same pattern as Phase 3)
+    final_skipped = False
     if lhm_available:
-        thermal.start()
+        print_info("Checking temps before final benchmark...")
+        idle_temps_final = fetch_snapshot()
+        idle_check_final = check_idle_thermals(idle_temps_final)
 
-    final = cb.run_benchmark(run_all=True)
+        if idle_check_final["safe"]:
+            print_success(idle_check_final["message"])
+        else:
+            print_warning(idle_check_final["message"])
+            if not prompt_approval("Temperatures are elevated. Run the final benchmark anyway?"):
+                print_info("Skipping final benchmark.")
+                final_skipped = True
 
-    if lhm_available:
-        thermal.stop()
+    if not final_skipped:
+        # Restart thermal monitoring for the final benchmark
+        if lhm_available:
+            thermal.start()
 
-    if final.get("status") == "success":
-        print_success("Final Benchmark Complete!")
-        print_info(f"After:  {final.get('scores', {})}")
-        print_info(f"Before: {baseline.get('scores', {})}")
+        final = runner.run_benchmark(full_suite=True)
+
+        if lhm_available:
+            thermal.stop()
+
+        if final.get("status") == "success":
+            print_success("Final Benchmark Complete!")
+            print_info(f"After:  {final.get('scores', {})}")
+            print_info(f"Before: {baseline.get('scores', {})}")
+    else:
+        print_info("Final benchmark was skipped — no comparison available.")
 
     print_header("Optimization Pipeline Complete")
 
 
 def main():
+    multiprocessing.freeze_support()  # Required for PyInstaller onefile + multiprocessing.Pool
     try:
         colorama.init(autoreset=True)
+
+        # Verify file integrity in frozen builds (no-op in dev)
+        from src.utils.integrity import verify_integrity
+        verify_integrity()
+
         print_banner()
 
         print_info("Checking system privileges...")
