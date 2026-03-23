@@ -15,9 +15,9 @@
 ### Phase 2: Bootstrapping & System Safety
 - [x] UAC privilege escalation
 - [x] System Restore Point creation (PowerShell)
-- [ ] Deep scan: `dxdiag` output capture
-- [ ] Deep scan: NvidiaProfileInspector export
-- [ ] Deep scan: LibreHardwareMonitor baseline logging
+- [x] Deep scan: `dxdiag` output capture (`collectors/sub/dxdiag_dumper.py`)
+- [ ] Deep scan: NvidiaProfileInspector export (deferred — no v1 auto-fix needs it)
+- [ ] Deep scan: LibreHardwareMonitor baseline logging (Week 3)
 
 ### Phase 3: Feature Modules
 #### Configuration Check ("Esports Check")
@@ -34,10 +34,10 @@
 - [ ] Thermal verification & guidance (LibreHardwareMonitor integration)
 
 ### Phase 4: LLM Integration
-- [ ] `llama-cpp-python` wrapper
-- [ ] GGUF model loading and inference
-- [ ] JSON action proposal generation
-- [ ] Human-in-the-loop approval flow
+- [x] `llama-cpp-python` wrapper (`src/llm/model_loader.py`)
+- [x] GGUF model loading and inference (CPU-only, first-run download from HuggingFace)
+- [x] JSON action proposal generation (`src/llm/action_proposer.py` + static fallback)
+- [x] Human-in-the-loop batch approval flow (numbered proposals, "1 3" / "all" / "skip")
 
 ### Phase 5: UI & Polish
 - [ ] Terminal-based interactive UI
@@ -45,10 +45,11 @@
 - [ ] Friendly LLM-generated explanations
 
 ## Current Status
-🟡 **Project initialized** — memory bank complete, ready to begin Week 1 PoC
+🟢 **Week 2 complete** — LLM integration done, all 6 esports checks + temp audit + Cinebench working, 69 tests passing
 
 ## Known Issues
-- None yet (project is brand new)
+- llama-cpp-python not yet tested with PyInstaller bundling (hard gate deferred to RTX 3080 dev machine)
+- Qwen2.5-7B vs 3B model size decision pending SLA benchmark on reference hardware
 
 ## Evolution of Decisions
 | Date | Decision | Context |
@@ -56,3 +57,6 @@
 | 2026-03-13 | Project created | Memory bank initialized from project brief |
 | 2026-03-13 | Terminal UI first | PyQt deferred; start simple, upgrade later |
 | 2026-03-13 | Qwen2.5-Coder-7B model | Best balance of size (~4.5 GB) and capability for offline use |
+| 2026-03-23 | LLM made optional | Tool works with static fallback templates; menu option 2 for model setup |
+| 2026-03-23 | NvidiaProfileInspector deferred | No v1 auto-fix requires GPU profile changes |
+| 2026-03-23 | Staged model download | Installer ships without GGUF; first-run download from HuggingFace |
