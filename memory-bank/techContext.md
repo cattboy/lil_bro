@@ -12,7 +12,7 @@
 | Thermal Monitoring | LibreHardwareMonitor | Bundled executable, open-source |
 | UI | Terminal / PyQt | Terminal-first, PyQt optional upgrade |
 | Bundler | PyInstaller | Compiles Python to standalone `.exe` |
-| Installer | Inno Setup or NSIS | Creates Windows installer package |
+| Packaging | PyInstaller (onefile) | Portable .exe, no installer needed |
 
 ## Development Setup
 - **OS:** Windows 10/11 (target platform)
@@ -22,7 +22,7 @@
 
 ## Technical Constraints
 - **Fully offline** — no cloud APIs, no telemetry, no network calls except driver version checks
-- **Single installer** — user must not need to install Python, Docker, Ollama, or any other dependency
+- **Single portable .exe** — user must not need to install Python, Docker, Ollama, or any other dependency
 - **Admin required** — System Restore Point and many optimizations need elevated privileges
 - **GPU VRAM** — Qwen2.5-Coder-7B Q4 needs ~4.5 GB; system must have enough RAM/VRAM
 - **Windows only** — WMI, registry, dxdiag, PowerShell are all Windows-specific
@@ -30,7 +30,9 @@
 ## Dependencies (Python Packages)
 - `colorama` — terminal color output
 - `wmi` — Windows Management Instrumentation
+- `psutil` — cross-platform process and system utilities
 - `llama-cpp-python` — local LLM inference (optional — tool works without it)
+- `pyinstaller` — .exe packaging (dev dependency)
 - `pytest` — testing (dev dependency)
 
 ## External Tools

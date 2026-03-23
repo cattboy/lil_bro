@@ -8,9 +8,9 @@
 
 ### Phase 1: Architecture & Packaging
 - [x] Python project scaffolding (`src/` structure)
-- [ ] Inno Setup / NSIS installer configuration
-- [ ] PyInstaller bundling setup
-- [ ] Initial run file-hash verification
+- [x] PyInstaller portable .exe bundling (`lil_bro.spec` + `build.py`)
+- [x] Initial run file-hash verification (`src/utils/integrity.py`)
+- [x] Writable paths relocated to `%APPDATA%\lil_bro\` (`src/utils/paths.py`)
 
 ### Phase 2: Bootstrapping & System Safety
 - [x] UAC privilege escalation
@@ -46,7 +46,7 @@
 - [ ] Friendly LLM-generated explanations
 
 ## Current Status
-🟢 **Week 3 complete** — LHM sidecar, thermal monitor, thermal guidance, benchmark orchestration, pre-benchmark safety gate. 150 tests passing
+🟢 **Week 4 complete** — PyInstaller portable .exe, %APPDATA% path relocation, SHA-256 integrity verification, build pipeline. 164 tests passing
 
 ## Known Issues
 - llama-cpp-python not yet tested with PyInstaller bundling (hard gate deferred to RTX 3080 dev machine)
