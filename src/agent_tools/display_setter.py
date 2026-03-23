@@ -1,5 +1,6 @@
 import ctypes
 from ctypes import wintypes
+from ..utils.formatting import prompt_approval
 
 ### exact match (find a mode that exactly matches target Hz) and best available (find the highest Hz the monitor supports):
 ### Key design decisions to call out
@@ -227,6 +228,9 @@ def set_max_refresh_rate(
             "resolution": f"{best_mode.dmPelsWidth}x{best_mode.dmPelsHeight}",
         }
 
+    if not prompt_approval(f"Set refresh rate to {best_mode.dmDisplayFrequency}Hz on {device_name}?"):
+        return {"success": False, "cancelled": True, "message": "User declined refresh rate change."}
+
     ok, msg = apply_display_mode(device_name, best_mode, persist=persist, dry_run=False)
     return {
         "success": ok,
@@ -262,6 +266,9 @@ def set_refresh_rate(
     if dry_run:
         return {"success": True, "dry_run": True, "would_apply_hz": target_hz}
 
+    if not prompt_approval(f"Set refresh rate to {target_hz}Hz on {device_name}?"):
+        return {"success": False, "cancelled": True, "message": "User declined refresh rate change."}
+
     ok, msg = apply_display_mode(device_name, mode, persist=persist, dry_run=False)
     return {"success": ok, "applied_hz": target_hz if ok else None, "message": msg}
 
@@ -273,7 +280,7 @@ def fix_all_monitors(persist: bool = True, dry_run: bool = False) -> list[dict]:
     Iterates all active displays and upgrades any running below
     their maximum supported refresh rate.
     """
-    from .display import get_all_displays   # your existing enumeration function
+    from ..collectors.sub.monitor_dumper import get_all_displays
     results = []
     for device in get_all_displays():
         result = set_max_refresh_rate(device, persist=persist, dry_run=dry_run)

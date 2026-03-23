@@ -3,17 +3,18 @@ from datetime import datetime
 
 class ActionLogger:
     def __init__(self, log_path: str = None):
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-        self.log_path = os.path.join(repo_root, "logs", "lil_bro_actions.log")
-        
-        # Ensure directory exists if not running on Linux dummy environment
-        if not self.log_path.startswith('/'):
-            log_dir = os.path.dirname(self.log_path)
-            if log_dir and not os.path.exists(log_dir):
-                try:
-                    os.makedirs(log_dir, exist_ok=True)
-                except Exception:
-                    pass
+        if log_path:
+            self.log_path = log_path
+        else:
+            repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+            self.log_path = os.path.join(repo_root, "logs", "lil_bro_actions.log")
+
+        log_dir = os.path.dirname(self.log_path)
+        if log_dir:
+            try:
+                os.makedirs(log_dir, exist_ok=True)
+            except Exception:
+                pass
                     
     def log_action(self, component: str, action: str, details: str = ""):
         """
