@@ -1,7 +1,48 @@
-import wmi
+try:
+    import wmi
+except ImportError:
+    wmi = None
 import subprocess
 from ..utils.errors import ScannerError
 from ..utils.formatting import print_step, print_step_done, print_warning, print_success, print_error, print_info
+
+def analyze_rebar(specs: dict) -> dict:
+    """
+    Pure analyzer. Reads pre-collected NVIDIA data from specs dict.
+    Returns a standardized finding dict — no system calls, no terminal output.
+    """
+    nvidia = specs.get("NVIDIA", "")
+
+    if isinstance(nvidia, list) and nvidia:
+        gpu = nvidia[0]
+        rebar_str = gpu.get("ReBAR", "")
+        bar1_mib = int(gpu.get("BAR1 Used MiB", 0) or 0)
+        name = gpu.get("GPU", "Unknown GPU")
+        rebar_on = (rebar_str == "Enabled") or (bar1_mib > 256)
+
+        if rebar_on:
+            return {
+                "check": "rebar",
+                "status": "OK",
+                "current": True,
+                "message": f"Resizable BAR is ENABLED ({name}, BAR1: {bar1_mib} MiB).",
+                "can_auto_fix": False,
+            }
+        return {
+            "check": "rebar",
+            "status": "WARNING",
+            "current": False,
+            "message": f"Resizable BAR is DISABLED ({name}). Enable 'Above 4G Decoding' in BIOS.",
+            "can_auto_fix": False,
+        }
+
+    return {
+        "check": "rebar",
+        "status": "UNKNOWN",
+        "current": None,
+        "message": "Could not determine ReBAR status — NVIDIA GPU not detected or nvidia-smi unavailable.",
+        "can_auto_fix": False,
+    }
 
 def check_nvidia_rebar() -> tuple[bool | None, str]:
     """
@@ -40,9 +81,11 @@ def check_wmi_rebar() -> tuple[bool, float, str]:
     Fallback method using WMI Win32_DeviceMemoryAddress to find large memory ranges.
     Returns (is_enabled, max_size_mb, message)
     """
+    if wmi is None:
+        raise ScannerError("WMI module not available.")
     rebar_enabled = False
     max_size_mb = 0.0
-    
+
     try:
         c = wmi.WMI()
         for mem in c.Win32_DeviceMemoryAddress():

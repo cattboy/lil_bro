@@ -2,6 +2,71 @@ import os
 from ..utils.formatting import print_step, print_step_done, print_info, print_warning
 from ..utils.action_logger import action_logger
 
+def _get_temp_targets() -> dict:
+    """Returns the canonical map of temp folder names to their paths."""
+    user_temp  = os.environ.get('TEMP', '')
+    win_temp   = os.environ.get('WINDIR', 'C:\\Windows') + '\\Temp'
+    sw_dist    = os.environ.get('WINDIR', 'C:\\Windows') + '\\SoftwareDistribution\\Download'
+    local      = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local')
+    appdata    = os.environ.get('APPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Roaming')
+    programdata = os.environ.get('PROGRAMDATA', 'C:\\ProgramData')
+    userprofile = os.environ.get('USERPROFILE', 'C:\\Users\\%USERNAME%')
+    return {
+        "User Temp":                     user_temp,
+        "Windows Temp":                  win_temp,
+        "Update Cache":                  sw_dist,
+        "NVIDIA Shader Cache":           programdata + '\\NVIDIA Corporation\\NV_Cache',
+        "NVIDIA GL Cache":               local + '\\NVIDIA\\GLCache',
+        "NVIDIA DX Cache":               local + '\\NVIDIA\\DXCache',
+        "NVIDIA Compute Cache":          appdata + '\\NVIDIA\\ComputeCache',
+        "D3D Cache":                     local + '\\D3DSCache',
+        "NVIDIA Per Driver Version DX Cache": userprofile + '\\AppData\\LocalLow\\NVIDIA\\PerDriverVersion\\DXCache',
+        "AMD DX Cache":                  local + '\\AMD\\DxCache',
+        "AMD DX9 Cache":                 local + '\\AMD\\DX9Cache',
+        "AMD Dxc Cache":                 local + '\\AMD\\DxcCache',
+        "AMD Ogl Cache":                 local + '\\OglCache',
+        "Intel D3D Cache":               local + '\\Microsoft\\D3DSCache',
+    }
+
+def get_temp_sizes() -> dict:
+    """
+    Returns temp folder sizes without any terminal output.
+    Used by spec_dumper to collect data silently during the scan phase.
+    """
+    targets = _get_temp_targets()
+    details = {}
+    total_bytes = 0
+    for name, path in targets.items():
+        size_bytes, count = scan_dir_size(path)
+        total_bytes += size_bytes
+        details[name] = {"path": path, "size_bytes": size_bytes, "file_count": count}
+    return {"total_bytes": total_bytes, "details": details}
+
+def analyze_temp_folders(specs: dict) -> dict:
+    """
+    Pure analyzer. Reads pre-collected temp folder data from specs dict.
+    Returns a standardized finding dict — no system calls, no terminal output.
+    """
+    temp_data = specs.get("TempFolders", {})
+    total_bytes = temp_data.get("total_bytes", 0)
+    mb = total_bytes / (1024 * 1024)
+
+    if total_bytes > (1024 * 1024 * 1024):
+        return {
+            "check": "temp_folders",
+            "status": "WARNING",
+            "current": total_bytes,
+            "message": f"Found {mb:.0f} MB of temporary files and caches. Cleanup recommended.",
+            "can_auto_fix": True,
+        }
+    return {
+        "check": "temp_folders",
+        "status": "OK",
+        "current": total_bytes,
+        "message": f"Temp folders are clean ({mb:.0f} MB total).",
+        "can_auto_fix": False,
+    }
+
 def scan_dir_size(path: str) -> tuple[int, int]:
     """Returns (total_bytes, file_count) for a given directory path."""
     total_size = 0
@@ -36,51 +101,7 @@ def scan_temp_folders() -> dict:
     Scans common Windows temporary directories and calculates their sizes.
     """
     print_step("Auditing Temporary Folders")
-    
-    # 1. User Temp
-    user_temp = os.environ.get('TEMP', '')
-    
-    # 2. Windows Temp
-    win_temp = os.environ.get('WINDIR', 'C:\\Windows') + '\\Temp'
-    
-    # 3. Software Distribution Download (Windows Update cache)
-    sw_dist = os.environ.get('WINDIR', 'C:\\Windows') + '\\SoftwareDistribution\\Download'
-
-    # 4. NVIDIA Shader Cache Locations taken from https://www.reddit.com/r/thedivision/comments/r0s4qx/comment/hlwbda8/
-    nv_cache = os.environ.get('PROGRAMDATA', 'C:\\ProgramData') + '\\NVIDIA Corporation\\NV_Cache'
-    nv_glcache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\NVIDIA\\GLCache'
-    nv_dxcache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\NVIDIA\\DXCache'
-    d3d_cache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\D3DSCache'
-    nv_computecache = os.environ.get('APPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Roaming') + '\\NVIDIA\\ComputeCache'
-    nv_perdriverversion_dxcache = os.environ.get('USERPROFILE', 'C:\\Users\\%USERNAME%') + '\\AppData\\LocalLow\\NVIDIA\\PerDriverVersion\\DXCache'
-    
-    # 5. AMD Shader Cache
-    amd_dxcache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\AMD\\DxCache'
-    amd_dx9cache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\AMD\\DX9Cache'
-    amd_dxcache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\AMD\\DxcCache'
-    amd_oglcache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\OglCache'
-
-    # 6. Intel Shader Cache
-    intel_d3dcache = os.environ.get('LOCALAPPDATA', 'C:\\Users\\%USERNAME%\\AppData\\Local') + '\\Microsoft\\D3DSCache'
-    
-    # 7. 
-    
-    targets = {
-        "User Temp": user_temp,
-        "Windows Temp": win_temp,
-        "Update Cache": sw_dist,
-        "NVIDIA Shader Cache": nv_cache,
-        "NVIDIA GL Cache": nv_glcache,
-        "NVIDIA DX Cache": nv_dxcache,
-        "NVIDIA Compute Cache": nv_computecache,
-        "D3D Cache": d3d_cache,
-        "NVIDIA Per Driver Version DX Cache": nv_perdriverversion_dxcache,
-        "AMD DX Cache": amd_dxcache,
-        "AMD DX9 Cache": amd_dx9cache,
-        "AMD Dxc Cache": amd_dxcache,
-        "AMD Ogl Cache": amd_oglcache,
-        "Intel D3D Cache": intel_d3dcache
-    }
+    targets = _get_temp_targets()
     
     results = {}
     total_bloat_bytes = 0

@@ -2,6 +2,32 @@ import winreg
 from ..utils.errors import ScannerError
 from ..utils.formatting import print_step, print_step_done, print_warning, print_success, print_error
 
+def analyze_game_mode(specs: dict) -> dict:
+    """
+    Pure analyzer. Reads pre-collected Game Mode state from specs dict.
+    Returns a standardized finding dict — no system calls, no terminal output.
+    """
+    game_mode = specs.get("GameMode", {})
+    enabled = game_mode.get("enabled", True)
+
+    if not enabled:
+        return {
+            "check": "game_mode",
+            "status": "WARNING",
+            "current": False,
+            "expected": True,
+            "message": "Windows Game Mode is DISABLED. Enable via Settings > Gaming > Game Mode.",
+            "can_auto_fix": False,
+        }
+    return {
+        "check": "game_mode",
+        "status": "OK",
+        "current": True,
+        "expected": True,
+        "message": "Windows Game Mode is ENABLED.",
+        "can_auto_fix": False,
+    }
+
 def get_game_mode_status() -> bool:
     """
     Checks the registry for AutoGameModeEnabled.

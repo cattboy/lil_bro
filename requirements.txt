@@ -1,0 +1,11 @@
+# lil_bro — Runtime dependencies
+# Windows-only tool. All packages below require Python 3.11+.
+
+colorama>=0.4.6       # Terminal color output (cross-platform ANSI)
+wmi>=1.5.1            # Windows Management Instrumentation queries
+
+# ── Week 2 (LLM integration) — uncomment when ready ──────────────────────────
+# llama-cpp-python>=0.3.0   # Local GGUF model inference (CPU)
+
+# ── Dev / testing ──────────────────────────────────────────────────────────────
+# pytest>=8.0

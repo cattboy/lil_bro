@@ -12,6 +12,44 @@ KNOWN_PLANS = {
     "a1841308-3541-4fab-bc81-f71556f20b4a": "Power Saver",
 }
 
+_PERF_GUIDS = {
+    "e9a42b02-d5df-448d-aa00-03f14749eb61",  # Ultimate Performance
+    "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",  # High Performance
+}
+
+def analyze_power_plan(specs: dict) -> dict:
+    """
+    Pure analyzer. Reads pre-collected power plan state from specs dict.
+    Returns a standardized finding dict — no system calls, no terminal output.
+    """
+    plan = specs.get("PowerPlan", {})
+    guid = plan.get("guid", "")
+    name = plan.get("name", "Unknown")
+
+    is_perf = (
+        guid in _PERF_GUIDS or
+        "performance" in name.lower() or
+        "ultimate" in name.lower()
+    )
+
+    if not is_perf:
+        return {
+            "check": "power_plan",
+            "status": "WARNING",
+            "current": name,
+            "expected": "High Performance or Ultimate Performance",
+            "message": f"Power plan is '{name}'. Switch to High Performance for gaming.",
+            "can_auto_fix": True,
+        }
+    return {
+        "check": "power_plan",
+        "status": "OK",
+        "current": name,
+        "expected": name,
+        "message": f"Power plan is optimal: '{name}'.",
+        "can_auto_fix": False,
+    }
+
 def get_active_power_plan() -> tuple[str, str]:
     """
     Runs powercfg /getactivescheme to find the active power plan.

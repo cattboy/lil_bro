@@ -1,15 +1,16 @@
 import sys
+import json
 import colorama
 from colorama import Fore, Style
 
 from src.bootstrapper import check_admin, create_restore_point
-from src.agent_tools.display import check_refresh_rate
+from src.agent_tools.display import analyze_display
+from src.agent_tools.game_mode import analyze_game_mode
+from src.agent_tools.power_plan import analyze_power_plan, check_power_plan
+from src.agent_tools.xmp_check import analyze_xmp
+from src.agent_tools.rebar import analyze_rebar
+from src.agent_tools.temp_audit import analyze_temp_folders, scan_temp_folders, clean_temp_folders
 from src.agent_tools.mouse import check_polling_rate
-from src.agent_tools.temp_audit import scan_temp_folders, clean_temp_folders
-from src.agent_tools.game_mode import check_game_mode
-from src.agent_tools.power_plan import check_power_plan
-from src.agent_tools.xmp_check import check_xmp_status
-from src.agent_tools.rebar import check_rebar
 from src.collectors.spec_dumper import dump_system_specs
 from src.benchmarks.cinebench import CinebenchOrchestrator
 from src.utils.formatting import print_header, print_info, print_warning, print_error, print_success, prompt_approval
@@ -66,32 +67,68 @@ def run_optimization_pipeline():
         print_info(f"Scores: {baseline.get('scores', {})}")
         
     print_header("Phase 4: Apply Esports Configurations")
-    print_info("Running configuration audits. Changes will be logged to C:\\Temp\\lil_bro_actions.log")
-    
-    print()
-    check_refresh_rate()
-    print()
-    check_game_mode()
-    print()
-    check_power_plan()
-    print()
-    check_xmp_status()
-    print()
-    check_rebar()
-    print()
-    
-    # Debloat
-    results = scan_temp_folders()
-    if results['total_bytes'] > 0:
-        MB = results['total_bytes'] / (1024*1024)
+
+    # Load specs collected in Phase 2 and run all pure analyzers
+    findings = []
+    specs = {}
+    if dump_path:
+        try:
+            with open(dump_path, "r", encoding="utf-8") as f:
+                specs = json.load(f)
+        except Exception as e:
+            print_warning(f"Could not load specs file: {e}")
+
+    if specs:
+        findings = [
+            analyze_display(specs),
+            analyze_game_mode(specs),
+            analyze_power_plan(specs),
+            analyze_xmp(specs),
+            analyze_rebar(specs),
+            analyze_temp_folders(specs),
+        ]
+
+        # Print audit summary
         print()
-        if prompt_approval(f"Would you like me to clean {MB:.2f} MB of temp files?"):
-            clean_temp_folders(results['details'])
-            
+        warnings = [f for f in findings if f["status"] == "WARNING"]
+        oks      = [f for f in findings if f["status"] == "OK"]
+        unknowns = [f for f in findings if f["status"] not in ("OK", "WARNING")]
+        print_info(f"Audit complete: {len(oks)} OK, {len(warnings)} need attention, {len(unknowns)} unknown")
+        print()
+        for finding in findings:
+            label = f"  [{finding['check'].upper()}]"
+            if finding["status"] == "OK":
+                print_success(f"{label} {finding['message']}")
+            elif finding["status"] == "WARNING":
+                print_warning(f"{label} {finding['message']}")
+            else:
+                print_error(f"{label} {finding['message']}")
+        print()
+
+    # Apply fixes for actionable findings
+    for finding in findings:
+        if finding["status"] != "WARNING" or not finding.get("can_auto_fix"):
+            continue
+        check = finding["check"]
+
+        if check == "power_plan":
+            check_power_plan()
+
+        elif check == "display":
+            print_info("[display] Auto-fix: open Windows Display Settings and set the refresh rate to the maximum supported.")
+
+        elif check == "temp_folders":
+            total_bytes = specs.get("TempFolders", {}).get("total_bytes", 0)
+            details     = specs.get("TempFolders", {}).get("details", {})
+            MB = total_bytes / (1024 * 1024)
+            if prompt_approval(f"Clean {MB:.2f} MB of temporary files?"):
+                clean_temp_folders(details)
+
+    # Mouse polling rate — live check, not spec-fed
     print()
-    # print(f"{Fore.YELLOW}PREPARE TO WIGGLE THE MOUSE FOR 3 SECONDS...{Style.RESET_ALL}")
-    # input("Press Enter to begin tracking...")
-    # check_polling_rate() Add later
+    print_warning("PREPARE TO WIGGLE THE MOUSE FOR 3 SECONDS...")
+    input(f"{Fore.CYAN}Press Enter to begin tracking...{Style.RESET_ALL}")
+    check_polling_rate()
 
     print_header("Phase 5: Final Verification Benchmark")
     final = cb.run_benchmark(run_all=True)
