@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**lil_bro** is a local, privacy-first AI agent for gaming PC optimization. It analyzes system configurations, detects misconfigurations, and applies targeted fixes with user approval. 100% offline — no data leaves the device. The only permitted external calls are driver version checks from vendor websites (NVIDIA/AMD/Intel).
+**lil_bro** is a local, privacy-first AI agent for gaming PC optimization. It analyzes system configurations, detects misconfigurations, and applies targeted fixes with user approval. 100% offline — no data leaves the device. The only permitted external calls are driver version checks from vendor websites (NVIDIA/AMD/Intel) and the one-time GGUF model download from HuggingFace on first run.
 
 ---
 
@@ -26,7 +26,7 @@
 ### Safety & User Trust
 - Every system modification must call `prompt_approval()` before executing — no silent changes, ever.
 - System Restore Point must be created via `bootstrapper.py` before any modifications begin.
-- No external HTTP calls, telemetry, or cloud APIs beyond driver version verification URLs.
+- No external HTTP calls, telemetry, or cloud APIs beyond driver version verification URLs and the one-time model download from HuggingFace.
 
 ### Code Architecture
 - New system checks belong in `src/agent_tools/` as independent modules.
@@ -40,23 +40,28 @@
 
 ```
 src/
-  main.py              — 5-phase pipeline orchestrator
+  main.py              — 5-phase pipeline orchestrator + 3-option menu
   bootstrapper.py      — UAC escalation + Restore Point creation
   collectors/
     spec_dumper.py     — Aggregates all system data into unified JSON
     sub/               — Individual collectors (WMI, dxdiag, nvidia-smi, EDID, monitor)
   agent_tools/         — Modular system checks (one file per check)
-    display.py         — Monitor refresh rate
+    display.py         — Monitor refresh rate analysis
+    display_setter.py  — Applies refresh rate changes via Win32 ChangeDisplaySettingsEx
     game_mode.py       — Windows Game Mode registry
     power_plan.py      — Power plan detection + switching
     xmp_check.py       — RAM XMP/EXPO detection
     rebar.py           — Resizable BAR detection
     temp_audit.py      — Temp folder bloat + cleanup
     mouse.py           — Mouse polling rate
+  llm/                 — LLM integration (optional — tool works without it)
+    model_loader.py    — GGUF model loading + first-run download from HuggingFace
+    action_proposer.py — Findings → LLM JSON proposals + static fallback templates
   benchmarks/
     cinebench.py       — Cinebench 2026 orchestration + thermal monitoring
   utils/
     action_logger.py   — Singleton logger → logs/lil_bro_actions.log
+    dump_parser.py     — Extracts slim hardware summary from full_specs.json for LLM
     errors.py          — LilBroError, AdminRequiredError, ScannerError, RestorePointError
     formatting.py      — Colorama terminal UI helpers (print_step, print_success, etc.)
 tests/                 — Unit tests, all mocked (no real system modifications)
@@ -69,7 +74,7 @@ memory-bank/           — Project design docs (brief, progress, patterns, activ
 1. **Bootstrapping & Safety** — UAC check, Restore Point creation
 2. **Deep System Scan** — WMI, dxdiag, nvidia-smi, EDID, monitor enum → unified JSON
 3. **Baseline Benchmark** — Cinebench 2026 single-core + thermals
-4. **Esports Configuration Check** — All agent_tools checks run, user approves fixes
+4. **Esports Configuration Check** — All agent_tools checks run → LLM proposals (or static fallback) → numbered batch approval UX
 5. **Final Verification Benchmark** — Re-run benchmark, compare delta
 
 ---
@@ -85,7 +90,7 @@ memory-bank/           — Project design docs (brief, progress, patterns, activ
 | Benchmarking | Cinebench 2026 CLI |
 | Thermal monitoring | LibreHardwareMonitor (HTTP API on localhost:8085) |
 | Terminal UI | colorama |
-| LLM (Week 2) | llama-cpp-python + Qwen2.5-Coder-7B-Instruct.Q4_K_M.gguf |
+| LLM (optional) | llama-cpp-python + Qwen2.5-Coder-7B-Instruct.Q4_K_M.gguf |
 | Packaging (Week 4) | PyInstaller + Inno Setup |
 
 ---
@@ -93,6 +98,14 @@ memory-bank/           — Project design docs (brief, progress, patterns, activ
 ## Development Roadmap
 
 - **Week 1** ✅ — PoC complete: all esports checks, temp audit, Cinebench, collectors
-- **Week 2** — LLM integration: llama-cpp-python, GGUF model loading, JSON action proposals
-- **Week 3** — LibreHardwareMonitor full integration, NvidiaProfileInspector export
+- **Week 2** ✅ — LLM integration: model loader, action proposer, batch approval UX, static fallback
+- **Week 3** — LibreHardwareMonitor full integration, thermal guidance module
 - **Week 4** — PyInstaller bundle, Inno Setup installer, file-hash verification on launch
+
+---
+
+## Design System
+Always read `DESIGN.md` before making any visual or UI decisions.
+All font choices, colors, spacing, and aesthetic direction are defined there.
+Do not deviate without explicit user approval.
+In QA mode, flag any code that doesn't match DESIGN.md.

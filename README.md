@@ -12,19 +12,19 @@ A **local, privacy-first AI agent** that optimizes your gaming PC for peak perfo
 
 ## Privacy Guarantee
 
-All processing happens locally. The only external calls are optional driver version checks against vendor websites (NVIDIA/AMD/Intel).
+All processing happens locally. The only external calls are optional driver version checks against vendor websites (NVIDIA/AMD/Intel) and the one-time AI model download on first run (skippable).
 
 ## Architecture
 
-- **Brain:** `llama-cpp-python` running `Qwen2.5-Coder-7B-Instruct.Q4_K_M.gguf` (~4.5 GB)
-- **Orchestrator:** Python 3
-- **Bundled Tools:** LibreHardwareMonitor, NvidiaProfileInspector
-- **Installer:** Single `.exe` via Inno Setup — no dependencies required
+- **Brain:** `llama-cpp-python` running `Qwen2.5-Coder-7B-Instruct.Q4_K_M.gguf` (~4.5 GB, optional — downloaded on first run)
+- **Orchestrator:** Python 3.11+
+- **Sidecar Tools:** LibreHardwareMonitor (thermal monitoring)
+- **Installer:** Inno Setup (Week 4)
 
 ## Status
 
-🟡 **In Development** — Project initialized, beginning Week 1 proof of concept.
+🟢 **Week 2 Complete** — Full pipeline working: system scan, 6 esports checks, Cinebench benchmarking, LLM-powered recommendations with batch approval UX. LLM is optional — tool works with static fallback templates when the model isn't loaded.
 
 ## Development
 
-See `memory-bank/` for full project documentation and context.
+See `docs/office-hours-design-20260323.md` for the full product design and roadmap.

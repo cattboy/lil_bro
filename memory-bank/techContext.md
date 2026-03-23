@@ -5,7 +5,7 @@
 |----------|-----------|---------------|
 | Language | Python 3 | Core orchestrator |
 | LLM Runtime | `llama-cpp-python` | Runs GGUF models in-process |
-| LLM Model | `Qwen2.5-Coder-7B-Instruct.Q4_K_M.gguf` | ~4.5 GB, bundled with installer |
+| LLM Model | `Qwen2.5-Coder-7B-Instruct.Q4_K_M.gguf` | ~4.5 GB, downloaded on first run from HuggingFace (optional) |
 | System Info | WMI (`wmi` package) | Windows Management Instrumentation queries |
 | System Info | `dxdiag` | DirectX Diagnostic Tool (built-in) |
 | GPU Profiling | NvidiaProfileInspector | Bundled executable |
@@ -28,16 +28,15 @@
 - **Windows only** — WMI, registry, dxdiag, PowerShell are all Windows-specific
 
 ## Dependencies (Python Packages)
-- `llama-cpp-python` — local LLM inference
+- `colorama` — terminal color output
 - `wmi` — Windows Management Instrumentation
-- `psutil` — system resource monitoring
-- `pyinstaller` — bundling (dev dependency)
-- `pyqt5` or `pyqt6` — optional GUI (future phase)
+- `llama-cpp-python` — local LLM inference (optional — tool works without it)
+- `pytest` — testing (dev dependency)
 
-## External Tools (Bundled)
-- `LibreHardwareMonitor` — hardware sensor monitoring
-- `NvidiaProfileInspector` — NVIDIA profile import/export
-- `dxdiag` — system-provided DirectX diagnostics
+## External Tools
+- `LibreHardwareMonitor` — hardware sensor monitoring (bundled sidecar, Week 3)
+- `NvidiaProfileInspector` — NVIDIA profile import/export (deferred to future version)
+- `dxdiag` — system-provided DirectX diagnostics (built-in to Windows)
 
 ## Tool Usage Patterns
 - **PowerShell** — System Restore Point creation, registry modifications
