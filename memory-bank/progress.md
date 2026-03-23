@@ -46,7 +46,7 @@
 - [ ] Friendly LLM-generated explanations
 
 ## Current Status
-🟢 **Week 4 complete** — PyInstaller portable .exe, %APPDATA% path relocation, SHA-256 integrity verification, build pipeline. 164 tests passing
+🟢 **Week 5 complete** — Game Mode auto-fix, animated progress bar (plasma sweep), NVIDIA driver display in Phase 2, thermals fallback template, brand voice idle warnings (≥80°C), collector resilience (`_safe_collect`), `check_polling_rate` error handling. 188 tests passing.
 
 ## Known Issues
 - llama-cpp-python not yet tested with PyInstaller bundling (hard gate deferred to RTX 3080 dev machine)
@@ -65,3 +65,7 @@
 | 2026-03-23 | Pre-benchmark thermal gate | Idle temp check before benchmark; CPU ≥75°C / GPU ≥80°C = warn and offer to skip |
 | 2026-03-23 | BenchmarkRunner replaces CinebenchOrchestrator | Cinebench auto-detect (12 paths) + CPU stress fallback via multiprocessing when not installed |
 | 2026-03-23 | RawValue sensor parsing | LHM JSON parser prefers numeric RawValue over string Value — more robust across locales |
+| 2026-03-24 | Game Mode auto-fix via registry | Replaced manual instruction with direct registry write (AutoGameModeEnabled) |
+| 2026-03-24 | _safe_collect in spec_dumper | Wrap each collector independently so one failure (e.g. nvidia-smi missing) doesn't abort the full dump |
+| 2026-03-24 | requirements.txt removed | pyproject.toml is now single source of truth; llama-cpp-python moved to optional [llm] extra |
+| 2026-03-24 | CONTRIBUTING.md added | Standard practice: README stays user-facing, CONTRIBUTING has dev setup + build commands |

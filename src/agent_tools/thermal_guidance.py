@@ -190,16 +190,31 @@ def check_idle_thermals(
     warnings = []
 
     if cpu_temp is not None and cpu_temp >= CPU_IDLE_WARN:
-        warnings.append(
-            f"CPU is already at {cpu_temp:.0f}°C at idle — "
-            f"under full load it could exceed {cpu_temp + 15:.0f}°C."
-        )
+        if cpu_temp >= 80.0:
+            warnings.append(
+                f"CPU is at {cpu_temp:.0f}°C AT IDLE — clean yo fans or repaste "
+                f"your CPU, your PC is dying yo. Under load this thing will hit "
+                f"{cpu_temp + 15:.0f}°C+ and throttle hard."
+            )
+        else:
+            warnings.append(
+                f"CPU is already at {cpu_temp:.0f}°C at idle — "
+                f"under full load it could exceed {cpu_temp + 15:.0f}°C."
+            )
 
     if gpu_temp is not None and gpu_temp >= GPU_IDLE_WARN:
-        warnings.append(
-            f"GPU is already at {gpu_temp:.0f}°C at idle — "
-            f"under full load it could exceed {gpu_temp + 15:.0f}°C."
-        )
+        if gpu_temp >= 80.0:
+            warnings.append(
+                f"GPU is at {gpu_temp:.0f}°C AT IDLE — that's cooked. "
+                f"Check your GPU fans are actually spinning, clean the dust out, "
+                f"and make sure your case isn't suffocating it. Under load "
+                f"you're looking at {gpu_temp + 15:.0f}°C+ easy."
+            )
+        else:
+            warnings.append(
+                f"GPU is already at {gpu_temp:.0f}°C at idle — "
+                f"under full load it could exceed {gpu_temp + 15:.0f}°C."
+            )
 
     if warnings:
         guidance = " ".join(warnings) + (

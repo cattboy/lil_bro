@@ -1,6 +1,6 @@
 import pytest
-from unittest.mock import patch, MagicMock
-from src.agent_tools.game_mode import get_game_mode_status, check_game_mode
+from unittest.mock import patch, MagicMock, call
+from src.agent_tools.game_mode import get_game_mode_status, check_game_mode, analyze_game_mode, set_game_mode
 from src.utils.errors import ScannerError
 
 @patch('src.agent_tools.game_mode.winreg')
@@ -45,3 +45,41 @@ def test_check_game_mode_error(mock_get_status):
     mock_get_status.side_effect = ScannerError("Registry locked")
     result = check_game_mode()
     assert result["status"] == "ERROR"
+
+
+@patch('src.agent_tools.game_mode.winreg')
+def test_set_game_mode_enable(mock_winreg):
+    mock_key = MagicMock()
+    mock_winreg.CreateKeyEx.return_value.__enter__.return_value = mock_key
+    mock_winreg.REG_DWORD = 4
+
+    result = set_game_mode(True)
+
+    assert result is True
+    mock_winreg.SetValueEx.assert_called_once_with(mock_key, "AutoGameModeEnabled", 0, 4, 1)
+
+
+@patch('src.agent_tools.game_mode.winreg')
+def test_set_game_mode_disable(mock_winreg):
+    mock_key = MagicMock()
+    mock_winreg.CreateKeyEx.return_value.__enter__.return_value = mock_key
+    mock_winreg.REG_DWORD = 4
+
+    result = set_game_mode(False)
+
+    assert result is True
+    mock_winreg.SetValueEx.assert_called_once_with(mock_key, "AutoGameModeEnabled", 0, 4, 0)
+
+
+@patch('src.agent_tools.game_mode.winreg')
+def test_set_game_mode_failure(mock_winreg):
+    mock_winreg.CreateKeyEx.side_effect = PermissionError("Access denied")
+
+    with pytest.raises(ScannerError):
+        set_game_mode(True)
+
+
+def test_analyze_game_mode_can_auto_fix():
+    result = analyze_game_mode({"GameMode": {"enabled": False}})
+    assert result["status"] == "WARNING"
+    assert result["can_auto_fix"] is True

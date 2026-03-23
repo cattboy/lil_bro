@@ -16,8 +16,8 @@ def analyze_game_mode(specs: dict) -> dict:
             "status": "WARNING",
             "current": False,
             "expected": True,
-            "message": "Windows Game Mode is DISABLED. Enable via Settings > Gaming > Game Mode.",
-            "can_auto_fix": False,
+            "message": "Windows Game Mode is DISABLED — lil_bro can flip this on for you.",
+            "can_auto_fix": True,
         }
     return {
         "check": "game_mode",
@@ -27,6 +27,32 @@ def analyze_game_mode(specs: dict) -> dict:
         "message": "Windows Game Mode is ENABLED.",
         "can_auto_fix": False,
     }
+
+def set_game_mode(enabled: bool) -> bool:
+    """
+    Sets Windows Game Mode on/off by writing AutoGameModeEnabled.
+
+    Args:
+        enabled: True to enable Game Mode, False to disable.
+
+    Returns:
+        True if the write succeeded.
+
+    Raises:
+        ScannerError: If the registry write fails.
+    """
+    try:
+        with winreg.CreateKeyEx(
+            winreg.HKEY_CURRENT_USER,
+            r"SOFTWARE\Microsoft\GameBar",
+            0,
+            winreg.KEY_SET_VALUE,
+        ) as key:
+            winreg.SetValueEx(key, "AutoGameModeEnabled", 0, winreg.REG_DWORD, 1 if enabled else 0)
+        return True
+    except Exception as e:
+        raise ScannerError(f"Failed to set Game Mode: {e}")
+
 
 def get_game_mode_status() -> bool:
     """

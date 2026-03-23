@@ -13,8 +13,10 @@
 - **Always activate the `.venv` before running any Python commands.** The venv lives at `.venv/` in the project root.
   - Activate: `.venv/Scripts/activate` (Windows)
   - Create if missing: `uv venv`
-  - Install deps: `uv pip install -r requirements.txt`
+  - Install deps: `uv pip install -e ".[dev]"`
+  - Install with LLM support: `uv pip install -e ".[dev,llm]"`
 - Never install packages globally. All dependencies must be inside `.venv/`.
+- `requirements.txt` has been removed — `pyproject.toml` is the single source of truth for all dependencies.
 
 ### Documentation
 - **Always save progress docs, notes, plans, and reports into `./docs/`** (project root `docs/` folder). Do not scatter docs elsewhere.
@@ -64,12 +66,13 @@ src/
     cinebench.py         — BenchmarkRunner: Cinebench auto-detect (12 paths) + CPU stress fallback
     thermal_monitor.py   — Background LHM temperature polling during benchmarks
   utils/
-    action_logger.py     — Singleton logger → %APPDATA%\lil_bro\logs\lil_bro_actions.log
+    action_logger.py     — Singleton logger → %APPDATA%\lil_bro\logs\lil_bro_actions.log (echoes to terminal)
     dump_parser.py       — Extracts slim hardware summary from full_specs.json for LLM
     errors.py            — LilBroError, AdminRequiredError, ScannerError, RestorePointError
     formatting.py        — Colorama terminal UI helpers (print_step, print_success, etc.)
     integrity.py         — SHA-256 exe hash verification (frozen builds only)
     paths.py             — Centralized %APPDATA%\lil_bro\ path helper
+    progress_bar.py      — AnimatedProgressBar: plasma-sweep terminal animation during fix execution
 build.py               — Automated build pipeline (PyInstaller + integrity manifest)
 lil_bro.spec           — PyInstaller onefile build specification
 tests/                 — Unit tests, all mocked (no real system modifications)
@@ -109,6 +112,7 @@ memory-bank/           — Project design docs (brief, progress, patterns, activ
 - **Week 2** ✅ — LLM integration: model loader, action proposer, batch approval UX, static fallback
 - **Week 3** ✅ — LHM sidecar, thermal monitor, thermal guidance, benchmark runner rework, pre-benchmark safety gate
 - **Week 4** ✅ — PyInstaller portable .exe, %APPDATA% path relocation, SHA-256 integrity verification
+- **Week 5** ✅ — Game Mode auto-fix, thermals fallback template, brand voice idle warning, animated progress bar, NVIDIA driver display, expanded test coverage (188 tests), collector resilience via `_safe_collect`
 
 ---
 

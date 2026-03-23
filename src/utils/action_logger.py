@@ -26,6 +26,10 @@ class ActionLogger:
         except Exception as e:
             # Fallback for testing environments
             print(f"Failed to write to action log: {e}")
+
+        # Echo to terminal (dim, non-intrusive)
+        from colorama import Style
+        print(f"{Style.DIM}  {log_entry}{Style.RESET_ALL}")
             
 # Global singleton instance
 action_logger = ActionLogger()

@@ -23,8 +23,12 @@ All processing happens locally. The only external calls are optional driver vers
 
 ## Status
 
-🟢 **Week 4 Complete** — Portable .exe packaging ready. Full pipeline: system scan, 8 esports checks, Cinebench benchmarking with CPU stress fallback, pre-benchmark thermal safety gate, LLM-powered recommendations with batch approval UX, SHA-256 integrity verification on launch. LLM is optional — tool works with static fallback templates.
+🟢 **Week 5 Complete** — 188 tests passing. Game Mode now auto-fixes via registry write. Animated plasma-sweep progress bar during fix execution. NVIDIA driver version shown after system scan. Thermal idle warnings use brand voice at ≥80°C. Full thermals fallback template for LLM-offline scenarios. Collector resilience: individual failures no longer abort the spec dump.
+
+Previous: portable .exe packaging, 8 esports checks, Cinebench + thermal benchmarking, LLM-powered recommendations with batch approval UX, SHA-256 integrity verification. LLM is optional — static fallback templates always work offline.
 
 ## Development
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for dev environment setup, test commands, and how to build the `.exe`.
 
 See `docs/office-hours-design-20260323.md` for the full product design and roadmap.

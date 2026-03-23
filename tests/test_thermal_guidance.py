@@ -224,3 +224,19 @@ def test_idle_check_return_structure():
     assert "cpu_temp" in result
     assert "gpu_temp" in result
     assert "message" in result
+
+
+def test_idle_cpu_extreme_heat_brand_voice():
+    """CPU at >=80°C at idle → brand voice warning with casual language."""
+    temps = {"Intel Core i7 > CPU Package": 85.0}
+    result = check_idle_thermals(temps)
+    assert result["safe"] is False
+    assert "clean yo fans" in result["message"]
+
+
+def test_idle_gpu_extreme_heat_brand_voice():
+    """GPU at >=80°C at idle → brand voice warning with casual language."""
+    temps = {"NVIDIA RTX 3080 > GPU Core": 82.0}
+    result = check_idle_thermals(temps)
+    assert result["safe"] is False
+    assert "that's cooked" in result["message"]

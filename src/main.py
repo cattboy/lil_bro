@@ -32,6 +32,7 @@ from src.utils.formatting import (
     print_header, print_info, print_warning, print_error, print_success, prompt_approval,
 )
 from src.utils.errors import LilBroError, AdminRequiredError
+from src.utils.progress_bar import AnimatedProgressBar
 
 # Module-level LLM instance — loaded once via "Setup AI Model", reused across runs.
 _llm = None
@@ -39,11 +40,11 @@ _llm = None
 
 def print_banner():
     banner = f"""{Fore.MAGENTA}{Style.BRIGHT}
-  _   _    __  _                  ___
- | | (_)  / / | |__   _ __  ___  / _ \\
- | | | | / /  | '_ \\ | '__|/ _ \\| | | |
- | | | |/ /   | |_) || |  | (_) | |_| |
- |_| |_/_/    |_.__/ |_|   \\___/ \\___/
+   _   _    __  _           ___
+ | | (_)  / / | |__   _ __ / _ \\
+ | | | | / /  | '_ \\ | '__| | | 
+ | | | |/ /   | |_) || |  | |_| |
+ |_| |_/_/    |_.__/ |_|   \\___/
 
   Your Local AI PC Optimization Agent
 {Style.RESET_ALL}"""
@@ -244,6 +245,16 @@ def _execute_fix(check: str, specs: dict) -> bool:
             print_error(f"[temp_folders] Cleanup failed: {e}")
             return False
 
+    elif check == "game_mode":
+        from src.agent_tools.game_mode import set_game_mode
+        try:
+            set_game_mode(enabled=True)
+            print_success("[game_mode] Game Mode enabled.")
+            return True
+        except Exception as e:
+            print_error(f"[game_mode] Failed: {e}")
+            return False
+
     return False  # check not auto-fixable
 
 
@@ -299,9 +310,15 @@ def _run_approval_flow(proposals: list[dict], specs: dict) -> None:
             )
 
     print()
-    for _n, proposal in sorted(selected_proposals.items()):
+    bar = AnimatedProgressBar(total=len(selected_proposals), label="Applying fixes")
+    bar.start()
+
+    for i, (_n, proposal) in enumerate(sorted(selected_proposals.items()), 1):
         check = proposal.get("finding", "")
+        bar.update(i, f"Fixing {check.replace('_', ' ')}...")
         _execute_fix(check, specs)
+
+    bar.finish()
 
     # Partial failure notice
     print_info(
@@ -344,6 +361,21 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
     dump_path = dump_system_specs()
     if dump_path:
         print_info(f"Full system specs saved to {dump_path}")
+
+        # Show key hardware info to the user
+        try:
+            with open(dump_path, "r", encoding="utf-8") as f:
+                specs_preview = json.load(f)
+            hw = extract_hardware_summary(specs_preview)
+
+            print()
+            print_info(f"CPU:    {hw.get('cpu', 'Unknown')}")
+            print_info(f"GPU:    {hw.get('gpu', 'Unknown')}")
+            print_info(f"Driver: {hw.get('gpu_driver', 'Unknown')}")
+            print_info(f"RAM:    {hw.get('ram_gb', 0)} GB @ {hw.get('ram_mhz', 0)} MHz")
+            print_info(f"OS:     {hw.get('os', 'Unknown')}")
+        except Exception:
+            pass  # Non-critical — don't block pipeline over a display error
 
     print_header("Phase 3: Baseline Benchmark")
 

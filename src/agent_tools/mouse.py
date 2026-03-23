@@ -80,8 +80,11 @@ def check_polling_rate() -> dict:
     """
     print_step("Scanning Mouse Polling Rate")
     print_step_done(True) # Just to close the line
-    
-    hz = _fallback_measure_rate(3)
+
+    try:
+        hz = _fallback_measure_rate(3)
+    except Exception as e:
+        return {"current_hz": 0, "status": "ERROR", "message": str(e)}
     
     result = {
         "current_hz": hz,

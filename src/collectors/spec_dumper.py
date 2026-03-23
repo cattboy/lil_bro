@@ -14,6 +14,14 @@ from ..utils.formatting import print_step, print_step_done, print_error, print_w
 from ..utils.paths import get_specs_path
 
 
+def _safe_collect(fn, *args, **kwargs):
+    """Wraps a collector call so a single failure doesn't abort the whole dump."""
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def _collect_power_plan() -> dict:
     try:
         guid, name = get_active_power_plan()
@@ -41,15 +49,15 @@ def dump_system_specs(output_path: str | None = None) -> str:
 
     specs = {
         "CollectionTime": datetime.now().isoformat(),
-        "WMI": get_wmi_specs(),
-        "DXDiag": get_dxdiag(),
-        "NVIDIA": get_nvidia_smi(),
-        "AMD": get_amd_smi(),
-        "LibreHardwareMonitor": get_lhm_data(),
-        "DisplayCapabilities": get_monitor_refresh_capabilities(),
+        "WMI": _safe_collect(get_wmi_specs),
+        "DXDiag": _safe_collect(get_dxdiag),
+        "NVIDIA": _safe_collect(get_nvidia_smi),
+        "AMD": _safe_collect(get_amd_smi),
+        "LibreHardwareMonitor": _safe_collect(get_lhm_data),
+        "DisplayCapabilities": _safe_collect(get_monitor_refresh_capabilities),
         "PowerPlan": _collect_power_plan(),
         "GameMode": _collect_game_mode(),
-        "TempFolders": get_temp_sizes(),
+        "TempFolders": _safe_collect(get_temp_sizes),
     }
 
     try:

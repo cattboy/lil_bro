@@ -62,6 +62,11 @@ def build_llm_input(hardware: dict, findings: list[dict]) -> dict:
                 "current_hz": f.get("current_hz", 0),
                 "threshold_hz": 500,
             })
+        elif check == "thermals":
+            entry.update({
+                "cpu_peak": f.get("cpu_peak"),
+                "gpu_peak": f.get("gpu_peak"),
+            })
 
         llm_findings.append(entry)
 
@@ -149,8 +154,8 @@ _FALLBACK: dict[str, dict] = {
             "Windows Game Mode is off. It prioritizes CPU/GPU resources to the active "
             "game and reduces background jitter."
         ),
-        "proposed_action": "Enable Game Mode in Settings → Gaming → Game Mode (manual)",
-        "can_auto_fix": False,
+        "proposed_action": "Enable Game Mode via registry",
+        "can_auto_fix": True,
     },
     "rebar": {
         "finding": "rebar",
@@ -180,6 +185,17 @@ _FALLBACK: dict[str, dict] = {
             "Open your mouse's driver software and set it to 1000Hz or higher."
         ),
         "proposed_action": "Set polling rate to 1000Hz in mouse driver software (manual)",
+        "can_auto_fix": False,
+    },
+    "thermals": {
+        "finding": "thermals",
+        "severity": "HIGH",
+        "explanation": (
+            "Your temps are running hot under load — your CPU or GPU is at risk of "
+            "thermal throttling, which silently kills your FPS. Clean your fans, "
+            "check your thermal paste, and make sure your case has decent airflow."
+        ),
+        "proposed_action": "Improve cooling: clean dust filters, check thermal paste, optimize case airflow (manual)",
         "can_auto_fix": False,
     },
 }

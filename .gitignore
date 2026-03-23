@@ -1,7 +1,10 @@
 /node-modules/*
 .env
 .clinerules
+
+#logs
 src/logs/
+logs/
 
 /lil_bro.egg-info/*
 .venv
