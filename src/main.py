@@ -21,6 +21,9 @@ from src.agent_tools.display_setter import find_best_mode, apply_display_mode
 from src.collectors.spec_dumper import dump_system_specs
 from src.collectors.sub.monitor_dumper import get_all_displays
 from src.benchmarks.cinebench import CinebenchOrchestrator
+from src.benchmarks.thermal_monitor import ThermalMonitor
+from src.collectors.sub.lhm_sidecar import LHMSidecar
+from src.agent_tools.thermal_guidance import analyze_thermals
 from src.utils.dump_parser import extract_hardware_summary
 from src.llm.model_loader import load_model, get_model_status
 from src.llm.action_proposer import propose_actions
@@ -309,6 +312,17 @@ def _run_approval_flow(proposals: list[dict], specs: dict) -> None:
 # ── Pipeline ──────────────────────────────────────────────────────────────────
 
 def run_optimization_pipeline():
+    lhm = LHMSidecar()
+    thermal = ThermalMonitor()
+
+    try:
+        _run_pipeline(lhm, thermal)
+    finally:
+        # Always clean up the sidecar, even on error/Ctrl+C
+        lhm.stop()
+
+
+def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
     print_header("Phase 1: Bootstrapping & Safety")
     try:
         create_restore_point()
@@ -318,16 +332,48 @@ def run_optimization_pipeline():
             return
 
     print_header("Phase 2: Deep System Scan")
+
+    # Launch LibreHardwareMonitor sidecar for thermal data
+    lhm_available = lhm.start()
+    if lhm_available:
+        print_success("Thermal monitoring active on port 8085.")
+    else:
+        print_info("Continuing without thermal monitoring — Cinebench will still run.")
+
     dump_path = dump_system_specs()
     if dump_path:
         print_info(f"Full system specs saved to {dump_path}")
 
     print_header("Phase 3: Baseline Benchmark")
+
+    # Start thermal polling before benchmark (if LHM is running)
+    if lhm_available:
+        thermal.start()
+        print_info("Thermal monitoring active — sampling temperatures during benchmark.")
+
     cb = CinebenchOrchestrator()
     baseline = cb.run_benchmark(run_all=False)
     if baseline.get("status") == "success":
         print_success("Baseline Benchmark Complete!")
         print_info(f"Scores: {baseline.get('scores', {})}")
+
+    # Stop thermal polling and capture peak temps
+    peak_temps: dict[str, float] = {}
+    if lhm_available:
+        thermal.stop()
+        peak_temps = thermal.get_peak_temps()
+        if peak_temps:
+            cpu_peak = thermal.get_cpu_peak()
+            gpu_peak = thermal.get_gpu_peak()
+            parts = []
+            if cpu_peak is not None:
+                parts.append(f"CPU: {cpu_peak:.1f}°C")
+            if gpu_peak is not None:
+                parts.append(f"GPU: {gpu_peak:.1f}°C")
+            if parts:
+                print_info(f"Peak temps during benchmark: {', '.join(parts)} ({thermal.sample_count} samples)")
+        else:
+            print_warning("Thermal monitor ran but captured no temperature data.")
 
     print_header("Phase 4: Apply Esports Configurations")
 
@@ -351,6 +397,14 @@ def run_optimization_pipeline():
             analyze_rebar(specs),
             analyze_temp_folders(specs),
         ]
+
+        # Thermal guidance (from benchmark peak temps)
+        thermal_finding = analyze_thermals(
+            peak_temps,
+            cpu_peak=thermal.get_cpu_peak() if lhm_available else None,
+            gpu_peak=thermal.get_gpu_peak() if lhm_available else None,
+        )
+        findings.append(thermal_finding)
 
         # Mouse: live check (not spec-fed) — normalize into finding format
         print()
@@ -397,7 +451,16 @@ def run_optimization_pipeline():
         _run_approval_flow(proposals, specs)
 
     print_header("Phase 5: Final Verification Benchmark")
+
+    # Restart thermal monitoring for the final benchmark
+    if lhm_available:
+        thermal.start()
+
     final = cb.run_benchmark(run_all=True)
+
+    if lhm_available:
+        thermal.stop()
+
     if final.get("status") == "success":
         print_success("Final Benchmark Complete!")
         print_info(f"After:  {final.get('scores', {})}")
