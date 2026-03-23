@@ -8,4 +8,4 @@ wmi>=1.5.1            # Windows Management Instrumentation queries
 # llama-cpp-python>=0.3.0   # Local GGUF model inference (CPU)
 
 # ── Dev / testing ──────────────────────────────────────────────────────────────
-# pytest>=8.0
+pytest>=8.0

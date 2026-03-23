@@ -15,10 +15,9 @@ def analyze_rebar(specs: dict) -> dict:
 
     if isinstance(nvidia, list) and nvidia:
         gpu = nvidia[0]
-        rebar_str = gpu.get("ReBAR", "")
-        bar1_mib = int(gpu.get("BAR1 Used MiB", 0) or 0)
+        rebar_on = gpu.get("ReBAR", False)          # bool from nvidia_smi_dumper
+        bar1_mib = gpu.get("BAR1 Used (MiB)", 0)   # int, key includes parentheses
         name = gpu.get("GPU", "Unknown GPU")
-        rebar_on = (rebar_str == "Enabled") or (bar1_mib > 256)
 
         if rebar_on:
             return {

@@ -1,3 +1,4 @@
+import os
 import pytest
 from unittest.mock import patch
 from src.agent_tools.temp_audit import _format_size, scan_temp_folders
@@ -52,4 +53,4 @@ def test_clean_temp_folders(mock_remove, mock_getsize, mock_exists, mock_walk):
     
     assert bytes_freed == 1024
     assert files_deleted == 1
-    mock_remove.assert_called_once_with('/fake/dir/file1.tmp')
+    mock_remove.assert_called_once_with(os.path.join('/fake/dir', 'file1.tmp'))

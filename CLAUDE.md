@@ -8,6 +8,14 @@
 
 ## Rules
 
+### Python Environment
+- **Always use `uv` for all Python package installs** — never use `pip install` directly.
+- **Always activate the `.venv` before running any Python commands.** The venv lives at `.venv/` in the project root.
+  - Activate: `.venv/Scripts/activate` (Windows)
+  - Create if missing: `uv venv`
+  - Install deps: `uv pip install -r requirements.txt`
+- Never install packages globally. All dependencies must be inside `.venv/`.
+
 ### Documentation
 - **Always save progress docs, notes, plans, and reports into `./docs/`** (project root `docs/` folder). Do not scatter docs elsewhere.
 
