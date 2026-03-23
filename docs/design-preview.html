@@ -1,0 +1,1280 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>lil_bro Design System Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<style>
+  /* ── Design Tokens ─────────────────────────────────────────────── */
+  :root {
+    --bg-deep:     #1A1B23;
+    --bg-surface:  #24252F;
+    --bg-elevated: #2E2F3A;
+    --bg-hover:    #363745;
+
+    --accent:      #00E5CC;
+    --accent-dim:  rgba(0, 229, 204, 0.15);
+    --accent-glow: rgba(0, 229, 204, 0.3);
+
+    --warning:     #FFB547;
+    --error:       #FF6B6B;
+    --success:     #4ADE80;
+    --info:        #60A5FA;
+
+    --text-primary:   #E8E6E3;
+    --text-secondary: #9B9AA0;
+    --text-muted:     #6B6A70;
+
+    --border:      #363745;
+    --border-accent: rgba(0, 229, 204, 0.25);
+
+    --radius-sm:   4px;
+    --radius-md:   8px;
+    --radius-lg:   12px;
+
+    --space-2xs: 2px;
+    --space-xs:  4px;
+    --space-sm:  8px;
+    --space-md:  16px;
+    --space-lg:  24px;
+    --space-xl:  32px;
+    --space-2xl: 48px;
+    --space-3xl: 64px;
+
+    --font-display: 'JetBrains Mono', monospace;
+    --font-body:    'DM Sans', sans-serif;
+    --font-mono:    'JetBrains Mono', monospace;
+
+    --scanline: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.03) 2px,
+      rgba(0, 0, 0, 0.03) 4px
+    );
+  }
+
+  /* ── Light mode overrides ──────────────────────────────────────── */
+  [data-theme="light"] {
+    --bg-deep:     #F0EDE8;
+    --bg-surface:  #FAFAF8;
+    --bg-elevated: #FFFFFF;
+    --bg-hover:    #E8E5E0;
+
+    --accent:      #00B8A3;
+    --accent-dim:  rgba(0, 184, 163, 0.1);
+    --accent-glow: rgba(0, 184, 163, 0.2);
+
+    --text-primary:   #1A1B23;
+    --text-secondary: #5A5960;
+    --text-muted:     #8A8990;
+
+    --border:      #D8D5D0;
+    --border-accent: rgba(0, 184, 163, 0.3);
+
+    --scanline: none;
+  }
+
+  /* ── Reset & Base ──────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Layout ────────────────────────────────────────────────────── */
+  .container {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: var(--space-xl) var(--space-lg);
+  }
+
+  .section {
+    margin-bottom: var(--space-3xl);
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: var(--space-lg);
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── Theme Toggle ──────────────────────────────────────────────── */
+  .theme-toggle {
+    position: fixed;
+    top: var(--space-lg);
+    right: var(--space-lg);
+    z-index: 100;
+    display: flex;
+    gap: var(--space-xs);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-xs);
+  }
+
+  .theme-toggle button {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    padding: var(--space-xs) var(--space-sm);
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-secondary);
+    transition: all 0.15s ease-out;
+  }
+
+  .theme-toggle button.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+
+  /* ── Hero ───────────────────────────────────────────────────────── */
+  .hero {
+    text-align: center;
+    padding: var(--space-3xl) 0;
+    position: relative;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--scanline);
+    pointer-events: none;
+    opacity: 0.5;
+  }
+
+  .hero-brand {
+    font-family: var(--font-display);
+    font-size: 3.5rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    line-height: 1.1;
+    margin-bottom: var(--space-md);
+  }
+
+  .hero-brand span {
+    color: var(--accent);
+    text-shadow: 0 0 40px var(--accent-glow);
+  }
+
+  .hero-sub {
+    font-family: var(--font-body);
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  .hero-badge {
+    display: inline-block;
+    margin-top: var(--space-lg);
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    padding: var(--space-xs) var(--space-md);
+    border: 1px solid var(--border-accent);
+    border-radius: var(--radius-sm);
+    background: var(--accent-dim);
+  }
+
+  /* ── Typography Specimens ──────────────────────────────────────── */
+  .type-grid {
+    display: grid;
+    gap: var(--space-lg);
+  }
+
+  .type-specimen {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .type-specimen::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--scanline);
+    pointer-events: none;
+    opacity: 0.3;
+  }
+
+  .type-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: var(--space-sm);
+  }
+
+  .type-sample-display {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.3;
+  }
+
+  .type-sample-body {
+    font-family: var(--font-body);
+    font-size: 1rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    max-width: 600px;
+  }
+
+  .type-sample-data {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    line-height: 1.8;
+  }
+
+  .type-sample-data .val { color: var(--accent); }
+  .type-sample-data .warn { color: var(--warning); }
+  .type-sample-data .err { color: var(--error); }
+  .type-sample-data .ok { color: var(--success); }
+
+  .type-meta {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: var(--space-sm);
+  }
+
+  /* ── Color Palette ─────────────────────────────────────────────── */
+  .palette-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: var(--space-md);
+  }
+
+  .swatch {
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .swatch-color {
+    height: 80px;
+    position: relative;
+  }
+
+  .swatch-color::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--scanline);
+    pointer-events: none;
+    opacity: 0.4;
+  }
+
+  .swatch-info {
+    background: var(--bg-surface);
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .swatch-name {
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .swatch-hex {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+
+  /* ── UI Components ─────────────────────────────────────────────── */
+  .components-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+  }
+
+  @media (max-width: 768px) {
+    .components-grid { grid-template-columns: 1fr; }
+  }
+
+  .component-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-lg);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .component-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--scanline);
+    pointer-events: none;
+    opacity: 0.3;
+  }
+
+  .component-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: var(--space-md);
+  }
+
+  /* Buttons */
+  .btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+    align-items: center;
+  }
+
+  .btn {
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s ease-out;
+    position: relative;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--bg-deep);
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 0 20px var(--accent-glow);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--border-accent);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--error);
+    border: 1px solid rgba(255, 107, 107, 0.3);
+  }
+
+  /* Alerts */
+  .alert-stack {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .alert {
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .alert-success {
+    background: rgba(74, 222, 128, 0.08);
+    border-color: var(--success);
+    color: var(--success);
+  }
+
+  .alert-warning {
+    background: rgba(255, 181, 71, 0.08);
+    border-color: var(--warning);
+    color: var(--warning);
+  }
+
+  .alert-error {
+    background: rgba(255, 107, 107, 0.08);
+    border-color: var(--error);
+    color: var(--error);
+  }
+
+  .alert-info {
+    background: rgba(96, 165, 250, 0.08);
+    border-color: var(--info);
+    color: var(--info);
+  }
+
+  /* Form inputs */
+  .input-stack {
+    display: grid;
+    gap: var(--space-md);
+  }
+
+  .input-group label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: var(--space-xs);
+  }
+
+  .input-group input,
+  .input-group select {
+    width: 100%;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    outline: none;
+    transition: border-color 0.15s ease-out;
+  }
+
+  .input-group input:focus,
+  .input-group select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-dim);
+  }
+
+  /* Stat cards */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-sm);
+  }
+
+  .stat-card {
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-md);
+    text-align: center;
+  }
+
+  .stat-value {
+    font-family: var(--font-mono);
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-top: var(--space-2xs);
+  }
+
+  /* ── Product Mockups ───────────────────────────────────────────── */
+  .mockup {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .mockup::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--scanline);
+    pointer-events: none;
+    opacity: 0.25;
+    z-index: 1;
+  }
+
+  .mockup-titlebar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mockup-dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .mockup-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .mockup-dot--close { background: var(--error); }
+  .mockup-dot--min { background: var(--warning); }
+  .mockup-dot--max { background: var(--success); }
+
+  .mockup-title {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    flex: 1;
+    text-align: center;
+  }
+
+  .mockup-body {
+    padding: var(--space-lg);
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Terminal mockup */
+  .terminal-line {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    line-height: 1.9;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .terminal-prompt {
+    color: var(--accent);
+  }
+
+  .terminal-dim {
+    color: var(--text-muted);
+  }
+
+  .terminal-bright {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .terminal-success { color: var(--success); }
+  .terminal-warning { color: var(--warning); }
+  .terminal-error   { color: var(--error); }
+  .terminal-accent  { color: var(--accent); }
+  .terminal-magenta { color: #D183E8; }
+
+  .terminal-block {
+    margin: var(--space-sm) 0;
+  }
+
+  /* GUI mockup */
+  .gui-layout {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 0;
+    min-height: 420px;
+  }
+
+  @media (max-width: 768px) {
+    .gui-layout { grid-template-columns: 1fr; }
+    .gui-sidebar { display: none; }
+  }
+
+  .gui-sidebar {
+    background: var(--bg-elevated);
+    border-right: 1px solid var(--border);
+    padding: var(--space-md);
+  }
+
+  .gui-nav-item {
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    margin-bottom: 2px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+  }
+
+  .gui-nav-item.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+
+  .gui-nav-item:hover:not(.active) {
+    background: var(--bg-hover);
+  }
+
+  .gui-nav-icon {
+    font-size: 0.9rem;
+    width: 20px;
+    text-align: center;
+  }
+
+  .gui-main {
+    padding: var(--space-lg);
+    overflow: hidden;
+  }
+
+  .gui-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-lg);
+  }
+
+  .gui-title {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .gui-status {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--success);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+  }
+
+  .gui-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 8px rgba(74, 222, 128, 0.5);
+  }
+
+  .gui-checks {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .gui-check {
+    display: grid;
+    grid-template-columns: 24px 1fr auto;
+    gap: var(--space-sm);
+    align-items: center;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+  }
+
+  .gui-check-icon {
+    font-size: 0.9rem;
+    text-align: center;
+  }
+
+  .gui-check-name {
+    font-family: var(--font-body);
+    color: var(--text-primary);
+  }
+
+  .gui-check-value {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-align: right;
+  }
+
+  .gui-check-ok { color: var(--success); }
+  .gui-check-warn { color: var(--warning); }
+
+  .gui-actions {
+    margin-top: var(--space-lg);
+    display: flex;
+    gap: var(--space-sm);
+  }
+
+  /* Installer mockup */
+  .installer-body {
+    text-align: center;
+    padding: var(--space-2xl) var(--space-lg);
+  }
+
+  .installer-logo {
+    font-family: var(--font-display);
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    margin-bottom: var(--space-xs);
+  }
+
+  .installer-logo span { color: var(--accent); }
+
+  .installer-version {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-bottom: var(--space-xl);
+  }
+
+  .installer-progress {
+    max-width: 360px;
+    margin: 0 auto var(--space-md);
+  }
+
+  .installer-bar-bg {
+    height: 6px;
+    background: var(--bg-deep);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .installer-bar-fill {
+    height: 100%;
+    width: 68%;
+    background: linear-gradient(90deg, var(--accent), #00FFE0);
+    border-radius: 3px;
+    box-shadow: 0 0 12px var(--accent-glow);
+    transition: width 0.4s ease-out;
+  }
+
+  .installer-pct {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--accent);
+    margin-top: var(--space-xs);
+  }
+
+  .installer-status {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: var(--space-md);
+  }
+
+  .installer-btns {
+    margin-top: var(--space-xl);
+    display: flex;
+    justify-content: center;
+    gap: var(--space-sm);
+  }
+
+  /* ── Spacing Scale ─────────────────────────────────────────────── */
+  .spacing-demo {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+  }
+
+  .spacing-unit {
+    text-align: center;
+  }
+
+  .spacing-block {
+    background: var(--accent-dim);
+    border: 1px solid var(--border-accent);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--space-xs);
+  }
+
+  .spacing-label {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-muted);
+  }
+
+  .spacing-px {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    opacity: 0.6;
+  }
+
+  /* ── Footer ────────────────────────────────────────────────────── */
+  .footer {
+    text-align: center;
+    padding: var(--space-2xl) 0 var(--space-xl);
+    border-top: 1px solid var(--border);
+  }
+
+  .footer-text {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+  }
+</style>
+</head>
+<body>
+
+<!-- Theme Toggle -->
+<div class="theme-toggle">
+  <button class="active" onclick="setTheme('dark')">Dark</button>
+  <button onclick="setTheme('light')">Light</button>
+</div>
+
+<div class="container">
+
+  <!-- ═══ Hero ═══ -->
+  <div class="hero section">
+    <div class="hero-brand">lil<span>_</span>bro</div>
+    <div class="hero-sub">Your local AI PC optimization agent. Privacy-first diagnostics, zero cloud dependency.</div>
+    <div class="hero-badge">Design System Preview &mdash; v0.1</div>
+  </div>
+
+  <!-- ═══ Typography ═══ -->
+  <div class="section">
+    <div class="section-title">Typography</div>
+    <div class="type-grid">
+
+      <div class="type-specimen">
+        <div class="type-label">Display / Hero &mdash; JetBrains Mono Bold</div>
+        <div class="type-sample-display">Esports Configuration Check</div>
+        <div class="type-meta">Used for: section headers, banner, navigation titles</div>
+      </div>
+
+      <div class="type-specimen">
+        <div class="type-label">Body &mdash; DM Sans Regular</div>
+        <div class="type-sample-body">
+          lil_bro scanned your system and found 3 issues that need attention.
+          Your monitor is running at 60Hz instead of its native 165Hz &mdash; that's
+          leaving a lot of smoothness on the table. Your power plan is set to Balanced,
+          which throttles your CPU during games. And there's 12.4 GB of old shader
+          cache clogging up your temp folders.
+        </div>
+        <div class="type-meta">Used for: explanations, descriptions, proposal text</div>
+      </div>
+
+      <div class="type-specimen">
+        <div class="type-label">Data / System Values &mdash; JetBrains Mono Regular</div>
+        <div class="type-sample-data">
+          <span class="val">Monitor:</span> ASUS VG27AQ1A &mdash; 2560x1440 @ <span class="warn">60Hz</span> (max: 165Hz)<br>
+          <span class="val">GPU:</span> NVIDIA RTX 3080 &mdash; 10240 MB VRAM <span class="ok">[OK]</span><br>
+          <span class="val">RAM:</span> 32768 MB DDR4 @ <span class="warn">2133 MHz</span> (XMP profile available)<br>
+          <span class="val">CPU:</span> AMD Ryzen 7 5800X &mdash; 78&deg;C peak <span class="ok">[OK]</span><br>
+          <span class="val">ReBAR:</span> <span class="err">NOT DETECTED</span>
+        </div>
+        <div class="type-meta">Used for: hardware specs, file paths, status values, benchmark scores</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ Color Palette ═══ -->
+  <div class="section">
+    <div class="section-title">Color Palette</div>
+    <div class="palette-grid">
+      <div class="swatch">
+        <div class="swatch-color" style="background: #1A1B23;"></div>
+        <div class="swatch-info"><div class="swatch-name">Deep BG</div><div class="swatch-hex">#1A1B23</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #24252F;"></div>
+        <div class="swatch-info"><div class="swatch-name">Surface</div><div class="swatch-hex">#24252F</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #2E2F3A;"></div>
+        <div class="swatch-info"><div class="swatch-name">Elevated</div><div class="swatch-hex">#2E2F3A</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #363745;"></div>
+        <div class="swatch-info"><div class="swatch-name">Hover</div><div class="swatch-hex">#363745</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #00E5CC;"></div>
+        <div class="swatch-info"><div class="swatch-name">Accent (Cyan)</div><div class="swatch-hex">#00E5CC</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #FFB547;"></div>
+        <div class="swatch-info"><div class="swatch-name">Warning</div><div class="swatch-hex">#FFB547</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #FF6B6B;"></div>
+        <div class="swatch-info"><div class="swatch-name">Error</div><div class="swatch-hex">#FF6B6B</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #4ADE80;"></div>
+        <div class="swatch-info"><div class="swatch-name">Success</div><div class="swatch-hex">#4ADE80</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #60A5FA;"></div>
+        <div class="swatch-info"><div class="swatch-name">Info</div><div class="swatch-hex">#60A5FA</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #E8E6E3;"></div>
+        <div class="swatch-info"><div class="swatch-name">Text Primary</div><div class="swatch-hex">#E8E6E3</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #9B9AA0;"></div>
+        <div class="swatch-info"><div class="swatch-name">Text Secondary</div><div class="swatch-hex">#9B9AA0</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background: #6B6A70;"></div>
+        <div class="swatch-info"><div class="swatch-name">Text Muted</div><div class="swatch-hex">#6B6A70</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ UI Components ═══ -->
+  <div class="section">
+    <div class="section-title">UI Components</div>
+    <div class="components-grid">
+
+      <div class="component-card">
+        <div class="component-label">Buttons</div>
+        <div class="btn-row">
+          <button class="btn btn-primary">Run Pipeline</button>
+          <button class="btn btn-secondary">Setup AI</button>
+          <button class="btn btn-ghost">Skip</button>
+          <button class="btn btn-danger">Cancel</button>
+        </div>
+      </div>
+
+      <div class="component-card">
+        <div class="component-label">Alerts</div>
+        <div class="alert-stack">
+          <div class="alert alert-success">System Restore Point created successfully</div>
+          <div class="alert alert-warning">Monitor running at 60Hz (max: 165Hz)</div>
+          <div class="alert alert-error">XMP not enabled &mdash; RAM at 2133 MHz</div>
+          <div class="alert alert-info">AI model loaded &mdash; using Qwen2.5-7B</div>
+        </div>
+      </div>
+
+      <div class="component-card">
+        <div class="component-label">Form Inputs</div>
+        <div class="input-stack">
+          <div class="input-group">
+            <label>Model Path</label>
+            <input type="text" value="%APPDATA%\lil_bro\models\Qwen2.5-7B.gguf" readonly>
+          </div>
+          <div class="input-group">
+            <label>Target Refresh Rate</label>
+            <select>
+              <option>165 Hz (native maximum)</option>
+              <option>144 Hz</option>
+              <option>120 Hz</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="component-card">
+        <div class="component-label">Stat Cards</div>
+        <div class="stat-row">
+          <div class="stat-card">
+            <div class="stat-value">165</div>
+            <div class="stat-label">Hz</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">72&deg;C</div>
+            <div class="stat-label">GPU Temp</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">1842</div>
+            <div class="stat-label">CB Score</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══ Mockup: Terminal CLI ═══ -->
+  <div class="section">
+    <div class="section-title">Mockup &mdash; Terminal CLI (Current)</div>
+    <div class="mockup">
+      <div class="mockup-titlebar">
+        <div class="mockup-dots">
+          <div class="mockup-dot mockup-dot--close"></div>
+          <div class="mockup-dot mockup-dot--min"></div>
+          <div class="mockup-dot mockup-dot--max"></div>
+        </div>
+        <div class="mockup-title">lil_bro &mdash; Windows Terminal</div>
+        <div style="width: 54px;"></div>
+      </div>
+      <div class="mockup-body" style="background: var(--bg-deep);">
+        <div class="terminal-block">
+          <div class="terminal-line terminal-magenta" style="font-weight:700; font-size:0.9rem;">
+  _   _    __  _                  ___
+ | | (_)  / / | |__   _ __  ___  / _ \
+ | | | | / /  | '_ \ | '__|/ _ \| | | |
+ | | | |/ /   | |_) || |  | (_) | |_| |
+ |_| |_/_/    |_.__/ |_|   \___/ \___/</div>
+        </div>
+        <div class="terminal-block">
+          <div class="terminal-line"><span class="terminal-accent">  Your Local AI PC Optimization Agent</span></div>
+          <div class="terminal-line terminal-dim">  Privacy Guarantee: 100% Offline Analysis. No data leaves your machine.</div>
+        </div>
+        <div class="terminal-block" style="margin-top: var(--space-md);">
+          <div class="terminal-line terminal-accent" style="font-weight:600;">== Phase 4: Apply Esports Configurations ==</div>
+        </div>
+        <div class="terminal-block">
+          <div class="terminal-line terminal-dim">Audit complete: <span class="terminal-success">4 OK</span>, <span class="terminal-warning">3 need attention</span>, 0 unknown</div>
+        </div>
+        <div class="terminal-block">
+          <div class="terminal-line"><span class="terminal-success">  [DISPLAY]</span> Running at native 165Hz &mdash; no change needed</div>
+          <div class="terminal-line"><span class="terminal-success">  [GAME_MODE]</span> Windows Game Mode is enabled</div>
+          <div class="terminal-line"><span class="terminal-warning">  [POWER_PLAN]</span> Active plan: Balanced &mdash; not optimal for gaming</div>
+          <div class="terminal-line"><span class="terminal-warning">  [XMP]</span> RAM at 2133 MHz &mdash; XMP/EXPO profile not enabled</div>
+          <div class="terminal-line"><span class="terminal-success">  [REBAR]</span> Resizable BAR is enabled</div>
+          <div class="terminal-line"><span class="terminal-warning">  [TEMP_FOLDERS]</span> 12.4 GB of temp data across 3 locations</div>
+          <div class="terminal-line"><span class="terminal-success">  [MOUSE]</span> Polling at 1000Hz &mdash; good</div>
+        </div>
+        <div class="terminal-block" style="margin-top: var(--space-md);">
+          <div class="terminal-line terminal-dim">Generating AI-powered recommendations...</div>
+        </div>
+        <div class="terminal-block">
+          <div class="terminal-line"><span class="terminal-error" style="font-weight:600;">[1] HIGH &mdash; Power Plan</span></div>
+          <div class="terminal-line terminal-dim">    Your PC is in Balanced mode which throttles CPU clocks mid-game.</div>
+          <div class="terminal-line">    Fix: Switch to Ultimate Performance plan  <span class="terminal-success">[AUTO]</span></div>
+        </div>
+        <div class="terminal-block">
+          <div class="terminal-line"><span class="terminal-warning" style="font-weight:600;">[2] MEDIUM &mdash; Xmp</span></div>
+          <div class="terminal-line terminal-dim">    RAM running at base 2133 MHz. Enable XMP in BIOS for rated speed.</div>
+          <div class="terminal-line">    Fix: Enable XMP/EXPO in BIOS  <span class="terminal-dim">[MANUAL]</span></div>
+        </div>
+        <div class="terminal-block">
+          <div class="terminal-line"><span class="terminal-accent" style="font-weight:600;">[3] LOW &mdash; Temp Folders</span></div>
+          <div class="terminal-line terminal-dim">    12.4 GB of cached shaders and temp files. Safe to clean.</div>
+          <div class="terminal-line">    Fix: Clean temp folders  <span class="terminal-success">[AUTO]</span></div>
+        </div>
+        <div class="terminal-block" style="margin-top: var(--space-md);">
+          <div class="terminal-line"><span class="terminal-accent">Apply changes? Enter numbers (e.g. "1 3"), "all", or "skip":</span> <span class="terminal-bright">1 3</span><span class="terminal-accent" style="animation: blink 1s step-end infinite;">_</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Mockup: PyQt GUI ═══ -->
+  <div class="section">
+    <div class="section-title">Mockup &mdash; PyQt Desktop App (Week 5)</div>
+    <div class="mockup">
+      <div class="mockup-titlebar">
+        <div class="mockup-dots">
+          <div class="mockup-dot mockup-dot--close"></div>
+          <div class="mockup-dot mockup-dot--min"></div>
+          <div class="mockup-dot mockup-dot--max"></div>
+        </div>
+        <div class="mockup-title">lil_bro v1.0 &mdash; Esports Optimization Agent</div>
+        <div style="width: 54px;"></div>
+      </div>
+      <div class="gui-layout">
+        <div class="gui-sidebar">
+          <div style="font-family: var(--font-display); font-weight: 700; font-size: 1rem; color: var(--text-primary); margin-bottom: var(--space-lg); padding: var(--space-sm);">
+            lil<span style="color: var(--accent);">_</span>bro
+          </div>
+          <div class="gui-nav-item active">
+            <span class="gui-nav-icon">&#9881;</span> Diagnostics
+          </div>
+          <div class="gui-nav-item">
+            <span class="gui-nav-icon">&#9889;</span> Benchmarks
+          </div>
+          <div class="gui-nav-item">
+            <span class="gui-nav-icon">&#9729;</span> Thermals
+          </div>
+          <div class="gui-nav-item">
+            <span class="gui-nav-icon">&#10024;</span> AI Model
+          </div>
+          <div class="gui-nav-item" style="margin-top: auto; padding-top: var(--space-xl);">
+            <span class="gui-nav-icon">&#9881;</span> Settings
+          </div>
+        </div>
+        <div class="gui-main">
+          <div class="gui-header">
+            <div class="gui-title">Esports Configuration Check</div>
+            <div class="gui-status">
+              <span class="gui-status-dot"></span> AI Model Ready
+            </div>
+          </div>
+
+          <div class="stat-row" style="margin-bottom: var(--space-lg);">
+            <div class="stat-card">
+              <div class="stat-value" style="color: var(--success);">4</div>
+              <div class="stat-label">Passing</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" style="color: var(--warning);">3</div>
+              <div class="stat-label">Warnings</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value">7</div>
+              <div class="stat-label">Total Checks</div>
+            </div>
+          </div>
+
+          <div class="gui-checks">
+            <div class="gui-check">
+              <span class="gui-check-icon" style="color: var(--success);">&#10003;</span>
+              <span class="gui-check-name">Monitor Refresh Rate</span>
+              <span class="gui-check-value gui-check-ok">165Hz</span>
+            </div>
+            <div class="gui-check">
+              <span class="gui-check-icon" style="color: var(--warning);">&#9888;</span>
+              <span class="gui-check-name">Power Plan</span>
+              <span class="gui-check-value gui-check-warn">Balanced</span>
+            </div>
+            <div class="gui-check">
+              <span class="gui-check-icon" style="color: var(--warning);">&#9888;</span>
+              <span class="gui-check-name">XMP/EXPO</span>
+              <span class="gui-check-value gui-check-warn">2133 MHz</span>
+            </div>
+            <div class="gui-check">
+              <span class="gui-check-icon" style="color: var(--success);">&#10003;</span>
+              <span class="gui-check-name">Windows Game Mode</span>
+              <span class="gui-check-value gui-check-ok">Enabled</span>
+            </div>
+            <div class="gui-check">
+              <span class="gui-check-icon" style="color: var(--success);">&#10003;</span>
+              <span class="gui-check-name">Resizable BAR</span>
+              <span class="gui-check-value gui-check-ok">Active</span>
+            </div>
+            <div class="gui-check">
+              <span class="gui-check-icon" style="color: var(--warning);">&#9888;</span>
+              <span class="gui-check-name">Temp Folders</span>
+              <span class="gui-check-value gui-check-warn">12.4 GB</span>
+            </div>
+            <div class="gui-check">
+              <span class="gui-check-icon" style="color: var(--success);">&#10003;</span>
+              <span class="gui-check-name">Mouse Polling Rate</span>
+              <span class="gui-check-value gui-check-ok">1000Hz</span>
+            </div>
+          </div>
+
+          <div class="gui-actions">
+            <button class="btn btn-primary">Apply Selected Fixes</button>
+            <button class="btn btn-secondary">View AI Recommendations</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Mockup: Installer ═══ -->
+  <div class="section">
+    <div class="section-title">Mockup &mdash; Windows Installer (Week 4)</div>
+    <div class="mockup">
+      <div class="mockup-titlebar">
+        <div class="mockup-dots">
+          <div class="mockup-dot mockup-dot--close"></div>
+          <div class="mockup-dot mockup-dot--min"></div>
+          <div class="mockup-dot mockup-dot--max"></div>
+        </div>
+        <div class="mockup-title">lil_bro Setup</div>
+        <div style="width: 54px;"></div>
+      </div>
+      <div class="installer-body">
+        <div class="installer-logo">lil<span>_</span>bro</div>
+        <div class="installer-version">v1.0.0 &mdash; Your Local AI PC Optimization Agent</div>
+        <div class="installer-progress">
+          <div class="installer-bar-bg">
+            <div class="installer-bar-fill"></div>
+          </div>
+          <div class="installer-pct">68%</div>
+        </div>
+        <div class="installer-status">Installing: LibreHardwareMonitor sidecar...</div>
+        <div class="installer-btns">
+          <button class="btn btn-ghost">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Spacing Scale ═══ -->
+  <div class="section">
+    <div class="section-title">Spacing Scale (8px base)</div>
+    <div class="spacing-demo">
+      <div class="spacing-unit">
+        <div class="spacing-block" style="width: 2px; height: 2px; margin: 0 auto var(--space-xs);"></div>
+        <div class="spacing-label">2xs</div>
+        <div class="spacing-px">2px</div>
+      </div>
+      <div class="spacing-unit">
+        <div class="spacing-block" style="width: 4px; height: 4px; margin: 0 auto var(--space-xs);"></div>
+        <div class="spacing-label">xs</div>
+        <div class="spacing-px">4px</div>
+      </div>
+      <div class="spacing-unit">
+        <div class="spacing-block" style="width: 8px; height: 8px; margin: 0 auto var(--space-xs);"></div>
+        <div class="spacing-label">sm</div>
+        <div class="spacing-px">8px</div>
+      </div>
+      <div class="spacing-unit">
+        <div class="spacing-block" style="width: 16px; height: 16px; margin: 0 auto var(--space-xs);"></div>
+        <div class="spacing-label">md</div>
+        <div class="spacing-px">16px</div>
+      </div>
+      <div class="spacing-unit">
+        <div class="spacing-block" style="width: 24px; height: 24px; margin: 0 auto var(--space-xs);"></div>
+        <div class="spacing-label">lg</div>
+        <div class="spacing-px">24px</div>
+      </div>
+      <div class="spacing-unit">
+        <div class="spacing-block" style="width: 32px; height: 32px; margin: 0 auto var(--space-xs);"></div>
+        <div class="spacing-label">xl</div>
+        <div class="spacing-px">32px</div>
+      </div>
+      <div class="spacing-unit">
+        <div class="spacing-block" style="width: 48px; height: 48px; margin: 0 auto var(--space-xs);"></div>
+        <div class="spacing-label">2xl</div>
+        <div class="spacing-px">48px</div>
+      </div>
+      <div class="spacing-unit">
+        <div class="spacing-block" style="width: 64px; height: 64px; margin: 0 auto var(--space-xs);"></div>
+        <div class="spacing-label">3xl</div>
+        <div class="spacing-px">64px</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Footer ═══ -->
+  <div class="footer">
+    <div class="footer-text">lil_bro Design System &mdash; Generated by /design-consultation &mdash; 2026-03-23</div>
+  </div>
+
+</div>
+
+<script>
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    document.querySelectorAll('.theme-toggle button').forEach(btn => {
+      btn.classList.toggle('active', btn.textContent.toLowerCase() === theme);
+    });
+  }
+</script>
+
+<style>
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+</style>
+
+</body>
+</html>

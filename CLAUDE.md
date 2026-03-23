@@ -101,3 +101,11 @@ memory-bank/           — Project design docs (brief, progress, patterns, activ
 - **Week 2** ✅ — LLM integration: model loader, action proposer, batch approval UX, static fallback
 - **Week 3** — LibreHardwareMonitor full integration, thermal guidance module
 - **Week 4** — PyInstaller bundle, Inno Setup installer, file-hash verification on launch
+
+---
+
+## Design System
+Always read `DESIGN.md` before making any visual or UI decisions.
+All font choices, colors, spacing, and aesthetic direction are defined there.
+Do not deviate without explicit user approval.
+In QA mode, flag any code that doesn't match DESIGN.md.
