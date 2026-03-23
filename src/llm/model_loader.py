@@ -14,7 +14,10 @@ import os
 import urllib.request
 from pathlib import Path
 
-from colorama import Fore, Style
+from src.utils.formatting import (
+    print_accent, print_error, print_warning, print_header, print_success,
+    print_step, print_step_done, prompt_confirm,
+)
 
 MODEL_FILENAME = "Qwen2.5-Coder-7B-Instruct.Q4_K_M.gguf"
 MODEL_HF_URL = (
@@ -50,7 +53,7 @@ def get_model_status() -> dict:
 def _download_model(dest: Path) -> bool:
     """Downloads the GGUF model to dest with a progress indicator. Returns True on success."""
     dest.parent.mkdir(parents=True, exist_ok=True)
-    print(f"{Fore.CYAN}Downloading {MODEL_FILENAME} (~{MODEL_SIZE_GB} GB){Style.RESET_ALL}")
+    print_accent(f"Downloading {MODEL_FILENAME} (~{MODEL_SIZE_GB} GB)")
     print(f"  Destination: {dest}")
 
     def _progress(block_num: int, block_size: int, total_size: int) -> None:
@@ -63,7 +66,7 @@ def _download_model(dest: Path) -> bool:
         print()  # newline after progress bar
         return True
     except Exception as e:
-        print(f"\n{Fore.RED}✗ Download failed: {e}{Style.RESET_ALL}")
+        print_error(f"Download failed: {e}")
         if dest.exists():
             dest.unlink(missing_ok=True)
         return False
@@ -84,51 +87,42 @@ def load_model():
     try:
         from llama_cpp import Llama  # type: ignore
     except ImportError:
-        print(
-            f"{Fore.YELLOW}⚠ llama-cpp-python not installed — "
-            f"AI explanations unavailable this run.{Style.RESET_ALL}"
-        )
+        print_warning("llama-cpp-python not installed — AI explanations unavailable this run.")
         return None
 
     model_path = get_model_path()
 
     if not model_path.exists():
-        print(f"\n{Fore.CYAN}{Style.BRIGHT}=== First Run: AI Model Download ==={Style.RESET_ALL}")
+        print_header("First Run: AI Model Download")
         print(
             f"lil_bro uses a local AI model ({MODEL_FILENAME}, ~{MODEL_SIZE_GB} GB)\n"
             "to explain findings and propose fixes in plain English.\n"
         )
-        print(f"{Fore.YELLOW}Privacy note:{Style.RESET_ALL}")
+        print_warning("Privacy note:")
         print("  • No system scan data or hardware info is transmitted.")
         print("  • Your IP will be visible to HuggingFace (the model host) during download only.")
         print("  • After the first run, lil_bro is fully offline.\n")
 
-        response = input(
-            f"{Fore.MAGENTA}Download model now? [y/N]: {Style.RESET_ALL}"
-        ).strip().lower()
-
-        if response not in ("y", "yes"):
-            print(
-                f"{Fore.YELLOW}⚠ Model download skipped — "
-                f"AI explanations will not be available this run.{Style.RESET_ALL}"
-            )
+        if not prompt_confirm("Download model now?"):
+            print_warning("Model download skipped — AI explanations will not be available this run.")
             return None
 
         if not _download_model(model_path):
             return None
 
-        print(f"{Fore.GREEN}✓ Model cached at {model_path}{Style.RESET_ALL}\n")
+        print_success(f"Model cached at {model_path}\n")
 
     try:
-        print(f"{Fore.BLUE}ℹ Loading AI model (CPU)...{Style.RESET_ALL}", end="", flush=True)
+        print_step("Loading AI model (CPU)")
         llm = Llama(
             model_path=str(model_path),
             n_ctx=2048,
             n_gpu_layers=0,  # CPU-only for portability across all hardware
             verbose=False,
         )
-        print(f" {Fore.GREEN}Ready.{Style.RESET_ALL}")
+        print_step_done(True)
         return llm
     except Exception as e:
-        print(f"\n{Fore.RED}✗ Failed to load model: {e}{Style.RESET_ALL}")
+        print_step_done(False)
+        print_error(f"Failed to load model: {e}")
         return None

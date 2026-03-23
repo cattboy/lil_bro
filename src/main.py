@@ -1,7 +1,6 @@
 import multiprocessing
 import sys
 import json
-import colorama
 from colorama import Fore, Style
 
 from src.bootstrapper import check_admin, create_restore_point
@@ -30,6 +29,7 @@ from src.llm.model_loader import load_model, get_model_status
 from src.llm.action_proposer import propose_actions
 from src.utils.formatting import (
     print_header, print_info, print_warning, print_error, print_success, prompt_approval,
+    print_dim, print_accent, print_prompt, print_audit_summary, print_finding, print_proposal,
 )
 from src.utils.errors import LilBroError, AdminRequiredError
 from src.utils.progress_bar import AnimatedProgressBar
@@ -45,11 +45,10 @@ def print_banner():
  | | | | / /  | '_ \\ | '__| | | |
  | | | |/ /   | |_) || |  | |_| |
  |_| |_/_/    |_.__/ |_|   \\___/
-
-  Your Local AI PC Optimization Agent
 {Style.RESET_ALL}"""
     print(banner)
-    print_info("Privacy Guarantee: 100% Offline Analysis. No data leaves your machine.\n")
+    print_accent("  Your Local AI PC Optimization Agent")
+    print_dim("  Privacy Guarantee: 100% Offline Analysis. No data leaves your machine.\n")
 
 
 # ── Menu ──────────────────────────────────────────────────────────────────────
@@ -63,11 +62,13 @@ def menu_loop():
         else:
             ai_label = f"{Fore.YELLOW}not loaded{Style.RESET_ALL}"
 
-        print("1. Run Full Esports Optimization Pipeline")
-        print(f"2. Setup AI Model ({ai_label})")
-        print("3. Exit")
+        print(f"  {Fore.CYAN}1.{Style.RESET_ALL} Run Full Esports Optimization Pipeline")
+        print(f"  {Fore.CYAN}2.{Style.RESET_ALL} Setup AI Model ({ai_label})")
+        print(f"  {Fore.CYAN}3.{Style.RESET_ALL} Exit")
 
-        choice = input(f"\n{Fore.CYAN}Select an option [1-3]: {Style.RESET_ALL}").strip()
+        print()
+        print_prompt("Select an option [1-3]: ")
+        choice = input().strip()
 
         if choice == '1':
             run_optimization_pipeline()
@@ -136,30 +137,17 @@ def _display_proposals(proposals: list[dict]) -> list[tuple[int, dict]]:
     auto_fixable: list[tuple[int, dict]] = []
     num = 0
 
-    severity_color = {
-        "HIGH":   Fore.RED,
-        "MEDIUM": Fore.YELLOW,
-        "LOW":    Fore.CYAN,
-    }
-
     for proposal in proposals:
         can_fix = proposal.get("can_auto_fix", False)
         num += 1
-        sev = proposal.get("severity", "MEDIUM")
-        color = severity_color.get(sev, Fore.WHITE)
-
-        fix_tag = (
-            f"{Fore.GREEN}[AUTO]{Style.RESET_ALL}"
-            if can_fix
-            else f"{Fore.WHITE}[MANUAL]{Style.RESET_ALL}"
+        print_proposal(
+            num=num,
+            severity=proposal.get("severity", "MEDIUM"),
+            title=proposal.get("finding", "").replace("_", " ").title(),
+            explanation=proposal.get("explanation", ""),
+            action=proposal.get("proposed_action", ""),
+            can_auto_fix=can_fix,
         )
-        print(
-            f"\n{color}{Style.BRIGHT}[{num}] {sev} — "
-            f"{proposal.get('finding', '').replace('_', ' ').title()}{Style.RESET_ALL}"
-        )
-        print(f"    {proposal.get('explanation', '')}")
-        print(f"    Fix: {proposal.get('proposed_action', '')}  {fix_tag}")
-
         if can_fix:
             auto_fixable.append((num, proposal))
 
@@ -277,22 +265,16 @@ def _run_approval_flow(proposals: list[dict], specs: dict) -> None:
         return
 
     total = len(proposals)
-    print(
-        f"\n{Fore.CYAN}Apply changes? "
-        f"Enter numbers (e.g. \"1 3\"), \"all\", or \"skip\":{Style.RESET_ALL} ",
-        end="",
-    )
+    print()
+    print_prompt(f"Apply changes? Enter numbers (e.g. \"1 3\"), \"all\", or \"skip\": ")
 
     while True:
         raw = input().strip()
         selection = _parse_selection(raw, total)
         if selection is not None:
             break
-        print(
-            f"{Fore.RED}Invalid input.{Style.RESET_ALL} "
-            f"Enter numbers 1–{total}, \"all\", or \"skip\": ",
-            end="",
-        )
+        print_error("Invalid input.")
+        print_prompt(f"Enter numbers 1–{total}, \"all\", or \"skip\": ")
 
     if not selection:
         print_info("No changes applied.")
@@ -369,11 +351,11 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
             hw = extract_hardware_summary(specs_preview)
 
             print()
-            print_info(f"CPU:    {hw.get('cpu', 'Unknown')}")
-            print_info(f"GPU:    {hw.get('gpu', 'Unknown')}")
-            print_info(f"Driver: {hw.get('gpu_driver', 'Unknown')}")
-            print_info(f"RAM:    {hw.get('ram_gb', 0)} GB @ {hw.get('ram_mhz', 0)} MHz")
-            print_info(f"OS:     {hw.get('os', 'Unknown')}")
+            print(f"  {Style.DIM}CPU:   {Style.RESET_ALL}{Fore.CYAN}{hw.get('cpu', 'Unknown')}{Style.RESET_ALL}")
+            print(f"  {Style.DIM}GPU:   {Style.RESET_ALL}{Fore.CYAN}{hw.get('gpu', 'Unknown')}{Style.RESET_ALL}")
+            print(f"  {Style.DIM}Driver:{Style.RESET_ALL}{Fore.CYAN}{hw.get('gpu_driver', 'Unknown')}{Style.RESET_ALL}")
+            print(f"  {Style.DIM}RAM:   {Style.RESET_ALL}{Fore.CYAN}{hw.get('ram_gb', 0)} GB @ {hw.get('ram_mhz', 0)} MHz{Style.RESET_ALL}")
+            print(f"  {Style.DIM}OS:    {Style.RESET_ALL}{Fore.CYAN}{hw.get('os', 'Unknown')}{Style.RESET_ALL}")
         except Exception:
             pass  # Non-critical — don't block pipeline over a display error
 
@@ -464,8 +446,9 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
 
         # Mouse: live check (not spec-fed) — normalize into finding format
         print()
-        print_warning("PREPARE TO WIGGLE THE MOUSE FOR 3 SECONDS...")
-        input(f"{Fore.CYAN}Press Enter to begin tracking...{Style.RESET_ALL}")
+        print_accent("Alright, wiggle your mouse for 3 seconds — we'll measure the polling rate.")
+        print_prompt("Press Enter when you're ready... ")
+        input()
         mouse_result = check_polling_rate()
         if mouse_result.get("status") == "WARNING":
             findings.append({
@@ -481,27 +464,18 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
         warnings = [f for f in findings if f["status"] == "WARNING"]
         oks      = [f for f in findings if f["status"] == "OK"]
         unknowns = [f for f in findings if f["status"] not in ("OK", "WARNING")]
-        print_info(
-            f"Audit complete: {len(oks)} OK, {len(warnings)} need attention, "
-            f"{len(unknowns)} unknown"
-        )
+        print_audit_summary(len(oks), len(warnings), len(unknowns))
         print()
         for finding in findings:
-            label = f"  [{finding['check'].upper()}]"
-            if finding["status"] == "OK":
-                print_success(f"{label} {finding['message']}")
-            elif finding["status"] == "WARNING":
-                print_warning(f"{label} {finding['message']}")
-            else:
-                print_error(f"{label} {finding['message']}")
+            print_finding(finding["check"], finding["message"], finding["status"])
 
         # Generate proposals — AI-powered if model loaded, standard otherwise
         print()
         hardware = extract_hardware_summary(specs)
         if _llm is not None:
-            print_info("Generating AI-powered recommendations...")
+            print_dim("Generating AI-powered recommendations...")
         else:
-            print_info("Generating recommendations...")
+            print_dim("Generating recommendations...")
         proposals = propose_actions(hardware, findings, _llm)
 
         _run_approval_flow(proposals, specs)
@@ -546,8 +520,6 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
 def main():
     multiprocessing.freeze_support()  # Required for PyInstaller onefile + multiprocessing.Pool
     try:
-        colorama.init(autoreset=True)
-
         # Verify file integrity in frozen builds (no-op in dev)
         from src.utils.integrity import verify_integrity
         verify_integrity()
@@ -565,7 +537,7 @@ def main():
         menu_loop()
 
     except KeyboardInterrupt:
-        print(f"\n{Fore.CYAN}Ctrl+C detected. Exiting...{Style.RESET_ALL}")
+        print_accent("\nCtrl+C detected. Exiting...")
         sys.exit(0)
     except Exception as e:
         print_error(f"Fatal unhandled exception: {e}")
