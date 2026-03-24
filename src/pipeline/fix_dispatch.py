@@ -5,6 +5,8 @@ Each fix handler has the signature: (specs: dict) -> bool
 To add a new auto-fixable check, add one handler function and one dict entry.
 """
 
+from collections.abc import Callable
+
 from src.utils.formatting import print_success, print_error
 
 
@@ -93,7 +95,7 @@ def _fix_game_mode(specs: dict) -> bool:
 # ---- Dispatch Registry ----
 # Key: check name (matches proposal["finding"])
 # Value: callable with signature (specs: dict) -> bool
-FIX_REGISTRY: dict[str, callable] = {
+FIX_REGISTRY: dict[str, Callable[[dict], bool]] = {
     "display": _fix_display,
     "power_plan": _fix_power_plan,
     "temp_folders": _fix_temp_folders,
