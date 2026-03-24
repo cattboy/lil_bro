@@ -69,6 +69,7 @@
   - `Fore.GREEN` → success (#4ADE80 equivalent)
   - `Fore.YELLOW` → warning (#FFB547 equivalent)
   - `Fore.RED` → error (#FF6B6B equivalent)
+  - `Fore.BLUE` → info/secondary (#60A5FA equivalent)
   - `Fore.MAGENTA` → brand/banner (#D183E8)
   - `Fore.WHITE` → text primary
   - `Style.DIM` → text muted

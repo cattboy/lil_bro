@@ -23,9 +23,9 @@ All processing happens locally. The only external calls are optional driver vers
 
 ## Status
 
-🟢 **Week 5 Complete** — 188 tests passing. Game Mode now auto-fixes via registry write. Animated plasma-sweep progress bar during fix execution. NVIDIA driver version shown after system scan. Thermal idle warnings use brand voice at ≥80°C. Full thermals fallback template for LLM-offline scenarios. Collector resilience: individual failures no longer abort the spec dump.
+🟢 **Week 6 Complete** — 215 tests passing. Terminal UI redesigned to match DESIGN.md color system. Unicode/ASCII fallback system for non-UTF-8 terminals. Centralized formatting helpers (`print_key_value`, `print_section_divider`, `print_prompt`). Progress bar dynamically sizes to terminal width. All inline colorama removed from main.py and model_loader.py.
 
-Previous: portable .exe packaging, 8 esports checks, Cinebench + thermal benchmarking, LLM-powered recommendations with batch approval UX, SHA-256 integrity verification. LLM is optional — static fallback templates always work offline.
+Previous: Game Mode auto-fix, animated progress bar, NVIDIA driver display, thermal brand voice, collector resilience, portable .exe packaging, 8 esports checks, Cinebench + thermal benchmarking, LLM-powered recommendations with batch approval UX. LLM is optional — static fallback templates always work offline.
 
 ## Development
 
