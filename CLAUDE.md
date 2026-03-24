@@ -113,6 +113,7 @@ memory-bank/           — Project design docs (brief, progress, patterns, activ
 - **Week 3** ✅ — LHM sidecar, thermal monitor, thermal guidance, benchmark runner rework, pre-benchmark safety gate
 - **Week 4** ✅ — PyInstaller portable .exe, %APPDATA% path relocation, SHA-256 integrity verification
 - **Week 5** ✅ — Game Mode auto-fix, thermals fallback template, brand voice idle warning, animated progress bar, NVIDIA driver display, expanded test coverage (188 tests), collector resilience via `_safe_collect`
+- **Week 6** ✅ — Terminal UI redesign: DESIGN.md color system compliance, Unicode/ASCII fallback system, centralized formatting helpers (print_key_value, print_section_divider, print_prompt), dynamic progress bar width, inline colorama removal, 27 new tests (215 total)
 
 ---
 
