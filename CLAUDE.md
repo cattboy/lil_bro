@@ -122,3 +122,19 @@ Always read `DESIGN.md` before making any visual or UI decisions.
 All font choices, colors, spacing, and aesthetic direction are defined there.
 Do not deviate without explicit user approval.
 In QA mode, flag any code that doesn't match DESIGN.md.
+
+---
+
+## gstack Design Docs
+
+When any gstack skill is invoked (`/office-hours`, `/plan-eng-review`, `/plan-ceo-review`, `/plan-design-review`, `/autoplan`, `/review`, `/ship`, etc.), **always check `C:\Users\Owner\.gstack\projects\cattboy-lil_bro\` for prior design docs** before starting work.
+
+Design docs from `/office-hours` sessions are stored there as:
+`{user}-{branch}-design-{datetime}.md`
+
+These docs contain approved architecture decisions, rejected approaches, feasibility risks, and open questions that should inform all downstream planning and implementation work. Downstream skills (plan-eng-review, plan-ceo-review, etc.) auto-discover these docs — but Claude Code should also read the most recent approved doc when beginning any significant feature work.
+
+List available docs with:
+```bash
+ls -t C:/Users/Owner/.gstack/projects/cattboy-lil_bro/*.md 2>/dev/null
+```
