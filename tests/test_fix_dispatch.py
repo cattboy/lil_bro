@@ -58,3 +58,36 @@ class TestFixDisplay:
     @patch("src.collectors.sub.monitor_dumper.get_all_displays", return_value=[])
     def test_display_no_mode_found(self, mock_displays, mock_find):
         assert execute_fix("display", {}) is False
+
+
+class TestFixPowerPlan:
+    @patch("src.agent_tools.power_plan.set_active_plan")
+    @patch("src.agent_tools.power_plan.list_available_plans")
+    def test_power_plan_success_via_perf_guid(self, mock_list, mock_set):
+        """Handler picks first plan matching a known PERF_GUID."""
+        from src.agent_tools.power_plan import _PERF_GUIDS
+        guid = next(iter(_PERF_GUIDS))
+        mock_list.return_value = [(guid, "High performance")]
+        assert execute_fix("power_plan", {}) is True
+        mock_set.assert_called_once_with(guid)
+
+    @patch("src.agent_tools.power_plan.set_active_plan")
+    @patch("src.agent_tools.power_plan.list_available_plans")
+    def test_power_plan_success_via_name_match(self, mock_list, mock_set):
+        """Handler falls back to name match when no PERF_GUID matches."""
+        mock_list.return_value = [("aaaa-bbbb", "High Performance Plan")]
+        assert execute_fix("power_plan", {}) is True
+        mock_set.assert_called_once_with("aaaa-bbbb")
+
+    @patch("src.agent_tools.power_plan.set_active_plan")
+    @patch("src.agent_tools.power_plan.create_high_performance_plan", return_value=("cccc-dddd", "Custom HP"))
+    @patch("src.agent_tools.power_plan.list_available_plans", return_value=[])
+    def test_power_plan_creates_new_when_none_found(self, mock_list, mock_create, mock_set):
+        """Handler creates a new plan when no matching plan exists."""
+        assert execute_fix("power_plan", {}) is True
+        mock_create.assert_called_once()
+        mock_set.assert_called_once_with("cccc-dddd")
+
+    @patch("src.agent_tools.power_plan.list_available_plans", side_effect=Exception("powercfg failed"))
+    def test_power_plan_failure(self, mock_list):
+        assert execute_fix("power_plan", {}) is False
