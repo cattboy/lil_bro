@@ -23,7 +23,9 @@ All processing happens locally. The only external calls are optional driver vers
 
 ## Status
 
-🟢 **Week 6 Complete** — 215 tests passing. Terminal UI redesigned to match DESIGN.md color system. Unicode/ASCII fallback system for non-UTF-8 terminals. Centralized formatting helpers (`print_key_value`, `print_section_divider`, `print_prompt`). Progress bar dynamically sizes to terminal width. All inline colorama removed from main.py and model_loader.py.
+🟢 **v0.7.0 — Week 7 Complete** — 246 tests passing. `main.py` split into a clean `src/pipeline/` package (8 modules: banner, menu, approval, fix_dispatch, thermal_gate, phases, _state). Dispatch dict pattern replaces if-elif chain. Thermal safety gate deduplicated. 31 new tests. QA: 246/246 passing, health 98/100.
+
+Previous: Terminal UI redesigned to match DESIGN.md color system. Unicode/ASCII fallback system for non-UTF-8 terminals. Centralized formatting helpers (`print_key_value`, `print_section_divider`, `print_prompt`). Progress bar dynamically sizes to terminal width. All inline colorama removed from main.py and model_loader.py.
 
 Previous: Game Mode auto-fix, animated progress bar, NVIDIA driver display, thermal brand voice, collector resilience, portable .exe packaging, 8 esports checks, Cinebench + thermal benchmarking, LLM-powered recommendations with batch approval UX. LLM is optional — static fallback templates always work offline.
 

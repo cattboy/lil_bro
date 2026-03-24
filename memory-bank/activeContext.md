@@ -1,23 +1,21 @@
 # Active Context
 
 ## Current Work Focus
-- **Week 4 packaging in progress** — portable .exe via PyInstaller onefile + integrity check
-- All pre-packaging code fixes done: paths relocated to %APPDATA%, freeze_support() added
+- **Week 7 module split complete** — `main.py` extracted into `src/pipeline/` package (8 modules)
+- Branch `feat/week6-terminal-ui` is ready for review/merge; 246 tests, QA health 98/100
 
-## Recent Changes (Week 4)
-- Created `src/utils/paths.py` — centralized %APPDATA%\lil_bro\ path helper
-- Created `src/_version.py` — single source of truth for version string
-- Created `src/utils/integrity.py` — SHA-256 exe hash verification (frozen builds only)
-- Created `lil_bro.spec` — PyInstaller onefile spec (console, UAC admin, no UPX)
-- Created `build.py` — automated build pipeline (PyInstaller + manifest generation)
-- Updated `src/utils/action_logger.py` — logs to %APPDATA%\lil_bro\logs\ instead of repo root
-- Updated `src/collectors/spec_dumper.py` — specs to %APPDATA%\lil_bro\logs\ instead of repo root
-- Updated `src/main.py` — added multiprocessing.freeze_support() + integrity check on startup
-- Added `tests/test_paths.py` (6 tests) + `tests/test_integrity.py` (8 tests)
-- 164 tests total, all passing
+## Recent Changes (Week 7)
+- Created `src/pipeline/` package: `__init__.py`, `_state.py`, `banner.py`, `menu.py`, `approval.py`, `fix_dispatch.py`, `thermal_gate.py`, `phases.py`
+- `src/main.py` trimmed from 549 lines to 48 lines (thin entry point only)
+- Dispatch dict pattern: `FIX_REGISTRY: dict[str, Callable[[dict], bool]]` replaces if-elif chain
+- Thermal safety gate deduplicated: single `thermal_safety_gate()` function in `thermal_gate.py`
+- `_llm` state managed via getter/setter in `_state.py` (avoids Python name-binding bug)
+- QA fixes: Callable type annotation (ISSUE-001), `_fix_power_plan` test coverage (ISSUE-002)
+- 31 new tests: `test_parse_selection.py` (12), `test_thermal_gate.py` (6), `test_fix_dispatch.py` (13)
+- 246 tests total, all passing
 
 ## Next Steps
-1. Build the .exe with `python build.py` and smoke test on target machine
+1. Merge `feat/week6-terminal-ui` → `main`
 2. Validate llama-cpp-python on RTX 3080 dev machine (hard gate)
 3. Benchmark Qwen2.5-3B vs 7B on reference hardware for 60-second SLA
 

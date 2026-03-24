@@ -46,7 +46,7 @@
 - [ ] Friendly LLM-generated explanations
 
 ## Current Status
-🟢 **Week 5 complete** — Game Mode auto-fix, animated progress bar (plasma sweep), NVIDIA driver display in Phase 2, thermals fallback template, brand voice idle warnings (≥80°C), collector resilience (`_safe_collect`), `check_polling_rate` error handling. 188 tests passing.
+🟢 **Week 7 complete** — `main.py` split into `src/pipeline/` package (8 modules: banner, menu, approval, fix_dispatch, thermal_gate, phases, _state). Dispatch dict pattern replaces if-elif chain. Thermal safety gate deduplicated. 246 tests passing (31 new, QA health 98/100). Also complete: Week 6 terminal UI redesign (DESIGN.md color system, Unicode/ASCII fallback, centralized formatting helpers, dynamic progress bar); Week 5 Game Mode auto-fix, animated progress bar, NVIDIA driver display, thermal brand voice, collector resilience.
 
 ## Known Issues
 - llama-cpp-python not yet tested with PyInstaller bundling (hard gate deferred to RTX 3080 dev machine)
