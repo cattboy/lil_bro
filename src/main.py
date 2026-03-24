@@ -30,6 +30,7 @@ from src.llm.action_proposer import propose_actions
 from src.utils.formatting import (
     print_header, print_info, print_warning, print_error, print_success, prompt_approval,
     print_dim, print_accent, print_prompt, print_audit_summary, print_finding, print_proposal,
+    print_key_value,
 )
 from src.utils.errors import LilBroError, AdminRequiredError
 from src.utils.progress_bar import AnimatedProgressBar
@@ -58,12 +59,12 @@ def menu_loop():
         print_header("Main Menu")
 
         if _llm is not None:
-            ai_label = f"{Fore.GREEN}ready{Style.RESET_ALL}"
+            print_key_value("AI Model", "ready", value_color=Fore.GREEN)
         else:
-            ai_label = f"{Fore.YELLOW}not loaded{Style.RESET_ALL}"
+            print_key_value("AI Model", "not loaded", value_color=Fore.YELLOW)
 
         print(f"  {Fore.CYAN}1.{Style.RESET_ALL} Run Full Esports Optimization Pipeline")
-        print(f"  {Fore.CYAN}2.{Style.RESET_ALL} Setup AI Model ({ai_label})")
+        print(f"  {Fore.CYAN}2.{Style.RESET_ALL} Setup AI Model")
         print(f"  {Fore.CYAN}3.{Style.RESET_ALL} Exit")
 
         print()
@@ -351,11 +352,11 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
             hw = extract_hardware_summary(specs_preview)
 
             print()
-            print(f"  {Style.DIM}CPU:   {Style.RESET_ALL}{Fore.CYAN}{hw.get('cpu', 'Unknown')}{Style.RESET_ALL}")
-            print(f"  {Style.DIM}GPU:   {Style.RESET_ALL}{Fore.CYAN}{hw.get('gpu', 'Unknown')}{Style.RESET_ALL}")
-            print(f"  {Style.DIM}Driver:{Style.RESET_ALL}{Fore.CYAN}{hw.get('gpu_driver', 'Unknown')}{Style.RESET_ALL}")
-            print(f"  {Style.DIM}RAM:   {Style.RESET_ALL}{Fore.CYAN}{hw.get('ram_gb', 0)} GB @ {hw.get('ram_mhz', 0)} MHz{Style.RESET_ALL}")
-            print(f"  {Style.DIM}OS:    {Style.RESET_ALL}{Fore.CYAN}{hw.get('os', 'Unknown')}{Style.RESET_ALL}")
+            print_key_value("CPU", hw.get('cpu', 'Unknown'))
+            print_key_value("GPU", hw.get('gpu', 'Unknown'))
+            print_key_value("Driver", hw.get('gpu_driver', 'Unknown'))
+            print_key_value("RAM", f"{hw.get('ram_gb', 0)} GB @ {hw.get('ram_mhz', 0)} MHz")
+            print_key_value("OS", hw.get('os', 'Unknown'))
         except Exception:
             pass  # Non-critical — don't block pipeline over a display error
 
