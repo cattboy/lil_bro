@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>lhm-server</AssemblyName>
+    <RootNamespace>LhmServer</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Suppress trimming warnings from LibreHardwareMonitorLib reflection usage -->
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      LibreHardwareMonitorLib 0.9.3+ uses PawnIO instead of the legacy
+      WinRing0x64.sys ring-0 driver that Microsoft was blocking on modern
+      Windows systems.  Use 0.9.* to always resolve the latest stable
+      PawnIO-based release.
+    -->
+    <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.*" />
+  </ItemGroup>
+
+</Project>

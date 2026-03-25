@@ -124,3 +124,31 @@ def prompt_approval(action_description: str) -> bool:
         if response in ['n', 'no', '']:
             return False
         print(f"{Fore.RED}Invalid input. Please enter 'y' or 'n'.{Style.RESET_ALL}")
+
+
+def resize_console_window() -> None:
+    """Resize the console window to 80% of the primary screen, centered."""
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        user32   = ctypes.windll.user32
+
+        hwnd = kernel32.GetConsoleWindow()
+        if not hwnd:
+            return
+
+        screen_w = user32.GetSystemMetrics(0)   # SM_CXSCREEN
+        screen_h = user32.GetSystemMetrics(1)   # SM_CYSCREEN
+
+        win_w = int(screen_w * 0.8)
+        win_h = int(screen_h * 0.8)
+        x     = (screen_w - win_w) // 2
+        y     = (screen_h - win_h) // 2
+
+        user32.ShowWindow(hwnd, 9)   # SW_RESTORE — de-maximize if needed
+        SWP_NOZORDER   = 0x0004
+        SWP_SHOWWINDOW = 0x0040
+        user32.SetWindowPos(hwnd, None, x, y, win_w, win_h,
+                            SWP_NOZORDER | SWP_SHOWWINDOW)
+    except Exception:
+        pass

@@ -2,6 +2,19 @@
 
 All notable changes to lil_bro are documented here.
 
+## [0.7.0] - 2026-03-25
+
+### Changed
+- `main.py` trimmed from 549 lines to 48 — all pipeline logic now lives in `src/pipeline/` (8 modules: `banner`, `menu`, `approval`, `fix_dispatch`, `thermal_gate`, `phases`, `_state`)
+- Auto-fix dispatch now uses a clean registry dict (`FIX_REGISTRY`) instead of an if-elif chain — adding a new auto-fixable check is now a one-liner
+- Thermal safety gate deduplicated — the 14-line pre-benchmark check that was copy-pasted in Phase 3 and Phase 5 is now a single reusable function
+- Shared LLM state managed via `get_llm()`/`set_llm()` in `_state.py` — eliminates the Python name-binding bug that would occur with `from module import _llm`
+- `FIX_REGISTRY` type annotation corrected from `callable` builtin to `Callable[[dict], bool]` from `collections.abc`
+
+### For contributors
+- 31 new tests: `test_parse_selection.py` (12 edge cases), `test_thermal_gate.py` (6 paths), `test_fix_dispatch.py` (13 — full coverage of all 4 dispatch handlers)
+- 246 tests total, all passing. QA health: 98/100.
+
 ## [0.6.0] - 2026-03-24
 
 ### Added

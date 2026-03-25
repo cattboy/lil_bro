@@ -77,20 +77,51 @@ def generate_manifest(exe_path: Path):
     print(f"  SHA-256:  {exe_hash[:32]}...")
 
 
+def build_lhm_server():
+    """Build the custom thermal sensor server (requires .NET 8 SDK).
+
+    Runs tools/lhm-server/build.ps1.  Failure is non-fatal — the main build
+    continues and thermal monitoring falls back to a user-installed LHM.
+    """
+    script = ROOT / "tools" / "lhm-server" / "build.ps1"
+    if not script.exists():
+        print("  SKIP: tools/lhm-server/build.ps1 not found")
+        return
+    
+
+    result = subprocess.run(
+        ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(script)],
+        cwd=str(script.parent),
+    )
+
+    lhm_exe = ROOT / "tools" / "lhm-server" / "dist" / "lhm-server.exe"
+    if result.returncode != 0 or not lhm_exe.exists():
+        print(
+            "  WARNING: lhm-server build failed — thermals will require a manual "
+            "LibreHardwareMonitor install.  Install .NET 8 SDK and re-run the build."
+        )
+    else:
+        size_mb = lhm_exe.stat().st_size / (1024 * 1024)
+        print(f"  Built: {lhm_exe} ({size_mb:.1f} MB)")
+
+
 def main():
     print("lil_bro build pipeline")
     print("=" * 40)
 
     if "--clean" in sys.argv:
-        print("\n[1/3] Cleaning...")
+        print("\n[1/4] Cleaning...")
         clean()
     else:
-        print("\n[1/3] Clean skipped (use --clean to force)")
+        print("\n[1/4] Clean skipped (use --clean to force)")
 
-    print("\n[2/3] Building with PyInstaller...")
+    print("\n[2/4] Building lhm-server (thermal sensor server)...")
+    build_lhm_server()
+
+    print("\n[3/4] Building with PyInstaller...")
     exe_path = run_pyinstaller()
 
-    print("\n[3/3] Generating integrity manifest...")
+    print("\n[4/4] Generating integrity manifest...")
     generate_manifest(exe_path)
 
     print("\n" + "=" * 40)

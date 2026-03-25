@@ -9,6 +9,25 @@ This is a solo project in active development. This file covers everything you ne
 - **Python 3.11+** (3.13 tested)
 - **uv** — fast Python package manager ([install](https://docs.astral.sh/uv/getting-started/installation/))
 - **Windows 10/11** — this tool is Windows-only (uses WMI, winreg, ctypes Win32 APIs)
+- **.NET 8 SDK** — required to build the bundled `lhm-server.exe` thermal sensor sidecar
+
+### Installing .NET 8 SDK (winget)
+
+The fastest way on Windows 10/11 is via winget:
+
+```powershell
+winget install Microsoft.DotNet.SDK.8
+```
+
+To verify the install or check what SDK versions are present:
+
+```powershell
+dotnet --list-sdks
+```
+
+You need at least one `8.x.xxx` entry. The SDK includes all runtimes — no separate runtime install is needed.
+
+> **Note:** If you only need to run the pre-built `lhm-server.exe` (already included in `tools/lhm-server/`), you do not need the SDK. The SDK is only required if you want to rebuild the sidecar from source.
 
 ---
 
@@ -62,7 +81,7 @@ python -m pytest tests/test_game_mode.py -v
 python -m pytest tests/ --cov=src --cov-report=term-missing
 ```
 
-Current suite: **215 tests**, all passing.
+Current suite: **246 tests**, all passing.
 
 ---
 
@@ -93,7 +112,15 @@ The `.spec` file (`lil_bro.spec`) is the PyInstaller build configuration — edi
 
 ```
 src/
-  main.py           — Pipeline orchestrator (5 phases) + menu
+  main.py           — Thin entry point (integrity, admin, banner, menu)
+  pipeline/         — 5-phase pipeline orchestrator, split into 8 modules
+    _state.py       — Shared LLM state (get_llm/set_llm)
+    banner.py       — ASCII art banner
+    menu.py         — 3-option menu loop + AI model setup
+    approval.py     — Proposal display, selection parsing, fix execution
+    fix_dispatch.py — Check→fix dispatch registry (FIX_REGISTRY dict)
+    thermal_gate.py — Pre-benchmark thermal safety gate
+    phases.py       — 5-phase pipeline orchestrator
   agent_tools/      — One file per system check (game_mode, display, power_plan, ...)
   collectors/       — Hardware data collection (WMI, dxdiag, nvidia-smi, EDID, ...)
   llm/              — Optional LLM integration (model loader + action proposer)
@@ -125,7 +152,7 @@ See `CLAUDE.md` for the full architecture reference used by the AI assistant.
 1. Create `src/agent_tools/your_check.py`
 2. Implement a pure `analyze_your_check(specs: dict) -> dict` function (no system calls, reads from specs)
 3. Return a dict with at minimum `check`, `status`, `message`, `can_auto_fix` keys
-4. Wire it into `_run_pipeline()` in `main.py`
-5. Add an auto-fix case to `_execute_fix()` if `can_auto_fix: True`
+4. Wire it into `_run_pipeline()` in `src/pipeline/phases.py`
+5. Add a handler function and registry entry to `src/pipeline/fix_dispatch.py` if `can_auto_fix: True`
 6. Add a fallback template to `_FALLBACK` in `action_proposer.py`
 7. Write mocked tests in `tests/test_your_check.py`
