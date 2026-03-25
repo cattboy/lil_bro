@@ -13,17 +13,6 @@ using LibreHardwareMonitor.Hardware;
 
 const int Port = 8085;
 
-// ── Sensor tree snapshot type ─────────────────────────────────────────────────
-// Mirrors the JSON structure the LHM HttpServer emits so _parse_temps_from_lhm()
-// in thermal_monitor.py can walk it without modification.
-
-sealed record SensorNode(
-    [property: JsonPropertyName("Text")]    string Text,
-    [property: JsonPropertyName("Value")]   string Value,
-    [property: JsonPropertyName("RawValue")] double RawValue,
-    [property: JsonPropertyName("Children")] List<SensorNode> Children
-);
-
 // ── Hardware visitor ──────────────────────────────────────────────────────────
 
 static List<SensorNode> BuildTree(IComputer computer)
@@ -83,7 +72,7 @@ static SensorNode HardwareToNode(IHardware hw)
 
 // ── Computer setup ────────────────────────────────────────────────────────────
 
-using var computer = new Computer
+var computer = new Computer
 {
     IsCpuEnabled         = true,
     IsGpuEnabled         = true,
@@ -200,6 +189,18 @@ static void HandleRequest(HttpListenerContext ctx, IComputer computer)
         resp.Close();
     }
 }
+
+// ── Sensor tree snapshot type ─────────────────────────────────────────────────
+// Mirrors the JSON structure the LHM HttpServer emits so _parse_temps_from_lhm()
+// in thermal_monitor.py can walk it without modification.
+// NOTE: type declarations must follow all top-level statements in C# 9+ programs.
+
+sealed record SensorNode(
+    [property: JsonPropertyName("Text")]    string Text,
+    [property: JsonPropertyName("Value")]   string Value,
+    [property: JsonPropertyName("RawValue")] double RawValue,
+    [property: JsonPropertyName("Children")] List<SensorNode> Children
+);
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
