@@ -247,6 +247,32 @@ def test_kill_process_clears_process_ref():
     assert sidecar._process is None
 
 
+# ── Regression: ISSUE-004 — lhm-server.exe corrupts parent console input mode ──
+
+@patch("src.collectors.sub.lhm_sidecar.time.sleep")
+@patch("src.collectors.sub.lhm_sidecar.time.monotonic")
+@patch("src.collectors.sub.lhm_sidecar._is_lhm_responding")
+@patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable",
+       return_value=(r"C:\tools\lhm-server.exe", True))
+@patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
+def test_popen_stdin_is_devnull(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep):
+    """Regression ISSUE-004: Popen must pass stdin=DEVNULL so lhm-server.exe does
+    not inherit the parent's console stdin handle and corrupt ENABLE_ECHO_INPUT."""
+    import subprocess as _sp
+    mock_proc = MagicMock()
+    mock_proc.pid = 42
+    mock_popen.return_value = mock_proc
+    mock_mono.side_effect = [0.0, 0.5]
+    mock_resp.side_effect = [True]
+
+    sidecar = LHMSidecar()
+    sidecar.start()
+
+    assert mock_popen.call_args[1].get("stdin") == _sp.DEVNULL, \
+        "stdin must be DEVNULL to prevent .NET runtime from corrupting parent console mode"
+
+
 # ── LHMSidecar.fetch_data ────────────────────────────────────────────────────
 
 @patch("src.collectors.sub.lhm_sidecar.urllib.request.urlopen")

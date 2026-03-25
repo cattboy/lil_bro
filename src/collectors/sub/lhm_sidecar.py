@@ -147,6 +147,7 @@ class LHMSidecar:
             cmd = [exe] if is_custom else [exe, "--http-port", str(LHM_PORT)]
             self._process = subprocess.Popen(
                 cmd,
+                stdin=subprocess.DEVNULL,    # prevent .NET runtime from touching parent console mode
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
