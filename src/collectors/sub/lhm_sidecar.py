@@ -184,18 +184,33 @@ class LHMSidecar:
         self._kill_process()
 
     def _kill_process(self) -> None:
-        if self._process is not None:
+        if self._process is None:
+            return
+        pid = self._process.pid
+        try:
+            self._process.terminate()
+            self._process.wait(timeout=3)
+        except Exception:
+            # terminate() timed out or was denied — try kill() then taskkill.
+            # On Windows, terminate() and kill() both call TerminateProcess(); if
+            # that fails (e.g. access-denied on an elevated process), fall back to
+            # `taskkill /F /T` which goes through a separate OS code path and also
+            # kills the full process tree.
             try:
-                self._process.terminate()
-                self._process.wait(timeout=5)
+                self._process.kill()
             except Exception:
-                try:
-                    self._process.kill()
-                except Exception:
-                    pass
-            finally:
-                action_logger.log_action("LHM Sidecar", "Stopped")
-                self._process = None
+                pass
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(pid)],
+                    capture_output=True,
+                    timeout=5,
+                )
+            except Exception:
+                pass
+        finally:
+            action_logger.log_action("LHM Sidecar", "Stopped")
+            self._process = None
 
     def fetch_data(self) -> Optional[dict]:
         """Fetch the current sensor tree from LHM. Returns None on failure."""
