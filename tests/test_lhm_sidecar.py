@@ -51,17 +51,31 @@ def test_lhm_not_responding(mock_urlopen):
 # ── find_lhm_executable ──────────────────────────────────────────────────────
 
 @patch("src.collectors.sub.lhm_sidecar.os.path.isfile")
-def test_find_lhm_exe_found(mock_isfile):
-    # First path checked returns True
-    mock_isfile.side_effect = lambda p: "tools" in p
-    result = find_lhm_executable()
-    assert result is not None
-    assert "LibreHardwareMonitor.exe" in result
+def test_find_lhm_returns_custom_server(mock_isfile):
+    """lhm-server.exe found → returns (path, True)."""
+    mock_isfile.side_effect = lambda p: p.endswith("lhm-server.exe")
+    path, is_custom = find_lhm_executable()
+    assert path is not None
+    assert path.endswith("lhm-server.exe")
+    assert is_custom is True
+
+
+@patch("src.collectors.sub.lhm_sidecar.os.path.isfile")
+def test_find_lhm_returns_full_lhm(mock_isfile):
+    """Only full LHM found → returns (path, False)."""
+    mock_isfile.side_effect = lambda p: "LibreHardwareMonitor.exe" in p and "lhm-server" not in p
+    path, is_custom = find_lhm_executable()
+    assert path is not None
+    assert "LibreHardwareMonitor.exe" in path
+    assert is_custom is False
 
 
 @patch("src.collectors.sub.lhm_sidecar.os.path.isfile", return_value=False)
 def test_find_lhm_exe_not_found(mock_isfile):
-    assert find_lhm_executable() is None
+    """Nothing found → returns (None, False)."""
+    path, is_custom = find_lhm_executable()
+    assert path is None
+    assert is_custom is False
 
 
 # ── LHMSidecar.start — already running ───────────────────────────────────────
@@ -85,33 +99,60 @@ def test_start_port_occupied_by_other(mock_port, mock_resp):
 
 # ── LHMSidecar.start — exe not found ─────────────────────────────────────────
 
-@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=None)
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(None, False))
 @patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
 def test_start_exe_not_found(mock_port, mock_find):
     sidecar = LHMSidecar()
     assert sidecar.start() is False
 
 
-# ── LHMSidecar.start — successful launch ─────────────────────────────────────
+# ── LHMSidecar.start — successful launch (full LHM) ──────────────────────────
 
 @patch("src.collectors.sub.lhm_sidecar.time.sleep")
 @patch("src.collectors.sub.lhm_sidecar.time.monotonic")
 @patch("src.collectors.sub.lhm_sidecar._is_lhm_responding")
 @patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
-@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value="C:\\LHM\\LHM.exe")
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\LHM\LibreHardwareMonitor.exe", False))
 @patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
-def test_start_launches_successfully(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep):
+def test_start_launches_full_lhm_successfully(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep):
     mock_proc = MagicMock()
     mock_proc.pid = 12345
     mock_popen.return_value = mock_proc
 
-    # First call to monotonic for deadline, then respond ready on second check
     mock_mono.side_effect = [0.0, 0.5, 1.0]
     mock_resp.side_effect = [False, True]
 
     sidecar = LHMSidecar()
     assert sidecar.start() is True
     assert sidecar._process is not None
+    # Full LHM must be launched with --http-port flag
+    call_args = mock_popen.call_args[0][0]
+    assert "--http-port" in call_args
+    assert str(LHM_PORT) in call_args
+
+
+# ── LHMSidecar.start — custom server launches without --http-port ─────────────
+
+@patch("src.collectors.sub.lhm_sidecar.time.sleep")
+@patch("src.collectors.sub.lhm_sidecar.time.monotonic")
+@patch("src.collectors.sub.lhm_sidecar._is_lhm_responding")
+@patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\tools\lhm-server.exe", True))
+@patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
+def test_start_launches_custom_server_no_port_flag(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep):
+    """lhm-server.exe has port hardcoded — must NOT receive --http-port arg."""
+    mock_proc = MagicMock()
+    mock_proc.pid = 99
+    mock_popen.return_value = mock_proc
+
+    mock_mono.side_effect = [0.0, 0.5, 1.0]
+    mock_resp.side_effect = [False, True]
+
+    sidecar = LHMSidecar()
+    assert sidecar.start() is True
+    call_args = mock_popen.call_args[0][0]
+    assert "--http-port" not in call_args
+    assert call_args == [r"C:\tools\lhm-server.exe"]
 
 
 # ── LHMSidecar.start — launch timeout ────────────────────────────────────────
@@ -120,13 +161,12 @@ def test_start_launches_successfully(mock_port, mock_find, mock_popen, mock_resp
 @patch("src.collectors.sub.lhm_sidecar.time.monotonic")
 @patch("src.collectors.sub.lhm_sidecar._is_lhm_responding", return_value=False)
 @patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
-@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value="C:\\LHM\\LHM.exe")
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\LHM\LibreHardwareMonitor.exe", False))
 @patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
 def test_start_launch_timeout(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep):
     mock_proc = MagicMock()
     mock_popen.return_value = mock_proc
 
-    # Monotonic returns values past the deadline immediately
     mock_mono.side_effect = [0.0, 6.0]
 
     sidecar = LHMSidecar()

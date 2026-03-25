@@ -10,28 +10,34 @@ import json
 import os
 import socket
 import subprocess
+import sys
 import time
 import urllib.request
 from typing import Optional
 
 from ...utils.formatting import print_step, print_step_done, print_warning, print_info
 from ...utils.action_logger import action_logger
+from ...utils.paths import get_appdata_dir
 
 LHM_PORT = 8085
 LHM_URL = f"http://localhost:{LHM_PORT}/data.json"
 _STARTUP_TIMEOUT = 5  # seconds to wait for /data.json readiness
 _POLL_INTERVAL = 0.5  # seconds between readiness checks
 
-# Common install paths for LibreHardwareMonitor
+# Search order for thermal sensor server binaries.
+# lhm-server.exe (custom minimal server) is checked first; falling back to
+# a user-installed full LibreHardwareMonitor installation.
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
 _LHM_SEARCH_PATHS = [
-    # Bundled with lil_bro (future installer)
-    os.path.join(
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")),
-        "tools",
-        "LibreHardwareMonitor",
-        "LibreHardwareMonitor.exe",
-    ),
-    # User-installed common locations
+    # 1. PyInstaller frozen bundle — sys._MEIPASS/tools/lhm-server.exe
+    os.path.join(getattr(sys, "_MEIPASS", _PROJECT_ROOT), "tools", "lhm-server.exe"),
+    # 2. %APPDATA%\lil_bro\tools\ — first-run extraction fallback for long _MEIPASS paths
+    os.path.join(str(get_appdata_dir()), "tools", "lhm-server.exe"),
+    # 3. Source-tree dev path — tools/lhm-server/dist/lhm-server.exe
+    os.path.join(_PROJECT_ROOT, "tools", "lhm-server", "dist", "lhm-server.exe"),
+    # 4. Full LibreHardwareMonitor installation (user-installed)
+    os.path.join(_PROJECT_ROOT, "tools", "LibreHardwareMonitor", "LibreHardwareMonitor.exe"),
     r"C:\Program Files\LibreHardwareMonitor\LibreHardwareMonitor.exe",
     r"C:\Program Files (x86)\LibreHardwareMonitor\LibreHardwareMonitor.exe",
     os.path.expandvars(r"%LOCALAPPDATA%\LibreHardwareMonitor\LibreHardwareMonitor.exe"),
@@ -57,12 +63,20 @@ def _is_lhm_responding() -> bool:
         return False
 
 
-def find_lhm_executable() -> Optional[str]:
-    """Search common paths for the LHM executable. Returns path or None."""
+def find_lhm_executable() -> tuple[Optional[str], bool]:
+    """Search for a thermal sensor server binary.
+
+    Returns:
+        (path, is_custom_server) where:
+        - path is the absolute path to the binary, or None if not found.
+        - is_custom_server is True for lhm-server.exe (custom minimal server),
+          False for the full LibreHardwareMonitor application.
+    """
     for path in _LHM_SEARCH_PATHS:
         if os.path.isfile(path):
-            return path
-    return None
+            is_custom = os.path.basename(path) == "lhm-server.exe"
+            return path, is_custom
+    return None, False
 
 
 class LHMSidecar:
@@ -111,28 +125,35 @@ class LHMSidecar:
                 )
                 return False
 
-        # Scenario 3: find and launch LHM
-        exe = self._exe_path or find_lhm_executable()
+        # Scenario 3: find and launch a thermal sensor server
+        if self._exe_path:
+            exe = self._exe_path
+            is_custom = os.path.basename(exe) == "lhm-server.exe"
+        else:
+            exe, is_custom = find_lhm_executable()
+
         if not exe:
             print_warning(
-                "LibreHardwareMonitor not found. Thermal monitoring unavailable.\n"
-                "  Install from: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases"
+                "Thermal sensor server not found. Thermal monitoring unavailable.\n"
+                "  (lhm-server.exe was not bundled, and LibreHardwareMonitor is not installed)"
             )
             return False
 
-        print_step("Launching LibreHardwareMonitor sidecar")
+        server_label = "lhm-server" if is_custom else "LibreHardwareMonitor"
+        print_step(f"Launching {server_label} sidecar")
         try:
-            # Launch with HTTP server enabled.
-            # LHM CLI: --http-port sets the web server port.
+            # lhm-server.exe has port hardcoded to 8085 — no CLI flag needed.
+            # Full LHM requires --http-port to enable its built-in web server.
+            cmd = [exe] if is_custom else [exe, "--http-port", str(LHM_PORT)]
             self._process = subprocess.Popen(
-                [exe, "--http-port", str(LHM_PORT)],
+                cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
         except Exception as e:
             print_step_done(False)
-            print_warning(f"Failed to launch LibreHardwareMonitor: {e}")
+            print_warning(f"Failed to launch {server_label}: {e}")
             return False
 
         # Wait for HTTP readiness

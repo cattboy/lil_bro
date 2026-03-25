@@ -1,0 +1,36 @@
+{
+  "_note": "PLACEHOLDER — capture a real /data.json snapshot from a running lhm-server or LHM instance and replace this file.",
+  "_instructions": [
+    "1. Build lhm-server: .\\build.ps1",
+    "2. Launch as admin: .\\dist\\lhm-server.exe",
+    "3. Capture: curl http://localhost:8085/data.json > reference-output.json",
+    "4. Verify structure matches the expected format below."
+  ],
+  "_expected_format": {
+    "Text": "Sensor",
+    "Value": "",
+    "RawValue": 0,
+    "Children": [
+      {
+        "Text": "<hardware name, e.g. Intel Core i7-14700K>",
+        "Value": "",
+        "RawValue": 0,
+        "Children": [
+          {
+            "Text": "Temperatures",
+            "Value": "",
+            "RawValue": 0,
+            "Children": [
+              {
+                "Text": "CPU Package",
+                "Value": "72.3 °C",
+                "RawValue": 72.3,
+                "Children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

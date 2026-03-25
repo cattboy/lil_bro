@@ -177,16 +177,31 @@ class ThermalMonitor:
             return self._samples
 
     def get_cpu_peak(self) -> Optional[float]:
-        """Return the highest CPU temperature seen, or None if no CPU temps recorded."""
+        """Return the peak CPU die temperature seen, or None if no CPU temps recorded.
+
+        Uses the same priority order as thermal_guidance._derive_cpu_temp:
+        CPU Package → Tctl/Tdie (AMD) → safe CPU sensors (excludes hotspot/VRM/Core Max).
+        """
+        _exclude = ("hotspot", "hot spot", "vrm", "vr ", "core max", "max core")
         with self._lock:
-            cpu_temps = [
-                v for k, v in self._peak_temps.items()
-                if "cpu" in k.lower() and "package" in k.lower()
-            ]
-            if not cpu_temps:
-                # Fall back to any CPU core temp
-                cpu_temps = [v for k, v in self._peak_temps.items() if "cpu" in k.lower()]
-            return max(cpu_temps) if cpu_temps else None
+            # P1: CPU Package
+            pkg = [v for k, v in self._peak_temps.items()
+                   if "cpu" in k.lower() and "package" in k.lower()]
+            if pkg:
+                return max(pkg)
+
+            # P2: AMD Tctl/Tdie
+            tctl = [v for k, v in self._peak_temps.items()
+                    if "tctl" in k.lower() or "tdie" in k.lower()]
+            if tctl:
+                return max(tctl)
+
+            # P3: Any CPU sensor excluding hotspot, VRM, Core Max
+            safe = [v for k, v in self._peak_temps.items()
+                    if "cpu" in k.lower()
+                    and "gpu" not in k.lower()
+                    and not any(excl in k.lower() for excl in _exclude)]
+            return max(safe) if safe else None
 
     def get_gpu_peak(self) -> Optional[float]:
         """Return the highest GPU temperature seen, or None if no GPU temps recorded."""

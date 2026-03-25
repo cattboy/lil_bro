@@ -47,8 +47,7 @@ def analyze_thermals(
 
     # Derive peaks if not provided
     if cpu_peak is None:
-        cpu_temps = [v for k, v in peak_temps.items() if "cpu" in k.lower()]
-        cpu_peak = max(cpu_temps) if cpu_temps else None
+        cpu_peak = _derive_cpu_temp(peak_temps)
 
     if gpu_peak is None:
         gpu_temps = [v for k, v in peak_temps.items() if "gpu" in k.lower()]
@@ -133,15 +132,41 @@ def _gpu_guidance(peak: float) -> str:
 
 # ── Pre-benchmark idle thermal check ─────────────────────────────────────────
 
+# Sensors that should never be used as the representative CPU temperature.
+# Core Max and Hotspot read higher than the package die temp and would produce
+# false-positive throttling warnings. VRM sensors measure voltage-regulator heat.
+_CPU_EXCLUDE_TERMS = ("hotspot", "hot spot", "vrm", "vr ", "core max", "max core")
+
+
 def _derive_cpu_temp(temps: dict[str, float]) -> Optional[float]:
-    """Pick the most representative CPU temperature from a snapshot."""
-    # Prefer "Package" sensor — it's the overall die temp
-    pkg = [v for k, v in temps.items() if "cpu" in k.lower() and "package" in k.lower()]
+    """Extract the CPU die temperature from a sensor snapshot.
+
+    Priority order:
+    1. CPU Package  — the standard die temp for Intel and most AMD CPUs
+    2. Tctl / Tdie  — AMD Ryzen primary sensor (LHM label has no "cpu" prefix)
+    3. Any CPU sensor excluding hotspot, VRM, and Core Max derivatives
+    """
+    # P1: CPU Package — explicit package sensor, most reliable
+    pkg = [v for k, v in temps.items()
+           if "cpu" in k.lower() and "package" in k.lower()]
     if pkg:
         return max(pkg)
-    # Fallback to any CPU-labelled sensor
-    cpu = [v for k, v in temps.items() if "cpu" in k.lower()]
-    return max(cpu) if cpu else None
+
+    # P2: AMD Tctl/Tdie — LHM sensor name contains no "cpu", e.g.
+    #     "AMD Ryzen 9 5900X > Core (Tctl/Tdie)"
+    tctl = [v for k, v in temps.items()
+            if "tctl" in k.lower() or "tdie" in k.lower()]
+    if tctl:
+        return max(tctl)
+
+    # P3: Any CPU sensor that is not a hotspot, VRM, or derived-max reading.
+    # "gpu" guard is defensive — prevents matching a sensor whose hardware node
+    # path happens to contain "cpu" (e.g. "CPU VRM" on a GPU sub-board).
+    safe = [v for k, v in temps.items()
+            if "cpu" in k.lower()
+            and "gpu" not in k.lower()
+            and not any(excl in k.lower() for excl in _CPU_EXCLUDE_TERMS)]
+    return max(safe) if safe else None
 
 
 def _derive_gpu_temp(temps: dict[str, float]) -> Optional[float]:

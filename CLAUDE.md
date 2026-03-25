@@ -124,6 +124,7 @@ memory-bank/           — Project design docs (brief, progress, patterns, activ
 - **Week 5** ✅ — Game Mode auto-fix, thermals fallback template, brand voice idle warning, animated progress bar, NVIDIA driver display, expanded test coverage (188 tests), collector resilience via `_safe_collect`
 - **Week 6** ✅ — Terminal UI redesign: DESIGN.md color system compliance, Unicode/ASCII fallback system, centralized formatting helpers (print_key_value, print_section_divider, print_prompt), dynamic progress bar width, inline colorama removal, 27 new tests (215 total)
 - **Week 7** ✅ — main.py module split: extracted `src/pipeline/` package (banner, menu, approval, fix_dispatch, thermal_gate, phases, _state), dispatch dict pattern, deduped thermal gate, 27 new tests (242 total)
+- **Week 8** ✅ — Bundle thermal sensor server: custom C# lhm-server.exe (LibreHardwareMonitorLib, PawnIO-era v0.9.*), HTTP /data.json sidecar; lhm_sidecar.py tuple return + custom vs full-LHM launch logic; fix CPU sensor derivation (_derive_cpu_temp priority: CPU Package → Tctl/Tdie → safe CPU; AMD Ryzen support; excludes hotspot/VRM/Core Max); 22 new tests (264 total)
 
 ---
 

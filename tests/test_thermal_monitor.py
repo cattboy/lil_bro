@@ -255,3 +255,64 @@ def test_fetch_snapshot_delegates(mock_fetch):
 def test_fetch_snapshot_empty(mock_fetch):
     """fetch_snapshot() returns {} when LHM is unreachable."""
     assert fetch_snapshot() == {}
+
+
+# ── get_cpu_peak sensor selection ─────────────────────────────────────────────
+
+def test_get_cpu_peak_prefers_package():
+    """CPU Package is always preferred for cpu peak."""
+    monitor = ThermalMonitor()
+    monitor._peak_temps = {
+        "Intel Core i7 > CPU Package": 88.0,
+        "Intel Core i7 > CPU Core Max": 95.0,
+        "Intel Core i7 > CPU Hot Spot": 102.0,
+    }
+    assert monitor.get_cpu_peak() == 88.0
+
+
+def test_get_cpu_peak_amd_tctl():
+    """AMD Tctl/Tdie used when no CPU Package sensor exists."""
+    monitor = ThermalMonitor()
+    monitor._peak_temps = {
+        "AMD Ryzen 9 5900X > Core (Tctl/Tdie)": 76.0,
+        "AMD Ryzen 9 5900X > Core #1": 74.0,
+    }
+    assert monitor.get_cpu_peak() == 76.0
+
+
+def test_get_cpu_peak_excludes_hotspot():
+    """CPU Hot Spot must not be selected as representative peak."""
+    monitor = ThermalMonitor()
+    monitor._peak_temps = {
+        "Intel Core i9 > CPU Hot Spot": 110.0,
+        "Intel Core i9 > CPU Core #1": 85.0,
+    }
+    assert monitor.get_cpu_peak() == 85.0
+
+
+def test_get_cpu_peak_excludes_core_max():
+    """CPU Core Max must not be selected."""
+    monitor = ThermalMonitor()
+    monitor._peak_temps = {
+        "Intel Core i7 > CPU Core Max": 98.0,
+        "Intel Core i7 > CPU Core #1": 83.0,
+        "Intel Core i7 > CPU Core #2": 81.0,
+    }
+    assert monitor.get_cpu_peak() == 83.0
+
+
+def test_get_cpu_peak_excludes_vrm():
+    """VRM temperature excluded from cpu peak."""
+    monitor = ThermalMonitor()
+    monitor._peak_temps = {
+        "Nuvoton > CPU VRM": 68.0,
+        "Intel Core i7 > CPU Core #1": 55.0,
+    }
+    assert monitor.get_cpu_peak() == 55.0
+
+
+def test_get_cpu_peak_no_cpu_sensors():
+    """Returns None when no CPU sensors at all."""
+    monitor = ThermalMonitor()
+    monitor._peak_temps = {"NVIDIA RTX 3080 > GPU Core": 70.0}
+    assert monitor.get_cpu_peak() is None

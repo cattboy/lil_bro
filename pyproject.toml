@@ -12,6 +12,9 @@ license = { text = "MIT" }
 authors = [
     { name = "Antigravity", email = "antigravity@example.com" }
 ]
+# System dependency (not enforced by uv/pip): .NET 8 SDK is required to build
+# lhm-server.exe (tools/lhm-server/). The runtime (.NET 8 Runtime) is required
+# to run lhm-server.exe at startup. Download: https://dotnet.microsoft.com/download/dotnet/8.0
 dependencies = [
     "wmi>=1.5.1; sys_platform == 'win32'",
     "psutil>=5.9.8",
@@ -33,6 +36,15 @@ lil_bro = "src.main:main"
 
 [tool.setuptools.packages.find]
 include = ["src*"]
+
+[tool.lil_bro.system-requirements]
+# Informational only — not enforced by uv/pip.
+# These must be installed manually before building or running lil_bro.
+dotnet-sdk = ">=8.0"
+dotnet-sdk-purpose = "Required to build tools/lhm-server/ (C# LibreHardwareMonitor sidecar)"
+dotnet-runtime = ">=8.0"
+dotnet-runtime-purpose = "Required to run lhm-server.exe at startup for thermal monitoring"
+dotnet-download = "https://dotnet.microsoft.com/download/dotnet/8.0"
 
 [tool.uv]
 required-environments = [
