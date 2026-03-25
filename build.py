@@ -87,6 +87,7 @@ def build_lhm_server():
     if not script.exists():
         print("  SKIP: tools/lhm-server/build.ps1 not found")
         return
+    
 
     result = subprocess.run(
         ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(script)],

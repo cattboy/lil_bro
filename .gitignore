@@ -18,3 +18,7 @@ uv.lock
 
 build/
 dist/
+
+## LHW bin
+/tools/lhm-server/bin
+/tools/lhm-server/obj

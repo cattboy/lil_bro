@@ -9,6 +9,25 @@ This is a solo project in active development. This file covers everything you ne
 - **Python 3.11+** (3.13 tested)
 - **uv** — fast Python package manager ([install](https://docs.astral.sh/uv/getting-started/installation/))
 - **Windows 10/11** — this tool is Windows-only (uses WMI, winreg, ctypes Win32 APIs)
+- **.NET 8 SDK** — required to build the bundled `lhm-server.exe` thermal sensor sidecar
+
+### Installing .NET 8 SDK (winget)
+
+The fastest way on Windows 10/11 is via winget:
+
+```powershell
+winget install Microsoft.DotNet.SDK.8
+```
+
+To verify the install or check what SDK versions are present:
+
+```powershell
+dotnet --list-sdks
+```
+
+You need at least one `8.x.xxx` entry. The SDK includes all runtimes — no separate runtime install is needed.
+
+> **Note:** If you only need to run the pre-built `lhm-server.exe` (already included in `tools/lhm-server/`), you do not need the SDK. The SDK is only required if you want to rebuild the sidecar from source.
 
 ---
 

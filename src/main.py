@@ -11,7 +11,7 @@ Thin wrapper that handles:
 import multiprocessing
 import sys
 
-from src.utils.formatting import print_info, print_warning, print_error, print_accent
+from src.utils.formatting import print_info, print_warning, print_error, print_accent, resize_console_window
 from src.utils.errors import AdminRequiredError
 from src.bootstrapper import check_admin
 from src.pipeline.banner import print_banner
@@ -20,6 +20,7 @@ from src.pipeline.menu import menu_loop
 
 def main():
     multiprocessing.freeze_support()
+    resize_console_window()
     try:
         from src.utils.integrity import verify_integrity
         verify_integrity()

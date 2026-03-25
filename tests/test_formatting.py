@@ -272,6 +272,53 @@ def test_print_proposal_manual_tag(capsys):
     assert "[MANUAL]" in out
 
 
+# ── resize_console_window (3 tests) ─────────────────────────────────────────
+
+def test_resize_console_calls_setwindowpos():
+    """Happy path: SetWindowPos is called with 80% of screen dims, centered."""
+    from unittest.mock import MagicMock, patch
+    mock_kernel32 = MagicMock()
+    mock_user32   = MagicMock()
+    mock_kernel32.GetConsoleWindow.return_value = 0xABCD  # non-zero handle
+    mock_user32.GetSystemMetrics.side_effect = lambda idx: 1920 if idx == 0 else 1080
+
+    with patch('ctypes.windll') as mock_windll:
+        mock_windll.kernel32 = mock_kernel32
+        mock_windll.user32   = mock_user32
+        formatting.resize_console_window()
+
+    expected_w = int(1920 * 0.8)  # 1536
+    expected_h = int(1080 * 0.8)  # 864
+    expected_x = (1920 - expected_w) // 2  # 192
+    expected_y = (1080 - expected_h) // 2  # 108
+    mock_user32.SetWindowPos.assert_called_once()
+    call_args = mock_user32.SetWindowPos.call_args[0]
+    assert call_args[1:5] == (None, expected_x, expected_y, expected_w)
+    assert call_args[5] == expected_h
+
+
+def test_resize_console_no_hwnd_is_noop():
+    """GetConsoleWindow returns 0 → SetWindowPos is never called."""
+    from unittest.mock import MagicMock, patch
+    mock_kernel32 = MagicMock()
+    mock_user32   = MagicMock()
+    mock_kernel32.GetConsoleWindow.return_value = 0
+
+    with patch('ctypes.windll') as mock_windll:
+        mock_windll.kernel32 = mock_kernel32
+        mock_windll.user32   = mock_user32
+        formatting.resize_console_window()
+
+    mock_user32.SetWindowPos.assert_not_called()
+
+
+def test_resize_console_exception_is_silent():
+    """Any exception inside resize_console_window is swallowed silently."""
+    from unittest.mock import patch
+    with patch('ctypes.windll', side_effect=Exception("ctypes exploded")):
+        formatting.resize_console_window()   # must not raise
+
+
 # ── DESIGN.md sync (2 tests) ────────────────────────────────────────────────
 
 _DESIGN_MD = Path(__file__).resolve().parent.parent / "DESIGN.md"
