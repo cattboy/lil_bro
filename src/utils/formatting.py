@@ -127,9 +127,20 @@ def prompt_approval(action_description: str) -> bool:
 
 
 def resize_console_window() -> None:
-    """Resize the console window to 80% of the primary screen, centered."""
+    """Resize the console window to 80% of the primary screen, centered.
+
+    Skips resize when running inside Windows Terminal (which manages its
+    own window layout) to avoid interfering with focus and input handling.
+    """
     try:
         import ctypes
+        import os
+
+        # Windows Terminal manages its own window — resizing the pseudo-console
+        # HWND can steal keyboard focus and break input().
+        if os.environ.get("WT_SESSION"):
+            return
+
         kernel32 = ctypes.windll.kernel32
         user32   = ctypes.windll.user32
 
@@ -145,10 +156,19 @@ def resize_console_window() -> None:
         x     = (screen_w - win_w) // 2
         y     = (screen_h - win_h) // 2
 
-        user32.ShowWindow(hwnd, 9)   # SW_RESTORE — de-maximize if needed
+        # Only de-maximize if actually maximized — unconditional SW_RESTORE
+        # triggers WM_SIZE messages that can disrupt the console input state.
+        if user32.IsZoomed(hwnd):
+            user32.ShowWindow(hwnd, 9)   # SW_RESTORE
+
+        # SWP_NOACTIVATE prevents SetWindowPos from triggering focus/activation
+        # changes that steal keyboard input from the console.
         SWP_NOZORDER   = 0x0004
-        SWP_SHOWWINDOW = 0x0040
+        SWP_NOACTIVATE = 0x0010
         user32.SetWindowPos(hwnd, None, x, y, win_w, win_h,
-                            SWP_NOZORDER | SWP_SHOWWINDOW)
+                            SWP_NOZORDER | SWP_NOACTIVATE)
+
+        # Re-acquire keyboard focus after the position change.
+        user32.SetForegroundWindow(hwnd)
     except Exception:
         pass

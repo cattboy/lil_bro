@@ -8,6 +8,7 @@ Covers:
   - print_section_divider (4 tests)
   - print_prompt regression (2 tests)
   - print_proposal regression (5 tests)
+  - resize_console_window (3 + 5 regression tests)
   - DESIGN.md sync (2 tests)
 """
 
@@ -272,15 +273,25 @@ def test_print_proposal_manual_tag(capsys):
     assert "[MANUAL]" in out
 
 
-# ── resize_console_window (3 tests) ─────────────────────────────────────────
+# ── resize_console_window (3 + 5 regression tests) ──────────────────────────
 
+def _make_resize_mocks():
+    """Factory for resize_console_window mock objects."""
+    from unittest.mock import MagicMock
+    mock_kernel32 = MagicMock()
+    mock_user32   = MagicMock()
+    mock_kernel32.GetConsoleWindow.return_value = 0xABCD
+    mock_user32.GetSystemMetrics.side_effect = lambda idx: 1920 if idx == 0 else 1080
+    mock_user32.IsZoomed.return_value = False
+    return mock_kernel32, mock_user32
+
+
+@patch.dict(os.environ, {}, clear=False)
 def test_resize_console_calls_setwindowpos():
     """Happy path: SetWindowPos is called with 80% of screen dims, centered."""
     from unittest.mock import MagicMock, patch
-    mock_kernel32 = MagicMock()
-    mock_user32   = MagicMock()
-    mock_kernel32.GetConsoleWindow.return_value = 0xABCD  # non-zero handle
-    mock_user32.GetSystemMetrics.side_effect = lambda idx: 1920 if idx == 0 else 1080
+    os.environ.pop("WT_SESSION", None)
+    mock_kernel32, mock_user32 = _make_resize_mocks()
 
     with patch('ctypes.windll') as mock_windll:
         mock_windll.kernel32 = mock_kernel32
@@ -317,6 +328,84 @@ def test_resize_console_exception_is_silent():
     from unittest.mock import patch
     with patch('ctypes.windll', side_effect=Exception("ctypes exploded")):
         formatting.resize_console_window()   # must not raise
+
+
+# Regression: ISSUE-003 — resize_console_window steals keyboard focus
+# Found by /qa on 2026-03-25
+
+@patch.dict(os.environ, {"WT_SESSION": "fake-guid"})
+def test_resize_skips_inside_windows_terminal():
+    """WT_SESSION env var set → resize is skipped entirely (no Win32 calls)."""
+    from unittest.mock import patch
+    with patch('ctypes.windll') as mock_windll:
+        formatting.resize_console_window()
+    mock_windll.kernel32.GetConsoleWindow.assert_not_called()
+
+
+@patch.dict(os.environ, {}, clear=False)
+def test_resize_no_showwindow_when_not_maximized():
+    """Window is NOT maximized → ShowWindow(SW_RESTORE) is NOT called."""
+    from unittest.mock import patch
+    os.environ.pop("WT_SESSION", None)
+    mock_kernel32, mock_user32 = _make_resize_mocks()
+    mock_user32.IsZoomed.return_value = False
+
+    with patch('ctypes.windll') as mock_windll:
+        mock_windll.kernel32 = mock_kernel32
+        mock_windll.user32   = mock_user32
+        formatting.resize_console_window()
+
+    mock_user32.ShowWindow.assert_not_called()
+
+
+@patch.dict(os.environ, {}, clear=False)
+def test_resize_restores_when_maximized():
+    """Window IS maximized → ShowWindow(SW_RESTORE=9) is called."""
+    from unittest.mock import patch
+    os.environ.pop("WT_SESSION", None)
+    mock_kernel32, mock_user32 = _make_resize_mocks()
+    mock_user32.IsZoomed.return_value = True
+
+    with patch('ctypes.windll') as mock_windll:
+        mock_windll.kernel32 = mock_kernel32
+        mock_windll.user32   = mock_user32
+        formatting.resize_console_window()
+
+    mock_user32.ShowWindow.assert_called_once_with(0xABCD, 9)
+
+
+@patch.dict(os.environ, {}, clear=False)
+def test_resize_uses_noactivate_flag():
+    """SetWindowPos must use SWP_NOACTIVATE (0x0010), not SWP_SHOWWINDOW (0x0040)."""
+    from unittest.mock import patch
+    os.environ.pop("WT_SESSION", None)
+    mock_kernel32, mock_user32 = _make_resize_mocks()
+
+    with patch('ctypes.windll') as mock_windll:
+        mock_windll.kernel32 = mock_kernel32
+        mock_windll.user32   = mock_user32
+        formatting.resize_console_window()
+
+    flags = mock_user32.SetWindowPos.call_args[0][6]
+    SWP_NOACTIVATE = 0x0010
+    SWP_SHOWWINDOW = 0x0040
+    assert flags & SWP_NOACTIVATE, "SWP_NOACTIVATE must be set"
+    assert not (flags & SWP_SHOWWINDOW), "SWP_SHOWWINDOW must NOT be set"
+
+
+@patch.dict(os.environ, {}, clear=False)
+def test_resize_calls_setforegroundwindow():
+    """SetForegroundWindow must be called after resize to restore keyboard focus."""
+    from unittest.mock import patch
+    os.environ.pop("WT_SESSION", None)
+    mock_kernel32, mock_user32 = _make_resize_mocks()
+
+    with patch('ctypes.windll') as mock_windll:
+        mock_windll.kernel32 = mock_kernel32
+        mock_windll.user32   = mock_user32
+        formatting.resize_console_window()
+
+    mock_user32.SetForegroundWindow.assert_called_once_with(0xABCD)
 
 
 # ── DESIGN.md sync (2 tests) ────────────────────────────────────────────────
