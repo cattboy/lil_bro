@@ -19,7 +19,10 @@
       "Bash(.venv/Scripts/python -m pytest tests/test_lhm_sidecar.py -v)",
       "Bash(.venv/Scripts/python -m pytest --tb=short -q)",
       "Bash(python -m pytest tests/test_formatting.py -q)",
-      "Bash(python -m pytest tests/ -q)"
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(sort -t- -k1,1)",
+      "Bash(python -m pytest tests/ -q --tb=short)",
+      "Bash(python -m pytest tests/test_lhm_sidecar.py -q --tb=short)"
     ]
   }
 }

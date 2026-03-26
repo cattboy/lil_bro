@@ -24,6 +24,7 @@ from src.utils.formatting import (
     print_step,
     print_step_done,
 )
+from src.utils.pawnio_check import is_pawnio_installed
 
 # LHM HTTP becomes ready before hardware sensors fully populate.
 # Retry a few times so we don't show "No sensor readings" on a healthy system.
@@ -72,6 +73,11 @@ def run_startup_thermal_scan() -> tuple[LHMSidecar, bool]:
 
     if cpu_temp is None and gpu_temp is None:
         print_dim("No sensor readings returned — temperature display skipped.")
+        if not is_pawnio_installed():
+            print_dim(
+                "  Hint: run lil_bro as administrator once to auto-install"
+                " the PawnIO thermal driver."
+            )
         print()
         return lhm, True
 

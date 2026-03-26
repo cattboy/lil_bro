@@ -5,11 +5,14 @@
 // License: this file is MIT.  LibreHardwareMonitorLib (dependency) is MPL-2.0.
 // See LICENSE-LHM.txt for attribution.
 
+using System.Diagnostics;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using LibreHardwareMonitor.Hardware;
+using Microsoft.Win32;
 
 const int Port = 8085;
 
@@ -70,6 +73,86 @@ static SensorNode HardwareToNode(IHardware hw)
     );
 }
 
+// ── PawnIO auto-install ───────────────────────────────────────────────────────
+// PawnIO.sys is embedded in this exe at build time.  On first run (admin
+// required), it is extracted to System32\drivers\ and registered as an
+// auto-start kernel service.  Subsequent runs reuse the already-installed
+// service — no admin needed after the first launch.
+
+static bool EnsurePawnIoInstalled()
+{
+    // Check if PawnIO service already exists (sc query returns 0 if present)
+    using var check = Process.Start(new ProcessStartInfo("sc", "query PawnIO")
+    {
+        RedirectStandardOutput = true,
+        RedirectStandardError  = true,
+        UseShellExecute        = false,
+        CreateNoWindow         = true,
+    });
+    check!.WaitForExit();
+    if (check.ExitCode == 0)
+        return true;  // already installed — nothing to do
+
+    // Locate embedded PawnIO.sys resource
+    var resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("PawnIO.sys");
+    if (resource is null)
+    {
+        Console.Error.WriteLine("[lhm-server] PawnIO.sys not embedded in this build — " +
+                                "temperatures may be unavailable.");
+        return false;
+    }
+
+    // Extract to System32\drivers\
+    var sysRoot    = Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows";
+    var driverPath = Path.Combine(sysRoot, "System32", "drivers", "PawnIO.sys");
+    try
+    {
+        using var fs = File.Create(driverPath);
+        resource.CopyTo(fs);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"[lhm-server] Failed to write PawnIO.sys: {ex.Message} " +
+                                "(run as administrator on first launch)");
+        return false;
+    }
+
+    // Register and start the kernel service
+    if (!RunSc($"create PawnIO binPath= \"{driverPath}\" type= kernel start= auto " +
+               "error= normal DisplayName= PawnIO"))
+        return false;
+    if (!RunSc("start PawnIO"))
+        return false;
+
+    // Write Uninstall registry key so PawnIo.IsInstalled returns true
+    try
+    {
+        using var key = Registry.LocalMachine.CreateSubKey(
+            @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO");
+        key.SetValue("DisplayVersion", "2.2.0");
+        key.SetValue("DisplayName", "PawnIO");
+    }
+    catch { /* non-fatal — driver is running regardless */ }
+
+    Console.WriteLine("[lhm-server] PawnIO driver installed successfully.");
+    return true;
+}
+
+static bool RunSc(string args)
+{
+    using var p = Process.Start(new ProcessStartInfo("sc", args)
+    {
+        UseShellExecute        = false,
+        CreateNoWindow         = true,
+        RedirectStandardOutput = true,
+        RedirectStandardError  = true,
+    });
+    p!.WaitForExit();
+    return p.ExitCode is 0 or 1056;  // 1056 = service already running
+}
+
+EnsurePawnIoInstalled();
+
 // ── Computer setup ────────────────────────────────────────────────────────────
 
 var computer = new Computer
@@ -96,13 +179,25 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-// Also exit cleanly if lil_bro (parent) terminates: detect closed stdin.
-_ = Task.Run(async () =>
+// Exit cleanly when the parent process (lil_bro) terminates.
+// Accepts --parent-pid <pid> so this works whether we were launched as a
+// direct child process (stdin pipe) or via ShellExecuteW elevation (no pipe).
+var cmdArgs  = Environment.GetCommandLineArgs();
+var ppIdx    = Array.IndexOf(cmdArgs, "--parent-pid");
+if (ppIdx >= 0 && ppIdx + 1 < cmdArgs.Length &&
+    int.TryParse(cmdArgs[ppIdx + 1], out int parentPid))
 {
-    try { await Console.In.ReadToEndAsync(cts.Token); }
-    catch { /* ignored */ }
-    finally { cts.Cancel(); }
-}, cts.Token);
+    _ = Task.Run(async () =>
+    {
+        while (!cts.Token.IsCancellationRequested)
+        {
+            try { Process.GetProcessById(parentPid); }
+            catch (ArgumentException) { cts.Cancel(); break; }  // parent gone
+            try { await Task.Delay(2000, cts.Token); }
+            catch (OperationCanceledException) { break; }
+        }
+    });
+}
 
 var updateTask = Task.Run(async () =>
 {

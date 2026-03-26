@@ -109,12 +109,13 @@ def test_start_exe_not_found(mock_port, mock_find):
 # ── LHMSidecar.start — successful launch (full LHM) ──────────────────────────
 
 @patch("src.collectors.sub.lhm_sidecar.time.sleep")
+@patch("src.collectors.sub.lhm_sidecar._is_admin", return_value=True)
 @patch("src.collectors.sub.lhm_sidecar.time.monotonic")
 @patch("src.collectors.sub.lhm_sidecar._is_lhm_responding")
 @patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
 @patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\LHM\LibreHardwareMonitor.exe", False))
 @patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
-def test_start_launches_full_lhm_successfully(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep):
+def test_start_launches_full_lhm_successfully(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_admin, mock_sleep):
     mock_proc = MagicMock()
     mock_proc.pid = 12345
     mock_popen.return_value = mock_proc
@@ -133,14 +134,17 @@ def test_start_launches_full_lhm_successfully(mock_port, mock_find, mock_popen, 
 
 # ── LHMSidecar.start — custom server launches without --http-port ─────────────
 
+@patch("src.collectors.sub.lhm_sidecar._is_admin", return_value=True)
 @patch("src.collectors.sub.lhm_sidecar.time.sleep")
 @patch("src.collectors.sub.lhm_sidecar.time.monotonic")
 @patch("src.collectors.sub.lhm_sidecar._is_lhm_responding")
 @patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
 @patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\tools\lhm-server.exe", True))
 @patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
-def test_start_launches_custom_server_no_port_flag(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep):
-    """lhm-server.exe has port hardcoded — must NOT receive --http-port arg."""
+def test_start_launches_custom_server_no_port_flag(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep, mock_admin):
+    """lhm-server.exe has port hardcoded — must NOT receive --http-port arg.
+    --parent-pid is passed to lhm-server.exe (custom server only) so it can
+    self-exit when lil_bro terminates."""
     mock_proc = MagicMock()
     mock_proc.pid = 99
     mock_popen.return_value = mock_proc
@@ -152,18 +156,21 @@ def test_start_launches_custom_server_no_port_flag(mock_port, mock_find, mock_po
     assert sidecar.start() is True
     call_args = mock_popen.call_args[0][0]
     assert "--http-port" not in call_args
-    assert call_args == [r"C:\tools\lhm-server.exe"]
+    # exe is first element; --parent-pid <pid> may follow for custom server
+    assert call_args[0] == r"C:\tools\lhm-server.exe"
+    assert "--parent-pid" in call_args
 
 
 # ── LHMSidecar.start — launch timeout ────────────────────────────────────────
 
+@patch("src.collectors.sub.lhm_sidecar._is_admin", return_value=True)
 @patch("src.collectors.sub.lhm_sidecar.time.sleep")
 @patch("src.collectors.sub.lhm_sidecar.time.monotonic")
 @patch("src.collectors.sub.lhm_sidecar._is_lhm_responding", return_value=False)
 @patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
 @patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\LHM\LibreHardwareMonitor.exe", False))
 @patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
-def test_start_launch_timeout(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep):
+def test_start_launch_timeout(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep, mock_admin):
     mock_proc = MagicMock()
     mock_popen.return_value = mock_proc
 
@@ -249,6 +256,7 @@ def test_kill_process_clears_process_ref():
 
 # ── Regression: ISSUE-004 — lhm-server.exe corrupts parent console input mode ──
 
+@patch("src.collectors.sub.lhm_sidecar._is_admin", return_value=True)
 @patch("src.collectors.sub.lhm_sidecar.time.sleep")
 @patch("src.collectors.sub.lhm_sidecar.time.monotonic")
 @patch("src.collectors.sub.lhm_sidecar._is_lhm_responding")
@@ -256,7 +264,7 @@ def test_kill_process_clears_process_ref():
 @patch("src.collectors.sub.lhm_sidecar.find_lhm_executable",
        return_value=(r"C:\tools\lhm-server.exe", True))
 @patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
-def test_popen_stdin_is_devnull(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep):
+def test_popen_stdin_is_devnull(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep, mock_admin):
     """Regression ISSUE-004: Popen must pass stdin=DEVNULL so lhm-server.exe does
     not inherit the parent's console stdin handle and corrupt ENABLE_ECHO_INPUT."""
     import subprocess as _sp
