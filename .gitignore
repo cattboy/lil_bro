@@ -19,6 +19,12 @@ uv.lock
 build/
 dist/
 
-## LHW bin
+## LHM / PawnIO build artifacts
 /tools/lhm-server/bin
 /tools/lhm-server/obj
+/tools/lhm-server/dist/
+
+/tools/PawnIO/cmake-build-*/
+/tools/PawnIO/dist/
+
+/docs/LibreHardwareMonitor/

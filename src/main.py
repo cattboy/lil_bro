@@ -16,6 +16,7 @@ from src.utils.errors import AdminRequiredError
 from src.bootstrapper import check_admin
 from src.pipeline.banner import print_banner
 from src.pipeline.menu import menu_loop
+from src.pipeline.startup_thermals import run_startup_thermal_scan
 
 
 def main():
@@ -35,7 +36,11 @@ def main():
             print_warning("Some features (like Restore Point Creation) will fail without Admin rights.")
             print()
 
-        menu_loop()
+        startup_lhm, _ = run_startup_thermal_scan()
+        try:
+            menu_loop()
+        finally:
+            startup_lhm.stop()
 
     except KeyboardInterrupt:
         print_accent("\nCtrl+C detected. Exiting...")

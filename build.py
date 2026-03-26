@@ -78,10 +78,15 @@ def generate_manifest(exe_path: Path):
 
 
 def build_lhm_server():
-    """Build the custom thermal sensor server (requires .NET 8 SDK).
+    """Build the custom thermal sensor server (requires .NET 8 SDK + WDK).
 
-    Runs tools/lhm-server/build.ps1.  Failure is non-fatal — the main build
-    continues and thermal monitoring falls back to a user-installed LHM.
+    Runs tools/lhm-server/build.ps1, which first auto-builds PawnIO.sys from
+    tools/PawnIO/build.ps1 (WDK + CMake) if not already present, then embeds
+    it inside lhm-server.exe.  The resulting exe auto-installs the PawnIO
+    kernel driver on first run (admin required once; persists across reboots).
+
+    Failure is non-fatal — the main build continues and thermal monitoring
+    falls back to a user-installed LibreHardwareMonitor if available.
     """
     script = ROOT / "tools" / "lhm-server" / "build.ps1"
     if not script.exists():

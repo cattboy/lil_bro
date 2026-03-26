@@ -21,4 +21,19 @@
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.*" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      PawnIO.sys is built by tools/PawnIO/build.ps1 (WDK + CMake) and placed
+      in tools/PawnIO/dist/PawnIO.sys.  Embedded here so lhm-server.exe is
+      self-contained: it extracts and installs the driver automatically on
+      first run (admin required once; persists as an auto-start service).
+      The Condition guard makes the build succeed even when PawnIO.sys has
+      not been built yet — sensor temps will just be unavailable in that case.
+    -->
+    <EmbeddedResource
+        Include="..\..\tools\PawnIO\dist\PawnIO.sys"
+        LogicalName="PawnIO.sys"
+        Condition="Exists('..\..\tools\PawnIO\dist\PawnIO.sys')" />
+  </ItemGroup>
+
 </Project>

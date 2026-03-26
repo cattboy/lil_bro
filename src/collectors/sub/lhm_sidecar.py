@@ -6,6 +6,7 @@ waits for readiness, and tears down on exit. Gracefully degrades if LHM
 is unavailable or the port is occupied.
 """
 
+import ctypes
 import json
 import os
 import socket
@@ -42,6 +43,32 @@ _LHM_SEARCH_PATHS = [
     r"C:\Program Files (x86)\LibreHardwareMonitor\LibreHardwareMonitor.exe",
     os.path.expandvars(r"%LOCALAPPDATA%\LibreHardwareMonitor\LibreHardwareMonitor.exe"),
 ]
+
+
+def _is_admin() -> bool:
+    """Return True if the current process has administrator privileges."""
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+def _find_elevated_pid(exe_name: str) -> Optional[int]:
+    """Find the PID of a running process by exe name via tasklist."""
+    try:
+        result = subprocess.run(
+            ["tasklist", "/fi", f"imagename eq {exe_name}", "/fo", "csv", "/nh"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        for line in result.stdout.strip().splitlines():
+            parts = line.strip('"').split('","')
+            if parts and parts[0].lower() == exe_name.lower():
+                return int(parts[1])
+    except Exception:
+        pass
+    return None
 
 
 def _is_port_in_use(port: int) -> bool:
@@ -95,6 +122,7 @@ class LHMSidecar:
         self._process: Optional[subprocess.Popen] = None
         self._exe_path = executable_path
         self._already_running = False
+        self._elevated = False  # True when launched via ShellExecuteW runas
 
     @property
     def is_running(self) -> bool:
@@ -141,16 +169,45 @@ class LHMSidecar:
 
         server_label = "lhm-server" if is_custom else "LibreHardwareMonitor"
         print_step(f"Launching {server_label} sidecar")
+
+        # lhm-server.exe has port hardcoded to 8085 — no CLI flag needed.
+        # Full LHM requires --http-port to enable its built-in web server.
+        # Pass --parent-pid so lhm-server.exe self-exits when lil_bro terminates
+        # (works both for direct subprocess and ShellExecuteW-elevated launches).
+        parent_flag = ["--parent-pid", str(os.getpid())] if is_custom else []
+        cmd = [exe] if is_custom else [exe, "--http-port", str(LHM_PORT)]
+
         try:
-            # lhm-server.exe has port hardcoded to 8085 — no CLI flag needed.
-            # Full LHM requires --http-port to enable its built-in web server.
-            cmd = [exe] if is_custom else [exe, "--http-port", str(LHM_PORT)]
-            self._process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
+            if _is_admin():
+                # Running as admin — subprocess inherits the token directly.
+                self._process = subprocess.Popen(
+                    cmd + parent_flag,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+            else:
+                # Not admin — lhm-server.exe needs admin to install PawnIO on
+                # first run.  Elevate via ShellExecuteW so the UAC prompt appears
+                # on behalf of lhm-server.exe specifically.
+                extra_args = " ".join(parent_flag)
+                ret = ctypes.windll.shell32.ShellExecuteW(
+                    None,        # hwnd
+                    "runas",     # verb — triggers UAC elevation
+                    exe,
+                    extra_args or None,
+                    None,        # working directory
+                    0,           # SW_HIDE
+                )
+                if ret <= 32:
+                    print_step_done(False)
+                    print_warning(
+                        "Could not elevate lhm-server.exe (ShellExecuteW returned "
+                        f"{ret}). Thermal monitoring unavailable."
+                    )
+                    return False
+                self._elevated = True
         except Exception as e:
             print_step_done(False)
             print_warning(f"Failed to launch {server_label}: {e}")
@@ -184,18 +241,51 @@ class LHMSidecar:
         self._kill_process()
 
     def _kill_process(self) -> None:
-        if self._process is not None:
-            try:
-                self._process.terminate()
-                self._process.wait(timeout=5)
-            except Exception:
+        if self._elevated:
+            # lhm-server.exe was launched elevated via ShellExecuteW — we have
+            # no Popen handle.  It self-exits via --parent-pid monitoring when
+            # lil_bro terminates.  Best-effort kill via tasklist PID lookup.
+            pid = _find_elevated_pid("lhm-server.exe")
+            if pid:
                 try:
-                    self._process.kill()
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(pid)],
+                        capture_output=True,
+                        timeout=5,
+                    )
                 except Exception:
                     pass
-            finally:
-                action_logger.log_action("LHM Sidecar", "Stopped")
-                self._process = None
+            action_logger.log_action("LHM Sidecar", "Stopped (elevated)")
+            self._elevated = False
+            return
+
+        if self._process is None:
+            return
+        pid = self._process.pid
+        try:
+            self._process.terminate()
+            self._process.wait(timeout=3)
+        except Exception:
+            # terminate() timed out or was denied — try kill() then taskkill.
+            # On Windows, terminate() and kill() both call TerminateProcess(); if
+            # that fails (e.g. access-denied on an elevated process), fall back to
+            # `taskkill /F /T` which goes through a separate OS code path and also
+            # kills the full process tree.
+            try:
+                self._process.kill()
+            except Exception:
+                pass
+            try:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(pid)],
+                    capture_output=True,
+                    timeout=5,
+                )
+            except Exception:
+                pass
+        finally:
+            action_logger.log_action("LHM Sidecar", "Stopped")
+            self._process = None
 
     def fetch_data(self) -> Optional[dict]:
         """Fetch the current sensor tree from LHM. Returns None on failure."""
