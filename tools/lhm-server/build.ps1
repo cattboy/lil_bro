@@ -14,7 +14,7 @@ $PawnIOSys = Resolve-Path (Join-Path $PSScriptRoot "..\..\tools\PawnIO\dist\Pawn
 
 if (-not $PawnIOSys) {
     Write-Host ""
-    Write-Host "PawnIO.sys not found — attempting auto-build from tools/PawnIO/..." `
+    Write-Host "PawnIO.sys not found - attempting auto-build from tools/PawnIO/..." `
                -ForegroundColor Yellow
     $PawnIOBuild = Join-Path $PSScriptRoot "..\..\tools\PawnIO\build.ps1"
     if (Test-Path $PawnIOBuild) {
@@ -22,15 +22,15 @@ if (-not $PawnIOSys) {
         if ($LASTEXITCODE -ne 0) {
             Write-Warning (
                 "PawnIO build failed.  lhm-server.exe will be built WITHOUT embedded " +
-                "PawnIO.sys — temperature monitoring will not work until PawnIO is " +
+                "PawnIO.sys - temperature monitoring will not work until PawnIO is " +
                 "installed separately.  See tools/PawnIO/build.ps1 for requirements."
             )
         }
     } else {
-        Write-Warning "tools/PawnIO/build.ps1 not found — skipping PawnIO embed."
+        Write-Warning "tools/PawnIO/build.ps1 not found - skipping PawnIO embed."
     }
 } else {
-    Write-Host "PawnIO.sys found — will embed in lhm-server.exe." -ForegroundColor Green
+    Write-Host "PawnIO.sys found - will embed in lhm-server.exe." -ForegroundColor Green
 }
 Write-Host ""
 

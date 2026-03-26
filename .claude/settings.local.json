@@ -22,7 +22,10 @@
       "Bash(python -m pytest tests/ -q)",
       "Bash(sort -t- -k1,1)",
       "Bash(python -m pytest tests/ -q --tb=short)",
-      "Bash(python -m pytest tests/test_lhm_sidecar.py -q --tb=short)"
+      "Bash(python -m pytest tests/test_lhm_sidecar.py -q --tb=short)",
+      "Bash(python build.py --clean)",
+      "Bash(git fetch:*)",
+      "Bash(git clone:*)"
     ]
   }
 }
