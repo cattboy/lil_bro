@@ -31,16 +31,49 @@ if (-not (Get-Command cmake -ErrorAction SilentlyContinue)) {
 }
 Write-Host "cmake: $(cmake --version | Select-Object -First 1)" -ForegroundColor DarkGray
 
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Error "git not found. Install Git and add it to PATH."
+}
+
 # WDK presence is checked by FindWdk.cmake; CMake configure will fail with a
 # clear message if WDK is absent.
+
+# ── Fetch PawnPP submodule (provides amx.h) ───────────────────────────────────
+
+$PawnPPDir = Join-Path $Root "PawnPP"
+
+# PawnPP is populated if its directory contains at least one file
+$PawnPPPopulated = (Test-Path $PawnPPDir) -and ((Get-ChildItem -Path $PawnPPDir -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1) -ne $null)
+
+if (-not $PawnPPPopulated) {
+    Write-Host ""
+    Write-Host "PawnPP submodule not found -- cloning namazso/PawnPP..." -ForegroundColor Cyan
+    # Remove any leftover empty directory before cloning
+    if (Test-Path $PawnPPDir) {
+        Remove-Item -Recurse -Force $PawnPPDir
+    }
+    git clone --depth 1 https://github.com/namazso/PawnPP.git $PawnPPDir
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Failed to clone PawnPP. Check your internet connection and try again."
+    }
+    Write-Host "PawnPP cloned." -ForegroundColor Green
+} else {
+    Write-Host "PawnPP: already present" -ForegroundColor DarkGray
+}
 
 # ── CMake configure ───────────────────────────────────────────────────────────
 
 $BuildDir = Join-Path $Root "cmake-build-release"
 
+# Wipe stale cmake cache so a freshly-cloned PawnPP is picked up correctly
+$CmakeCache = Join-Path $BuildDir "CMakeCache.txt"
+if (Test-Path $CmakeCache) {
+    Remove-Item -Force $CmakeCache
+}
+
 Write-Host ""
 Write-Host "Configuring PawnIO (Release/x64)..." -ForegroundColor Cyan
-cmake -S $Root -B $BuildDir -DCMAKE_BUILD_TYPE=Release -A x64
+cmake -S $Root -B $BuildDir -G "Visual Studio 17 2022" -DCMAKE_BUILD_TYPE=Release -A x64 "-DPAWNIO_NAME_FULL=PawnIO"
 if ($LASTEXITCODE -ne 0) {
     Write-Error (
         "CMake configure failed.`n" +
@@ -81,6 +114,6 @@ Copy-Item -Path $SysFile.FullName -Destination $OutSys -Force
 
 $SizeMB = [math]::Round((Get-Item $OutSys).Length / 1KB, 1)
 Write-Host ""
-Write-Host "PawnIO.sys  →  $OutSys  (${SizeMB} KB)" -ForegroundColor Green
+Write-Host "PawnIO.sys -> $OutSys  (${SizeMB} KB)" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next: run tools/lhm-server/build.ps1 to embed PawnIO.sys in lhm-server.exe." -ForegroundColor DarkGray

@@ -4,6 +4,12 @@ LibreHardwareMonitor sidecar process manager.
 Launches LHM as a background process with its HTTP server on port 8085,
 waits for readiness, and tears down on exit. Gracefully degrades if LHM
 is unavailable or the port is occupied.
+
+PawnIO build prerequisite: lhm-server.exe embeds PawnIO.sys only when
+tools/PawnIO/dist/ exists at build time. That directory requires WDK +
+CMake + test-signing — it is never built in CI. Without PawnIO, lhm-server
+falls back to WMI-only sensors (no ring-0 access). This is expected; do not
+attempt to fix the WDK build chain here.
 """
 
 import ctypes
@@ -12,17 +18,18 @@ import os
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from typing import Optional
 
-from ...utils.formatting import print_step, print_step_done, print_warning, print_info
+from ...utils.formatting import print_step, print_step_done, print_warning, print_info, print_dim
 from ...utils.action_logger import action_logger
 from ...utils.paths import get_appdata_dir
 
 LHM_PORT = 8085
 LHM_URL = f"http://localhost:{LHM_PORT}/data.json"
-_STARTUP_TIMEOUT = 5  # seconds to wait for /data.json readiness
+_STARTUP_TIMEOUT = 15  # seconds to wait for /data.json readiness (.NET cold start)
 _POLL_INTERVAL = 0.5  # seconds between readiness checks
 
 # Search order for thermal sensor server binaries.
@@ -123,6 +130,7 @@ class LHMSidecar:
         self._exe_path = executable_path
         self._already_running = False
         self._elevated = False  # True when launched via ShellExecuteW runas
+        self._stderr_lines: list[str] = []
 
     @property
     def is_running(self) -> bool:
@@ -184,9 +192,10 @@ class LHMSidecar:
                     cmd + parent_flag,
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
+                threading.Thread(target=self._drain_stderr, daemon=True).start()
             else:
                 # Not admin — lhm-server.exe needs admin to install PawnIO on
                 # first run.  Elevate via ShellExecuteW so the UAC prompt appears
@@ -218,20 +227,50 @@ class LHMSidecar:
         while time.monotonic() < deadline:
             if _is_lhm_responding():
                 print_step_done(True)
+                pid_str = str(self._process.pid) if self._process else "elevated"
                 action_logger.log_action(
-                    "LHM Sidecar", f"Launched (PID {self._process.pid})", f"Port {LHM_PORT}"
+                    "LHM Sidecar", f"Launched (PID {pid_str})", f"Port {LHM_PORT}"
                 )
                 return True
+            # Early exit if subprocess already died
+            if self._process is not None and self._process.poll() is not None:
+                rc = self._process.returncode
+                print_step_done(False)
+                print_warning(
+                    f"lhm-server.exe exited immediately (exit code {rc}). "
+                    "Thermal monitoring unavailable."
+                )
+                if self._stderr_lines:
+                    for line in self._stderr_lines[-10:]:
+                        print_dim(f"  [lhm-server] {line}")
+                self._process = None
+                return False
             time.sleep(_POLL_INTERVAL)
 
-        # Timeout — LHM started but HTTP never became ready
+        # Timeout — process alive but HTTP never became ready
         print_step_done(False)
         print_warning(
             f"LibreHardwareMonitor launched but /data.json not reachable after "
             f"{_STARTUP_TIMEOUT}s. Thermal monitoring unavailable."
         )
+        if self._stderr_lines:
+            for line in self._stderr_lines[-10:]:
+                print_dim(f"  [lhm-server] {line}")
         self._kill_process()
         return False
+
+    def _drain_stderr(self) -> None:
+        """Read stderr from subprocess into _stderr_lines (daemon thread)."""
+        proc = self._process
+        if proc is None or proc.stderr is None:
+            return
+        try:
+            for raw_line in proc.stderr:
+                line = raw_line.decode("utf-8", errors="replace").rstrip()
+                if line:
+                    self._stderr_lines.append(line)
+        except (ValueError, OSError):
+            pass  # pipe closed on normal shutdown
 
     def stop(self) -> None:
         """Tear down the LHM sidecar if we launched it."""
