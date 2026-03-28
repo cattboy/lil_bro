@@ -147,6 +147,77 @@ See `CLAUDE.md` for the full architecture reference used by the AI assistant.
 
 ---
 
+## PawnIO driver (thermal sensor access)
+
+lhm-server.exe uses LibreHardwareMonitorLib to read CPU/GPU temperatures. On modern Windows, ring-0 hardware access requires the **PawnIO kernel driver**. The driver is embedded inside lhm-server.exe and auto-installed on first admin launch.
+
+### Signed vs. unsigned PawnIO.sys
+
+PawnIO.sys is a **kernel driver** — Windows enforces strict code-signing requirements:
+
+| Build type | Source | Loads without test-signing? |
+|---|---|---|
+| Official release | [pawnio.eu](https://pawnio.eu) | Yes (WHQL-signed) |
+| Built from source | `tools/PawnIO/build.ps1` | **No** — unsigned, blocked with error 577 |
+
+**For development**, you have two options:
+1. **Enable test-signing** on your dev machine (see below) to use the source-built driver
+2. **Download the signed release** from pawnio.eu and place it at `tools/PawnIO/dist/PawnIO.sys`
+
+**For production/distribution**, always use the officially signed PawnIO.sys from pawnio.eu.
+
+### Enabling test-signing mode (development only)
+
+Test-signing allows Windows to load unsigned kernel drivers. This is a boot-time setting that affects your entire system.
+
+**Enable:**
+```powershell
+# Requires admin (elevated PowerShell)
+bcdedit /set testsigning on
+# Reboot required
+shutdown /r /t 0
+```
+
+**Disable:**
+```powershell
+bcdedit /set testsigning off
+shutdown /r /t 0
+```
+
+**What to expect:**
+- A "Test Mode" watermark appears in the bottom-right corner of the desktop
+- All unsigned/test-signed kernel drivers can load (not just PawnIO)
+- Secure Boot must allow it — most consumer/gaming PCs do; some enterprise UEFI configs may block it
+- No special certificates or tools are needed
+
+**Requirements:**
+- Windows 10/11 (any edition)
+- Admin privileges to run `bcdedit`
+- Secure Boot not locked to reject test-signing (rare on consumer hardware)
+- A reboot after each toggle
+
+### Cleaning up a broken PawnIO service
+
+If you previously ran lhm-server with an unsigned PawnIO.sys (without test-signing), a broken service entry may exist. The retry logic in lhm-server will auto-clean this, but you can also clean it up manually:
+
+```powershell
+# Requires admin
+sc delete PawnIO
+del C:\Windows\System32\drivers\PawnIO.sys
+```
+
+### Build workflow
+
+```
+tools/PawnIO/build.ps1      # Build PawnIO.sys from source (WDK + CMake required)
+tools/lhm-server/build.ps1  # Build lhm-server.exe (embeds PawnIO.sys if present)
+python build.py              # Full pipeline: PawnIO -> lhm-server -> lil_bro.exe
+```
+
+The lhm-server build auto-triggers PawnIO build if `tools/PawnIO/dist/PawnIO.sys` is missing. If you download the signed binary manually, place it there before building lhm-server.
+
+---
+
 ## Writing new checks
 
 1. Create `src/agent_tools/your_check.py`

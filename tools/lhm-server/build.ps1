@@ -47,6 +47,10 @@ $sdkVersion = (dotnet --version 2>$null)
 Write-Host "dotnet SDK: $sdkVersion"
 
 Write-Host "Building lhm-server (self-contained win-x64)..."
+# Clean first — incremental builds can miss newly-added EmbeddedResource files
+# (the Condition guard means MSBuild doesn't track PawnIO.sys as an input until
+# it exists, so a stale cache silently omits it).
+dotnet clean "$PSScriptRoot\LhmServer.csproj" -c Release -r win-x64 --nologo 2>$null
 dotnet publish "$PSScriptRoot\LhmServer.csproj" `
     -r win-x64 `
     -c Release `

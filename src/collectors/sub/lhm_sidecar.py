@@ -231,6 +231,13 @@ class LHMSidecar:
                 action_logger.log_action(
                     "LHM Sidecar", f"Launched (PID {pid_str})", f"Port {LHM_PORT}"
                 )
+                # Surface any PawnIO driver warnings (stderr is captured but
+                # normally only printed on failure/timeout — PawnIO errors are
+                # non-fatal so the server keeps running without ring-0 access).
+                time.sleep(0.3)  # brief flush window for stderr drain thread
+                for line in self._stderr_lines:
+                    if "pawnio" in line.lower():
+                        print_warning(f"[lhm-server] {line}")
                 return True
             # Early exit if subprocess already died
             if self._process is not None and self._process.poll() is not None:
