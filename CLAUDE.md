@@ -82,8 +82,13 @@ src/
     integrity.py         — SHA-256 exe hash verification (frozen builds only)
     paths.py             — Centralized %APPDATA%\lil_bro\ path helper
     progress_bar.py      — AnimatedProgressBar: plasma-sweep terminal animation during fix execution
-build.py               — Automated build pipeline (PyInstaller + integrity manifest)
+build.py               — Automated build pipeline (lhm-server + PyInstaller + integrity manifest)
 lil_bro.spec           — PyInstaller onefile build specification
+install_deps.ps1       — One-command dev setup (Python, uv, .NET 8, WDK, submodules)
+tools/
+  PawnIO/              — PawnIO kernel driver source + WDK build script
+  PawnIO_Latest_Check/ — Auto-updater: fetches signed PawnIO.sys from GitHub releases
+  lhm-server/          — Custom C# thermal sensor server (LibreHardwareMonitorLib + PawnIO)
 tests/                 — Unit tests, all mocked (no real system modifications)
 docs/                  — All progress docs, plans, reports, and notes go here
 memory-bank/           — Project design docs (brief, progress, patterns, active context)
