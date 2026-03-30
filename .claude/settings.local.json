@@ -26,7 +26,8 @@
       "Bash(python build.py --clean)",
       "Bash(git fetch:*)",
       "Bash(git clone:*)",
-      "Bash(python -m pytest tests/test_lhm_sidecar.py -v)"
+      "Bash(python -m pytest tests/test_lhm_sidecar.py -v)",
+      "Bash(curl -s http://localhost:8085/data.json)"
     ]
   }
 }

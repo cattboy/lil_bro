@@ -17,11 +17,13 @@ from src.bootstrapper import check_admin
 from src.pipeline.banner import print_banner
 from src.pipeline.menu import menu_loop
 from src.pipeline.startup_thermals import run_startup_thermal_scan
+from src.pipeline.post_run_cleanup import post_run_cleanup
 
 
 def main():
     multiprocessing.freeze_support()
     resize_console_window()
+    startup_lhm = None
     try:
         from src.utils.integrity import verify_integrity
         verify_integrity()
@@ -37,17 +39,15 @@ def main():
             print()
 
         startup_lhm, _ = run_startup_thermal_scan()
-        try:
-            menu_loop()
-        finally:
-            startup_lhm.stop()
+        menu_loop()
 
     except KeyboardInterrupt:
         print_accent("\nCtrl+C detected. Exiting...")
-        sys.exit(0)
     except Exception as e:
         print_error(f"Fatal unhandled exception: {e}")
         sys.exit(1)
+    finally:
+        post_run_cleanup(startup_lhm)
 
 
 if __name__ == "__main__":

@@ -25,7 +25,6 @@ from typing import Optional
 
 from ...utils.formatting import print_step, print_step_done, print_warning, print_info, print_dim
 from ...utils.action_logger import action_logger
-from ...utils.paths import get_appdata_dir
 
 LHM_PORT = 8085
 LHM_URL = f"http://localhost:{LHM_PORT}/data.json"
@@ -40,8 +39,8 @@ _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 _LHM_SEARCH_PATHS = [
     # 1. PyInstaller frozen bundle — sys._MEIPASS/tools/lhm-server.exe
     os.path.join(getattr(sys, "_MEIPASS", _PROJECT_ROOT), "tools", "lhm-server.exe"),
-    # 2. %APPDATA%\lil_bro\tools\ — first-run extraction fallback for long _MEIPASS paths
-    os.path.join(str(get_appdata_dir()), "tools", "lhm-server.exe"),
+    # 2. Next to the running executable — portable deployment (frozen .exe)
+    os.path.join(os.path.dirname(sys.executable), "tools", "lhm-server.exe"),
     # 3. Source-tree dev path — tools/lhm-server/dist/lhm-server.exe
     os.path.join(_PROJECT_ROOT, "tools", "lhm-server", "dist", "lhm-server.exe"),
     # 4. Full LibreHardwareMonitor installation (user-installed)
