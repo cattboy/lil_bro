@@ -8,6 +8,7 @@ Thin wrapper that handles:
   - Delegates to pipeline.menu for the main loop
 """
 
+import argparse
 import multiprocessing
 import sys
 
@@ -20,8 +21,28 @@ from src.pipeline.startup_thermals import run_startup_thermal_scan
 from src.pipeline.post_run_cleanup import post_run_cleanup
 
 
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="lil_bro",
+        description="Local AI gaming PC optimizer",
+        add_help=True,
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug logging to lil_bro_debug.log (CWD root)",
+    )
+    return parser.parse_args()
+
+
 def main():
     multiprocessing.freeze_support()
+    args = _parse_args()
+
+    if args.debug:
+        from src.utils.debug_logger import enable_debug_logging
+        enable_debug_logging()
+
     resize_console_window()
     startup_lhm = None
     try:

@@ -25,6 +25,7 @@ from src.utils.formatting import (
 )
 from src.utils.errors import LilBroError
 from src.utils.action_logger import action_logger
+from src.utils.debug_logger import get_debug_logger
 from src.pipeline._state import get_llm
 from src.pipeline.thermal_gate import thermal_safety_gate
 from src.pipeline.approval import run_approval_flow
@@ -46,22 +47,28 @@ def run_optimization_pipeline():
 def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
     """Executes all 5 phases sequentially."""
 
+    log = get_debug_logger()
+
     # -- Phase 1: Bootstrapping & Safety --
+    log.info("Phase 1: Bootstrapping & Safety")
     print_header("Phase 1: Bootstrapping & Safety")
     try:
         create_restore_point()
     except LilBroError as e:
+        log.error("Restore point creation failed: %s", e)
         print_error(str(e))
         if not prompt_approval("Restore point creation failed. Continue anyway?"):
             return
 
     # -- Phase 2: Deep System Scan --
+    log.info("Phase 2: Deep System Scan")
     print_header("Phase 2: Deep System Scan")
 
     lhm_available = lhm.start()
     if lhm_available:
         print_success("Thermal monitoring active on port 8085.")
     else:
+        log.warning("LHM sidecar unavailable — continuing without thermal monitoring")
         print_info("Continuing without thermal monitoring -- Cinebench will still run.")
 
     dump_path = dump_system_specs()
@@ -77,10 +84,11 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
             print_key_value("Driver", hw.get('gpu_driver', 'Unknown'))
             print_key_value("RAM", f"{hw.get('ram_gb', 0)} GB @ {hw.get('ram_mhz', 0)} MHz")
             print_key_value("OS", hw.get('os', 'Unknown'))
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning("Could not parse specs preview for display: %s", exc)
 
     # -- Phase 3: Baseline Benchmark --
+    log.info("Phase 3: Baseline Benchmark")
     print_header("Phase 3: Baseline Benchmark")
 
     runner = BenchmarkRunner()
@@ -120,6 +128,7 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
                 print_warning("Thermal monitor ran but captured no temperature data.")
 
     # -- Phase 4: Apply Esports Configurations --
+    log.info("Phase 4: Apply Esports Configurations")
     print_header("Phase 4: Apply Esports Configurations")
 
     specs: dict = {}
@@ -128,6 +137,7 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
             with open(dump_path, "r", encoding="utf-8") as f:
                 specs = json.load(f)
         except Exception as e:
+            log.error("Could not load specs file %s: %s", dump_path, e)
             print_warning(f"Could not load specs file: {e}")
 
     if not specs:
@@ -184,6 +194,7 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
         run_approval_flow(proposals, specs)
 
     # -- Phase 5: Final Verification Benchmark --
+    log.info("Phase 5: Final Verification Benchmark")
     print_header("Phase 5: Final Verification Benchmark")
 
     final_skipped = thermal_safety_gate(

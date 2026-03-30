@@ -33,3 +33,6 @@ dist/
 
 /docs/LibreHardwareMonitor/
 /docs/completed/
+lil_bro_actions.log
+lil_bro_debug.log
+lil_bro.spec
