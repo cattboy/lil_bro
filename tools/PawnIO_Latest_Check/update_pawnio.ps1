@@ -106,84 +106,88 @@ if ((Test-Path $VersionFile) -and (Test-Path $SetupExe)) {
 
 # ── Step 3: Compare versions ────────────────────────────────────────────────
 
+$skipDownload = $false
+
 if ($localVersion) {
     try {
         $ghVer    = [System.Version]$latestVersion
         $localVer = [System.Version]$localVersion
         if ($ghVer -le $localVer) {
             Write-Host ""
-            Write-Host "Already up to date ($localVersion)." -ForegroundColor Green
-            exit 0
+            Write-Host "Already up to date ($localVersion) - extracting from cached installer..." -ForegroundColor Green
+            $skipDownload = $true
         }
     } catch {
         Write-Host "  Version parse warning: $_ -- proceeding with download." -ForegroundColor Yellow
     }
 }
 
-Write-Host ""
-Write-Host "New version available: $localVersion -> $latestVersion" -ForegroundColor Cyan
+if (-not $skipDownload) {
+    Write-Host ""
+    Write-Host "New version available: $localVersion -> $latestVersion" -ForegroundColor Cyan
 
-# ── Step 4: Archive old exe ─────────────────────────────────────────────────
+    # ── Step 4: Archive old exe ─────────────────────────────────────────────
 
-if ((Test-Path $SetupExe) -and $localVersion) {
-    New-Item -ItemType Directory -Force -Path $ArchiveDir | Out-Null
-    $archiveName = "PawnIO_setup_${localVersion}.exe"
-    $archivePath = Join-Path $ArchiveDir $archiveName
-    Move-Item -Path $SetupExe -Destination $archivePath -Force
-    Write-Host "  Archived: $archiveName" -ForegroundColor DarkGray
-}
-
-# ── Step 5: Download new release ────────────────────────────────────────────
-
-New-Item -ItemType Directory -Force -Path $ResourceDir | Out-Null
-
-Write-Host ""
-Write-Host "Downloading PawnIO_setup.exe ($latestVersion)..." -ForegroundColor Cyan
-
-try {
-    Invoke-WebRequest -Uri $downloadUrl -OutFile $SetupExe -Headers $headers -TimeoutSec 300
-} catch {
-    Write-Error "Download failed: $_"
-}
-
-$actualSize = (Get-Item $SetupExe).Length
-if ($actualSize -ne $expectedSize) {
-    Remove-Item -Force $SetupExe -ErrorAction SilentlyContinue
-    Write-Error ("Size mismatch! Expected $expectedSize bytes, got $actualSize bytes.`n" +
-                 "  Download may be corrupted. Deleted the file -- re-run to retry.")
-}
-
-Write-Host "  Downloaded: $actualSize bytes" -ForegroundColor Green
-
-# ── Step 6: SHA256 verification ─────────────────────────────────────────────
-
-Write-Host ""
-Write-Host "Verifying SHA256..." -ForegroundColor Cyan
-
-$sha256   = [System.Security.Cryptography.SHA256]::Create()
-$stream   = [System.IO.File]::OpenRead($SetupExe)
-$hashBytes = $sha256.ComputeHash($stream)
-$stream.Close()
-$sha256.Dispose()
-$actualSHA = ([BitConverter]::ToString($hashBytes) -replace '-','').ToLower()
-
-if ($actualSHA -ne $expectedSHA) {
-    # Restore archived copy if we have one
-    if ($localVersion) {
-        $archivePath = Join-Path $ArchiveDir "PawnIO_setup_${localVersion}.exe"
-        if (Test-Path $archivePath) {
-            Copy-Item -Path $archivePath -Destination $SetupExe -Force
-            Write-Host "  Restored previous version from archive." -ForegroundColor Yellow
-        }
+    if ((Test-Path $SetupExe) -and $localVersion) {
+        New-Item -ItemType Directory -Force -Path $ArchiveDir | Out-Null
+        $archiveName = "PawnIO_setup_${localVersion}.exe"
+        $archivePath = Join-Path $ArchiveDir $archiveName
+        Move-Item -Path $SetupExe -Destination $archivePath -Force
+        Write-Host "  Archived: $archiveName" -ForegroundColor DarkGray
     }
-    Remove-Item -Force $SetupExe -ErrorAction SilentlyContinue
-    Write-Error ("SHA256 MISMATCH!`n" +
-                 "  Expected: $expectedSHA`n" +
-                 "  Actual:   $actualSHA`n" +
-                 "  The downloaded file has been deleted.")
-}
 
-Write-Host "  SHA256 verified: $($actualSHA.Substring(0,16))..." -ForegroundColor Green
+    # ── Step 5: Download new release ────────────────────────────────────────
+
+    New-Item -ItemType Directory -Force -Path $ResourceDir | Out-Null
+
+    Write-Host ""
+    Write-Host "Downloading PawnIO_setup.exe ($latestVersion)..." -ForegroundColor Cyan
+
+    try {
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $SetupExe -Headers $headers -TimeoutSec 300
+    } catch {
+        Write-Error "Download failed: $_"
+    }
+
+    $actualSize = (Get-Item $SetupExe).Length
+    if ($actualSize -ne $expectedSize) {
+        Remove-Item -Force $SetupExe -ErrorAction SilentlyContinue
+        Write-Error ("Size mismatch! Expected $expectedSize bytes, got $actualSize bytes.`n" +
+                     "  Download may be corrupted. Deleted the file -- re-run to retry.")
+    }
+
+    Write-Host "  Downloaded: $actualSize bytes" -ForegroundColor Green
+
+    # ── Step 6: SHA256 verification ──────────────────────────────────────────
+
+    Write-Host ""
+    Write-Host "Verifying SHA256..." -ForegroundColor Cyan
+
+    $sha256    = [System.Security.Cryptography.SHA256]::Create()
+    $stream    = [System.IO.File]::OpenRead($SetupExe)
+    $hashBytes = $sha256.ComputeHash($stream)
+    $stream.Close()
+    $sha256.Dispose()
+    $actualSHA = ([BitConverter]::ToString($hashBytes) -replace '-','').ToLower()
+
+    if ($actualSHA -ne $expectedSHA) {
+        # Restore archived copy if we have one
+        if ($localVersion) {
+            $archivePath = Join-Path $ArchiveDir "PawnIO_setup_${localVersion}.exe"
+            if (Test-Path $archivePath) {
+                Copy-Item -Path $archivePath -Destination $SetupExe -Force
+                Write-Host "  Restored previous version from archive." -ForegroundColor Yellow
+            }
+        }
+        Remove-Item -Force $SetupExe -ErrorAction SilentlyContinue
+        Write-Error ("SHA256 MISMATCH!`n" +
+                     "  Expected: $expectedSHA`n" +
+                     "  Actual:   $actualSHA`n" +
+                     "  The downloaded file has been deleted.")
+    }
+
+    Write-Host "  SHA256 verified: $($actualSHA.Substring(0,16))..." -ForegroundColor Green
+}
 
 # ── Step 7: Extract PawnIO.sys using 7-Zip ──────────────────────────────────
 # PawnIO_setup.exe is a PE containing a zstd-compressed CAB in RCDATA resource 105.
@@ -260,18 +264,24 @@ Write-Host "  PawnIO.sys -> $TargetSys ($($sysSize) KB)" -ForegroundColor Green
 # Clean up temp dir
 Remove-Item -Recurse -Force $tempExtract
 
-# ── Step 8: Update version tracking ─────────────────────────────────────────
+# ── Step 8: Update version tracking (only when a new version was downloaded) ─
 
-$versionInfo = @{
-    version    = $latestVersion
-    sha256     = $actualSHA
-    updated_at = (Get-Date -Format "o")
-} | ConvertTo-Json -Depth 2
+if (-not $skipDownload) {
+    $versionInfo = @{
+        version    = $latestVersion
+        sha256     = $actualSHA
+        updated_at = (Get-Date -Format "o")
+    } | ConvertTo-Json -Depth 2
 
-Set-Content -Path $VersionFile -Value $versionInfo -Encoding UTF8
+    Set-Content -Path $VersionFile -Value $versionInfo -Encoding UTF8
 
-Write-Host ""
-Write-Host "PawnIO updated to $latestVersion successfully." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "PawnIO updated to $latestVersion successfully." -ForegroundColor Green
+} else {
+    Write-Host ""
+    Write-Host "PawnIO extracted from cached installer ($localVersion)." -ForegroundColor Green
+}
+
 Write-Host "  Setup exe: $SetupExe" -ForegroundColor DarkGray
 Write-Host "  Driver:    $TargetSys" -ForegroundColor DarkGray
 Write-Host ""
