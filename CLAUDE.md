@@ -82,12 +82,12 @@ src/
     integrity.py         — SHA-256 exe hash verification (frozen builds only)
     paths.py             — Centralized %APPDATA%\lil_bro\ path helper
     progress_bar.py      — AnimatedProgressBar: plasma-sweep terminal animation during fix execution
-build.py               — Automated build pipeline (lhm-server + PyInstaller + integrity manifest)
+build.py               — Automated build pipeline (5 steps: PawnIO update → lhm-server → PyInstaller → integrity manifest)
 lil_bro.spec           — PyInstaller onefile build specification
 install_deps.ps1       — One-command dev setup (Python, uv, .NET 8, WDK, submodules)
 tools/
-  PawnIO/              — PawnIO kernel driver source + WDK build script
-  PawnIO_Latest_Check/ — Auto-updater: fetches signed PawnIO.sys from GitHub releases
+  PawnIO/              — PawnIO kernel driver source + WDK build script (fallback path)
+  PawnIO_Latest_Check/ — Primary PawnIO.sys source: fetches latest signed binary from namazso/PawnIO.Setup GitHub releases; WDK build is fallback if offline/unavailable
   lhm-server/          — Custom C# thermal sensor server (LibreHardwareMonitorLib + PawnIO)
 tests/                 — Unit tests, all mocked (no real system modifications)
 docs/                  — All progress docs, plans, reports, and notes go here
@@ -130,6 +130,7 @@ memory-bank/           — Project design docs (brief, progress, patterns, activ
 - **Week 6** ✅ — Terminal UI redesign: DESIGN.md color system compliance, Unicode/ASCII fallback system, centralized formatting helpers (print_key_value, print_section_divider, print_prompt), dynamic progress bar width, inline colorama removal, 27 new tests (215 total)
 - **Week 7** ✅ — main.py module split: extracted `src/pipeline/` package (banner, menu, approval, fix_dispatch, thermal_gate, phases, _state), dispatch dict pattern, deduped thermal gate, 27 new tests (242 total)
 - **Week 8** ✅ — Bundle thermal sensor server: custom C# lhm-server.exe (LibreHardwareMonitorLib, PawnIO-era v0.9.*), HTTP /data.json sidecar; lhm_sidecar.py tuple return + custom vs full-LHM launch logic; fix CPU sensor derivation (_derive_cpu_temp priority: CPU Package → Tctl/Tdie → safe CPU; AMD Ryzen support; excludes hotspot/VRM/Core Max); 22 new tests (264 total)
+- **Sprint: pawnio-cleanup** ✅ — Build pipeline hardened: `update_pawnio.ps1` integrated as build step [2/5]; fetches latest signed PawnIO.sys from namazso/PawnIO.Setup GitHub releases before lhm-server build; WDK source compilation retained as automatic fallback when offline/rate-limited/7-Zip absent
 
 ---
 

@@ -237,6 +237,11 @@ class LHMSidecar:
                 for line in self._stderr_lines:
                     if "pawnio" in line.lower():
                         print_warning(f"[lhm-server] {line}")
+                        action_logger.log_action(
+                            "LHM Sidecar",
+                            "PawnIO driver activity detected",
+                            line.strip(),
+                        )
                 return True
             # Early exit if subprocess already died
             if self._process is not None and self._process.poll() is not None:

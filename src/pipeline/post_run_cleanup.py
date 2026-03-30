@@ -6,7 +6,7 @@ Ensures lil_bro leaves no trace after exit:
   - Stops and uninstalls the PawnIO kernel driver service
   - Removes PawnIO.sys from System32\\drivers
   - Cleans the PawnIO registry entry
-  - Removes leftover tools from %APPDATA%\\lil_bro\\tools (backward compat)
+  - Removes the ./lil_bro/ temp folder created in the CWD during this run
 
 The GGUF model (%APPDATA%\\lil_bro\\models\\) is preserved -- it was
 downloaded with explicit user consent and is expensive to re-fetch.
@@ -93,27 +93,13 @@ def _uninstall_pawnio() -> None:
         pass
 
 
-def _cleanup_appdata() -> None:
-    """Remove leftover tools from %APPDATA%\\lil_bro\\tools (backward compat).
-
-    Preserves logs/ (persistent across runs) and models/ (user-initiated download).
-    """
-    appdata_env = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
-    appdata = Path(appdata_env) / "lil_bro"
-    if not appdata.is_dir():
+def _cleanup_cwd_tempdir() -> None:
+    """Remove the ./lil_bro/ temp folder created in the CWD during this run."""
+    lil_bro_dir = Path.cwd() / "lil_bro"
+    if not lil_bro_dir.is_dir():
         return
-
-    target = appdata / "tools"
-    if target.is_dir():
-        try:
-            shutil.rmtree(target)
-        except OSError:
-            pass
-
-    # Remove the base dir if nothing remains (logs/ and models/ normally keep it populated)
     try:
-        if not any(appdata.iterdir()):
-            appdata.rmdir()
+        shutil.rmtree(lil_bro_dir)
     except OSError:
         pass
 
@@ -140,9 +126,9 @@ def post_run_cleanup(lhm: Optional[LHMSidecar]) -> None:
     except Exception:
         pass
 
-    # 3. Remove runtime files from %APPDATA%
+    # 3. Remove CWD ./lil_bro/ temp folder
     try:
-        _cleanup_appdata()
+        _cleanup_cwd_tempdir()
     except Exception:
         pass
 
