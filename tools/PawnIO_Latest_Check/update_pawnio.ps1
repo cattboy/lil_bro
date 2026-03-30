@@ -4,6 +4,7 @@
     verifies SHA256, and extracts PawnIO.sys for the build pipeline.
 
 .DESCRIPTION
+    0. Check if PawnIO.sys already exists in dist
     1. Queries GitHub API for the latest namazso/PawnIO.Setup release
     2. Compares against locally tracked version
     3. Downloads new release if available, archives the old one
@@ -30,6 +31,16 @@ $TargetSys   = Join-Path $PawnIODist "PawnIO.sys"
 $SevenZip    = "C:\Program Files\7-Zip\7z.exe"
 
 $GitHubAPI   = "https://api.github.com/repos/namazso/PawnIO.Setup/releases/latest"
+
+# ── Step 0: Check if PawnIO.sys already exists in dist ──────────────────────
+
+if (Test-Path $TargetSys) {
+    Write-Host "PawnIO.sys already present in dist - skipping update check." -ForegroundColor Green
+    Write-Host "  $TargetSys" -ForegroundColor DarkGray
+    exit 0
+}
+
+Write-Host "PawnIO.sys not found in dist - running update check." -ForegroundColor Yellow
 
 # ── Prerequisite: 7-Zip ─────────────────────────────────────────────────────
 
