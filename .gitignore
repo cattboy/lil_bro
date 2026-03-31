@@ -31,8 +31,13 @@ dist/
 /tools/PawnIO_Latest_Check/_extract_temp/
 /tools/PawnIO_Latest_Check/resources/PawnIO_setup.exe
 
+#Dcos
 /docs/LibreHardwareMonitor/
 /docs/completed/
+
+
 lil_bro_actions.log
 lil_bro_debug.log
 lil_bro.spec
+
+/resolve

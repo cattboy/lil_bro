@@ -18,6 +18,18 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+# Read the PE Machine field (offset 4 into the PE header) to determine CPU arch.
+# Returns the COFF machine type as a UInt16 (0x8664 = AMD64, 0xAA64 = ARM64, etc.)
+function Get-PEMachineType([string]$Path) {
+    $bytes    = [System.IO.File]::ReadAllBytes($Path)
+    $peOffset = [System.BitConverter]::ToInt32($bytes, 0x3C)
+    return    [System.BitConverter]::ToUInt16($bytes, $peOffset + 4)
+}
+
+$AMD64 = [uint16]0x8664   # x64 / AMD64 machine type
+
 # ── Paths ────────────────────────────────────────────────────────────────────
 
 $ScriptDir   = $PSScriptRoot
@@ -35,12 +47,20 @@ $GitHubAPI   = "https://api.github.com/repos/namazso/PawnIO.Setup/releases/lates
 # ── Step 0: Check if PawnIO.sys already exists in dist ──────────────────────
 
 if (Test-Path $TargetSys) {
-    Write-Host "PawnIO.sys already present in dist - skipping update check." -ForegroundColor Green
-    Write-Host "  $TargetSys" -ForegroundColor DarkGray
-    exit 0
+    $existingMachine = Get-PEMachineType $TargetSys
+    if ($existingMachine -eq $AMD64) {
+        Write-Host "PawnIO.sys (x64) already present in dist - skipping update check." -ForegroundColor Green
+        Write-Host "  $TargetSys" -ForegroundColor DarkGray
+        exit 0
+    }
+    # Wrong architecture (e.g. ARM64 was extracted on a previous run) - re-extract.
+    Write-Host ("PawnIO.sys in dist is wrong architecture " +
+                ("(0x{0:X4} - expected 0x8664 x64). Re-extracting..." -f $existingMachine)) `
+               -ForegroundColor Yellow
 }
-
-Write-Host "PawnIO.sys not found in dist - running update check." -ForegroundColor Yellow
+else {
+    Write-Host "PawnIO.sys not found in dist - running update check." -ForegroundColor Yellow
+}
 
 # ── Prerequisite: 7-Zip ─────────────────────────────────────────────────────
 
@@ -233,25 +253,40 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "7-Zip CAB extraction failed (exit code $LASTEXITCODE)."
 }
 
-# The first PawnIO.sys (without _N suffix) is the x64 signed driver
-$foundSys = Join-Path $step2Dir "PawnIO.sys"
+# PawnIO_setup.exe is a multi-arch installer — the CAB contains both x64 and
+# ARM64 drivers.  7-Zip -aou renames duplicates (PawnIO.sys, PawnIO_1.sys …)
+# so the first file is NOT guaranteed to be x64.  Select explicitly by PE
+# machine type (0x8664 = AMD64/x64) to avoid embedding the ARM64 variant on
+# x64 Windows, which causes a silent sc-start failure (wrong architecture).
+$allSys = Get-ChildItem -Path $step2Dir -Filter "PawnIO*.sys" -ErrorAction SilentlyContinue
 
-if (-not (Test-Path $foundSys)) {
-    # Fallback: search for any PawnIO.sys variant
-    $fallback = Get-ChildItem -Path $step2Dir -Filter "PawnIO*.sys" -ErrorAction SilentlyContinue |
-                Sort-Object Length -Descending | Select-Object -First 1
-    if ($fallback) {
-        $foundSys = $fallback.FullName
-        Write-Host "  Using fallback: $($fallback.Name) ($($fallback.Length) bytes)" -ForegroundColor Yellow
-    } else {
-        Write-Host "  Extracted contents:" -ForegroundColor Yellow
-        Get-ChildItem -Path $step2Dir | ForEach-Object {
-            Write-Host "    $($_.Name) ($($_.Length) bytes)" -ForegroundColor DarkGray
-        }
-        Remove-Item -Recurse -Force $tempExtract -ErrorAction SilentlyContinue
-        Write-Error ("PawnIO.sys not found in extracted contents.`n" +
-                     "  The installer format may have changed -- manual extraction required.")
+# Log what was extracted so the CI log makes arch selection transparent
+foreach ($f in $allSys) {
+    $mt = Get-PEMachineType $f.FullName
+    $archLabel = if ($mt -eq $AMD64) { "x64" } elseif ($mt -eq 0xAA64) { "ARM64" } else { "0x{0:X4}" -f $mt }
+    Write-Host "  Found: $($f.Name) ($($f.Length) bytes, $archLabel)" -ForegroundColor DarkGray
+}
+
+$x64Sys = $allSys | Where-Object { (Get-PEMachineType $_.FullName) -eq $AMD64 } | Select-Object -First 1
+
+if ($x64Sys) {
+    $foundSys = $x64Sys.FullName
+    Write-Host "  Selected x64 driver: $($x64Sys.Name)" -ForegroundColor Green
+} elseif ($allSys) {
+    # No x64 variant found — warn and fall back to the largest file
+    $fallback = $allSys | Sort-Object Length -Descending | Select-Object -First 1
+    $foundSys = $fallback.FullName
+    Write-Warning ("No x64 (0x8664) PawnIO.sys found in extracted contents.`n" +
+                   "  Falling back to: $($fallback.Name) ($($fallback.Length) bytes).`n" +
+                   "  This may fail on x64 Windows if the wrong architecture is selected.")
+} else {
+    Write-Host "  Extracted contents:" -ForegroundColor Yellow
+    Get-ChildItem -Path $step2Dir | ForEach-Object {
+        Write-Host "    $($_.Name) ($($_.Length) bytes)" -ForegroundColor DarkGray
     }
+    Remove-Item -Recurse -Force $tempExtract -ErrorAction SilentlyContinue
+    Write-Error ("PawnIO.sys not found in extracted contents.`n" +
+                 "  The installer format may have changed -- manual extraction required.")
 }
 
 # Copy to build pipeline target
