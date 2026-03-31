@@ -26,10 +26,10 @@ dist/
 
 /tools/PawnIO/cmake-build-*/
 /tools/PawnIO/dist/
-/tools/PawnIO_Latest_Check/archive/
+/tools/PawnIO_Latest_Check/resources/archive/
 /tools/PawnIO_Latest_Check/version.json
 /tools/PawnIO_Latest_Check/_extract_temp/
-/resources/PawnIO_setup.exe
+/tools/PawnIO_Latest_Check/resources/PawnIO_setup.exe
 
 /docs/LibreHardwareMonitor/
 /docs/completed/

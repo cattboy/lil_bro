@@ -22,8 +22,8 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir   = $PSScriptRoot
 $RepoRoot    = Resolve-Path (Join-Path $ScriptDir "..\..")
-$ResourceDir = Join-Path $RepoRoot "resources"
-$ArchiveDir  = Join-Path $ScriptDir "archive"
+$ResourceDir = Join-Path $ScriptDir "resources"
+$ArchiveDir  = Join-Path $ResourceDir "archive"
 $VersionFile = Join-Path $ScriptDir "version.json"
 $SetupExe    = Join-Path $ResourceDir "PawnIO_setup.exe"
 $PawnIODist  = Join-Path (Join-Path (Join-Path $RepoRoot "tools") "PawnIO") "dist"
