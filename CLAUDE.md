@@ -42,7 +42,7 @@
 
 ```
 src/
-  main.py                — Thin entry point (integrity, admin, banner, menu)
+  main.py                — Thin entry point (integrity, admin, banner, menu; --debug flag via argparse)
   bootstrapper.py        — UAC escalation + Restore Point creation
   _version.py            — Single source of truth for version string
   pipeline/
@@ -54,6 +54,7 @@ src/
     fix_dispatch.py      — Check->fix dispatch registry
     thermal_gate.py      — Pre-benchmark thermal safety check
     phases.py            — 5-phase pipeline orchestrator
+    post_run_cleanup.py  — Deletes ./lil_bro/ on exit; preserves CWD-root persistent logs
   collectors/
     spec_dumper.py       — Aggregates all system data into unified JSON
     sub/                 — Individual collectors (WMI, dxdiag, nvidia-smi, EDID, monitor)
@@ -75,12 +76,13 @@ src/
     cinebench.py         — BenchmarkRunner: Cinebench auto-detect (12 paths) + CPU stress fallback
     thermal_monitor.py   — Background LHM temperature polling during benchmarks
   utils/
-    action_logger.py     — Singleton logger → %APPDATA%\lil_bro\logs\lil_bro_actions.log (echoes to terminal)
+    action_logger.py     — Singleton logger → ./lil_bro_actions.log (CWD root, survives cleanup; echoes to terminal)
+    debug_logger.py      — Persistent stdlib debug logger → ./lil_bro_debug.log; disabled by default, enabled via --debug flag
     dump_parser.py       — Extracts slim hardware summary from full_specs.json for LLM
     errors.py            — LilBroError, AdminRequiredError, ScannerError, RestorePointError
     formatting.py        — Colorama terminal UI helpers (print_step, print_success, etc.)
     integrity.py         — SHA-256 exe hash verification (frozen builds only)
-    paths.py             — Centralized %APPDATA%\lil_bro\ path helper
+    paths.py             — Centralized CWD-relative path helper (lil_bro/ runtime dir, persistent log paths)
     progress_bar.py      — AnimatedProgressBar: plasma-sweep terminal animation during fix execution
 build.py               — Automated build pipeline (5 steps: PawnIO update → lhm-server → PyInstaller → integrity manifest)
 lil_bro.spec           — PyInstaller onefile build specification
@@ -130,7 +132,7 @@ memory-bank/           — Project design docs (brief, progress, patterns, activ
 - **Week 6** ✅ — Terminal UI redesign: DESIGN.md color system compliance, Unicode/ASCII fallback system, centralized formatting helpers (print_key_value, print_section_divider, print_prompt), dynamic progress bar width, inline colorama removal, 27 new tests (215 total)
 - **Week 7** ✅ — main.py module split: extracted `src/pipeline/` package (banner, menu, approval, fix_dispatch, thermal_gate, phases, _state), dispatch dict pattern, deduped thermal gate, 27 new tests (242 total)
 - **Week 8** ✅ — Bundle thermal sensor server: custom C# lhm-server.exe (LibreHardwareMonitorLib, PawnIO-era v0.9.*), HTTP /data.json sidecar; lhm_sidecar.py tuple return + custom vs full-LHM launch logic; fix CPU sensor derivation (_derive_cpu_temp priority: CPU Package → Tctl/Tdie → safe CPU; AMD Ryzen support; excludes hotspot/VRM/Core Max); 22 new tests (264 total)
-- **Sprint: pawnio-cleanup** ✅ — Build pipeline hardened: `update_pawnio.ps1` integrated as build step [2/5]; fetches latest signed PawnIO.sys from namazso/PawnIO.Setup GitHub releases before lhm-server build; WDK source compilation retained as automatic fallback when offline/rate-limited/7-Zip absent
+- **Sprint: pawnio-cleanup** ✅ — Build pipeline hardened: `update_pawnio.ps1` integrated as build step [2/5]; fetches latest signed PawnIO.sys from namazso/PawnIO.Setup GitHub releases; WDK source compilation retained as fallback. Debug logging: `debug_logger.py` singleton + `--debug` CLI flag (disabled by default, no overhead); `get_specs_path()` fixed to `./lil_bro/full_specs.json`; `post_run_cleanup.py` cleans `./lil_bro/` on exit while preserving CWD-root logs; 312 tests passing
 
 ---
 

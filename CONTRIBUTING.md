@@ -70,6 +70,14 @@ Or use the entry point registered by pyproject.toml:
 lil_bro
 ```
 
+To enable debug logging (writes `./lil_bro_debug.log` at CWD root):
+
+```bash
+python -m src.main --debug
+# or, for the built exe:
+lil_bro.exe --debug
+```
+
 ---
 
 ## Running tests
@@ -87,7 +95,7 @@ python -m pytest tests/test_game_mode.py -v
 python -m pytest tests/ --cov=src --cov-report=term-missing
 ```
 
-Current suite: **295 tests**, all passing.
+Current suite: **312 tests**, all passing.
 
 ---
 
@@ -104,10 +112,11 @@ python build.py --clean
 ```
 
 `build.py` does the following automatically:
-1. Builds `lhm-server.exe` via `tools/lhm-server/build.ps1` (auto-builds PawnIO.sys if missing)
-2. Runs `PyInstaller lil_bro.spec --noconfirm`
-3. Generates `dist/integrity.json` with the SHA-256 hash of the exe
-4. Prints the output size and path
+1. *(Optional)* Cleans previous `dist/` and `build/` artifacts when `--clean` is passed
+2. Fetches the latest signed `PawnIO.sys` from namazso/PawnIO.Setup GitHub releases (falls back to WDK source build if offline or 7-Zip is absent)
+3. Builds `lhm-server.exe` via `tools/lhm-server/build.ps1` (embeds PawnIO.sys)
+4. Runs `PyInstaller lil_bro.spec --noconfirm`
+5. Generates `dist/integrity.json` with the SHA-256 hash of the exe
 
 The `.spec` file (`lil_bro.spec`) is the PyInstaller build configuration — edit it if you need to add data files or hidden imports.
 

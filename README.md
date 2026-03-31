@@ -23,7 +23,7 @@ All processing happens locally. The only external calls are optional driver vers
 
 ## Status
 
-🟢 **v0.8.0 — Week 8 Complete** — 295 tests passing. Bundled thermal sensor server: custom C# lhm-server.exe (LibreHardwareMonitorLib + PawnIO kernel driver) with HTTP /data.json sidecar. PawnIO.sys auto-built from source or fetched from GitHub releases via `update_pawnio.ps1`. New `install_deps.ps1` for one-command dev setup. CPU sensor derivation rewritten (CPU Package → Tctl/Tdie → safe CPU; AMD Ryzen support).
+🟢 **v0.9.0 — Sprint: pawnio-cleanup** — 312 tests passing. Debug logging: pass `--debug` to write a persistent `lil_bro_debug.log` (disabled by default — zero overhead in normal runs). Post-run cleanup deletes `./lil_bro/` on exit while preserving CWD-root logs. `full_specs.json` moved to correct location (`./lil_bro/`, not the logs subdir). PawnIO.sys now fetched from signed GitHub releases as build step [2/5].
 
 Previous: `main.py` split into `src/pipeline/` package (8 modules). Dispatch dict pattern. Terminal UI redesigned to DESIGN.md. Unicode/ASCII fallback. Centralized formatting helpers. Progress bar auto-width.
 
