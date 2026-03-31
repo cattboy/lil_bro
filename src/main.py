@@ -40,8 +40,9 @@ def main():
     args = _parse_args()
 
     if args.debug:
-        from src.utils.debug_logger import enable_debug_logging
+        from src.utils.debug_logger import enable_debug_logging, get_debug_logger
         enable_debug_logging()
+        get_debug_logger()  # Eagerly initialize: creates file + SESSION START header now
 
     resize_console_window()
     startup_lhm = None

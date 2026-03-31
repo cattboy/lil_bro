@@ -76,7 +76,7 @@ def run_startup_thermal_scan() -> tuple[LHMSidecar, bool]:
         if not is_pawnio_installed():
             print_dim(
                 "  Hint: run lil_bro as administrator once to auto-install"
-                " the PawnIO thermal driver."
+                " the PawnIO thermal driver. pawnio.sys is required visit https://github.com/namazso/PawnIO.Setup/releases for more info."
             )
         print()
         return lhm, True
