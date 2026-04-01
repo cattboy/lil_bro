@@ -2,6 +2,7 @@ import ctypes
 import os
 import sys
 import subprocess
+from datetime import datetime
 from .utils.errors import AdminRequiredError, RestorePointError
 from .utils.formatting import prompt_approval, print_step, print_step_done, print_error, print_success
 from .utils.action_logger import action_logger
@@ -48,11 +49,14 @@ def enable_system_restore() -> bool:
     except Exception:
         return False
 
-def create_restore_point(description: str = "LIL' BROS Pre-Tuning Backup"):
+def create_restore_point(description: str | None = None):
     """
     Creates a Windows System Restore point via PowerShell.
     Require human-in-the-loop approval before executing.
     """
+    if description is None:
+        description = f"lil_bro Pre-Tuning {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
     if not is_system_restore_enabled():
         print_error("System Restore is currently disabled.")
         print_step("To manually enable: Click Start Button -> Type 'Create a restore point' -> Click Configure -> Turn on system protection. -> Click OK & OK -> Rerun script and try again")
