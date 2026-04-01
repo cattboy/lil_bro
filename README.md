@@ -23,7 +23,7 @@ All processing happens locally. The only external calls are optional driver vers
 
 ## Status
 
-🟢 **v0.9.0 — Sprint: pawnio-cleanup** — 312 tests passing. Debug logging: pass `--debug` to write a persistent `lil_bro_debug.log` (disabled by default — zero overhead in normal runs). Post-run cleanup deletes `./lil_bro/` on exit while preserving CWD-root logs. `full_specs.json` moved to correct location (`./lil_bro/`, not the logs subdir). PawnIO.sys now fetched from signed GitHub releases as build step [2/5].
+🟢 **v0.9.0 — Sprint: action-logger-tuning** — 325 tests passing. Action log now captures user approval decisions and per-fix outcomes (`[PASS]`/`[FAIL]`/`[APPROVED]`/`[SKIPPED]`) — session start anchors the full app lifecycle including startup thermal scan. Debug logging: pass `--debug` to write a persistent `lil_bro_debug.log` (disabled by default — zero overhead in normal runs). Post-run cleanup deletes `./lil_bro/` on exit while preserving CWD-root logs.
 
 Previous: `main.py` split into `src/pipeline/` package (8 modules). Dispatch dict pattern. Terminal UI redesigned to DESIGN.md. Unicode/ASCII fallback. Centralized formatting helpers. Progress bar auto-width.
 
