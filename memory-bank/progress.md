@@ -70,3 +70,4 @@
 | 2026-03-24 | requirements.txt removed | pyproject.toml is now single source of truth; llama-cpp-python moved to optional [llm] extra |
 | 2026-03-24 | CONTRIBUTING.md added | Standard practice: README stays user-facing, CONTRIBUTING has dev setup + build commands |
 | 2026-03-30 | GitHub-first PawnIO.sys acquisition | update_pawnio.ps1 integrated into build.py step [2/5]; downloads official signed binary from namazso/PawnIO.Setup; WDK source build demoted to fallback |
+| 2026-04-01 | Multi-arch PawnIO extraction deferred | All 4 variants (2× x64, 2× ARM64) exist in the CAB; currently only x64 is kept. Backlog item in docs/todos.md covers preserving all arch variants + build.py --arch flag for future ARM64 builds |
