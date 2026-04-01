@@ -136,7 +136,7 @@ def clean_temp_folders(details: dict) -> tuple[int, int]:
     bytes_freed = 0
     files_deleted = 0
     
-    for name, data in details.items():
+    for data in details.values():
         if data['size_bytes'] == 0:
             continue
             
