@@ -1,6 +1,7 @@
 import winreg
 from ..utils.errors import ScannerError
 from ..utils.formatting import print_step, print_step_done, print_warning, print_success, print_error
+from ..utils.action_logger import action_logger
 
 def analyze_game_mode(specs: dict) -> dict:
     """
@@ -49,6 +50,11 @@ def set_game_mode(enabled: bool) -> bool:
             winreg.KEY_SET_VALUE,
         ) as key:
             winreg.SetValueEx(key, "AutoGameModeEnabled", 0, winreg.REG_DWORD, 1 if enabled else 0)
+        action_logger.log_action(
+            "Game Mode",
+            f"Set AutoGameModeEnabled = {1 if enabled else 0}",
+            r"HKCU\SOFTWARE\Microsoft\GameBar",
+        )
         return True
     except Exception as e:
         raise ScannerError(f"Failed to set Game Mode: {e}")

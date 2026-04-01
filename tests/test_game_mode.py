@@ -47,8 +47,9 @@ def test_check_game_mode_error(mock_get_status):
     assert result["status"] == "ERROR"
 
 
+@patch('src.agent_tools.game_mode.action_logger')
 @patch('src.agent_tools.game_mode.winreg')
-def test_set_game_mode_enable(mock_winreg):
+def test_set_game_mode_enable(mock_winreg, mock_logger):
     mock_key = MagicMock()
     mock_winreg.CreateKeyEx.return_value.__enter__.return_value = mock_key
     mock_winreg.REG_DWORD = 4
@@ -57,10 +58,14 @@ def test_set_game_mode_enable(mock_winreg):
 
     assert result is True
     mock_winreg.SetValueEx.assert_called_once_with(mock_key, "AutoGameModeEnabled", 0, 4, 1)
+    mock_logger.log_action.assert_called_once_with(
+        "Game Mode", "Set AutoGameModeEnabled = 1", r"HKCU\SOFTWARE\Microsoft\GameBar"
+    )
 
 
+@patch('src.agent_tools.game_mode.action_logger')
 @patch('src.agent_tools.game_mode.winreg')
-def test_set_game_mode_disable(mock_winreg):
+def test_set_game_mode_disable(mock_winreg, mock_logger):
     mock_key = MagicMock()
     mock_winreg.CreateKeyEx.return_value.__enter__.return_value = mock_key
     mock_winreg.REG_DWORD = 4
@@ -69,6 +74,9 @@ def test_set_game_mode_disable(mock_winreg):
 
     assert result is True
     mock_winreg.SetValueEx.assert_called_once_with(mock_key, "AutoGameModeEnabled", 0, 4, 0)
+    mock_logger.log_action.assert_called_once_with(
+        "Game Mode", "Set AutoGameModeEnabled = 0", r"HKCU\SOFTWARE\Microsoft\GameBar"
+    )
 
 
 @patch('src.agent_tools.game_mode.winreg')

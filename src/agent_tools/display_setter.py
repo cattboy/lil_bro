@@ -1,6 +1,7 @@
 import ctypes
 from ctypes import wintypes
 from ..utils.formatting import prompt_approval
+from ..utils.action_logger import action_logger
 
 ### exact match (find a mode that exactly matches target Hz) and best available (find the highest Hz the monitor supports):
 ### Key design decisions to call out
@@ -232,6 +233,12 @@ def set_max_refresh_rate(
         return {"success": False, "cancelled": True, "message": "User declined refresh rate change."}
 
     ok, msg = apply_display_mode(device_name, best_mode, persist=persist, dry_run=False)
+    if ok:
+        action_logger.log_action(
+            "Display",
+            f"Refresh rate changed {current_hz}Hz \u2192 {best_mode.dmDisplayFrequency}Hz on {device_name}",
+            f"persisted={persist}",
+        )
     return {
         "success": ok,
         "changed_from_hz": current_hz,
@@ -270,6 +277,12 @@ def set_refresh_rate(
         return {"success": False, "cancelled": True, "message": "User declined refresh rate change."}
 
     ok, msg = apply_display_mode(device_name, mode, persist=persist, dry_run=False)
+    if ok:
+        action_logger.log_action(
+            "Display",
+            f"Refresh rate set to {target_hz}Hz on {device_name}",
+            f"persisted={persist}",
+        )
     return {"success": ok, "applied_hz": target_hz if ok else None, "message": msg}
 
 

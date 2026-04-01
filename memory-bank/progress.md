@@ -46,7 +46,7 @@
 - [ ] Friendly LLM-generated explanations
 
 ## Current Status
-🟢 **Week 7 complete** — `main.py` split into `src/pipeline/` package (8 modules: banner, menu, approval, fix_dispatch, thermal_gate, phases, _state). Dispatch dict pattern replaces if-elif chain. Thermal safety gate deduplicated. 246 tests passing (31 new, QA health 98/100). Also complete: Week 6 terminal UI redesign (DESIGN.md color system, Unicode/ASCII fallback, centralized formatting helpers, dynamic progress bar); Week 5 Game Mode auto-fix, animated progress bar, NVIDIA driver display, thermal brand voice, collector resilience.
+🟢 **Week 8 + pawnio-cleanup complete** — lhm-server.exe bundled with PawnIO.sys (custom C# thermal server). Build pipeline now has 5 steps: [1] clean, [2] fetch signed PawnIO.sys from GitHub (update_pawnio.ps1), [3] build lhm-server, [4] PyInstaller, [5] manifest. WDK source build is the automatic fallback when offline/unavailable. 264 tests passing.
 
 ## Known Issues
 - llama-cpp-python not yet tested with PyInstaller bundling (hard gate deferred to RTX 3080 dev machine)
@@ -69,3 +69,5 @@
 | 2026-03-24 | _safe_collect in spec_dumper | Wrap each collector independently so one failure (e.g. nvidia-smi missing) doesn't abort the full dump |
 | 2026-03-24 | requirements.txt removed | pyproject.toml is now single source of truth; llama-cpp-python moved to optional [llm] extra |
 | 2026-03-24 | CONTRIBUTING.md added | Standard practice: README stays user-facing, CONTRIBUTING has dev setup + build commands |
+| 2026-03-30 | GitHub-first PawnIO.sys acquisition | update_pawnio.ps1 integrated into build.py step [2/5]; downloads official signed binary from namazso/PawnIO.Setup; WDK source build demoted to fallback |
+| 2026-04-01 | Multi-arch PawnIO extraction deferred | All 4 variants (2× x64, 2× ARM64) exist in the CAB; currently only x64 is kept. Backlog item in docs/todos.md covers preserving all arch variants + build.py --arch flag for future ARM64 builds |

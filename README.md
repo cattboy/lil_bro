@@ -18,14 +18,14 @@ All processing happens locally. The only external calls are optional driver vers
 
 - **Brain:** `llama-cpp-python` running `Qwen2.5-Coder-7B-Instruct.Q4_K_M.gguf` (~4.5 GB, optional — downloaded on first run)
 - **Orchestrator:** Python 3.11+
-- **Sidecar Tools:** LibreHardwareMonitor (thermal monitoring)
-- **Packaging:** PyInstaller portable .exe (Week 4)
+- **Sidecar Tools:** Custom lhm-server.exe (LibreHardwareMonitor + PawnIO kernel driver for ring-0 thermal access)
+- **Packaging:** PyInstaller portable .exe
 
 ## Status
 
-🟢 **v0.7.0 — Week 7 Complete** — 246 tests passing. `main.py` split into a clean `src/pipeline/` package (8 modules: banner, menu, approval, fix_dispatch, thermal_gate, phases, _state). Dispatch dict pattern replaces if-elif chain. Thermal safety gate deduplicated. 31 new tests. QA: 246/246 passing, health 98/100.
+🟢 **v0.9.0 — Sprint: pawnio-cleanup** — 312 tests passing. Debug logging: pass `--debug` to write a persistent `lil_bro_debug.log` (disabled by default — zero overhead in normal runs). Post-run cleanup deletes `./lil_bro/` on exit while preserving CWD-root logs. `full_specs.json` moved to correct location (`./lil_bro/`, not the logs subdir). PawnIO.sys now fetched from signed GitHub releases as build step [2/5].
 
-Previous: Terminal UI redesigned to match DESIGN.md color system. Unicode/ASCII fallback system for non-UTF-8 terminals. Centralized formatting helpers (`print_key_value`, `print_section_divider`, `print_prompt`). Progress bar dynamically sizes to terminal width. All inline colorama removed from main.py and model_loader.py.
+Previous: `main.py` split into `src/pipeline/` package (8 modules). Dispatch dict pattern. Terminal UI redesigned to DESIGN.md. Unicode/ASCII fallback. Centralized formatting helpers. Progress bar auto-width.
 
 Previous: Game Mode auto-fix, animated progress bar, NVIDIA driver display, thermal brand voice, collector resilience, portable .exe packaging, 8 esports checks, Cinebench + thermal benchmarking, LLM-powered recommendations with batch approval UX. LLM is optional — static fallback templates always work offline.
 

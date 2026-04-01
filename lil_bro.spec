@@ -17,12 +17,17 @@ ROOT = os.path.abspath('.')
 # Build step: python build.py  (calls tools/lhm-server/build.ps1 first).
 _lhm_server_exe = os.path.join(ROOT, 'tools', 'lhm-server', 'dist', 'lhm-server.exe')
 _lhm_license    = os.path.join(ROOT, 'tools', 'lhm-server', 'LICENSE-LHM.txt')
+_pawnio_sys     = os.path.join(ROOT, 'tools', 'PawnIO', 'dist', 'PawnIO.sys')
 
 _extra_datas = []
 if os.path.isfile(_lhm_server_exe):
     _extra_datas.append((_lhm_server_exe, 'tools'))
 if os.path.isfile(_lhm_license):
     _extra_datas.append((_lhm_license, 'tools'))
+# Bundle PawnIO.sys alongside lhm-server.exe as a disk fallback — the .NET
+# EmbeddedResource can silently miss it on incremental builds.
+if os.path.isfile(_pawnio_sys):
+    _extra_datas.append((_pawnio_sys, 'tools'))
 
 a = Analysis(
     [os.path.join(ROOT, 'src', 'main.py')],
