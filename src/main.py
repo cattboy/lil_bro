@@ -12,6 +12,7 @@ import argparse
 import multiprocessing
 import sys
 
+from src.utils.action_logger import action_logger
 from src.utils.formatting import print_info, print_warning, print_error, print_accent, resize_console_window
 from src.utils.errors import AdminRequiredError
 from src.bootstrapper import check_admin
@@ -60,6 +61,7 @@ def main():
             print_warning("Some features (like Restore Point Creation) will fail without Admin rights.")
             print()
 
+        action_logger.log_session_start()
         startup_lhm, _ = run_startup_thermal_scan()
         menu_loop()
 
@@ -70,6 +72,7 @@ def main():
         sys.exit(1)
     finally:
         post_run_cleanup(startup_lhm)
+        action_logger.log_session_end()
 
 
 if __name__ == "__main__":

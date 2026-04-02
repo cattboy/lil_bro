@@ -45,16 +45,24 @@ class ActionLogger:
         from src.utils.formatting import print_dim
         print_dim(f"  {line}")
 
-    def log_action(self, component: str, action: str, details: str = ""):
+    def log_action(self, component: str, action: str, details: str = "", outcome: str = ""):
         """
         Logs a system modification action.
+
+        When outcome is provided the format is:
+            [timestamp] [OUTCOME] [component] action | details
+        When omitted (backward-compat):
+            [timestamp] [component] action | details
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        log_entry = f"[{timestamp}] [{component}] {action}"
+
+        if outcome:
+            log_entry = f"[{timestamp}] [{outcome}] [{component}] {action}"
+        else:
+            log_entry = f"[{timestamp}] [{component}] {action}"
         if details:
             log_entry += f" | {details}"
-            
+
         try:
             with open(self.log_path, "a", encoding="utf-8") as f:
                 f.write(log_entry + "\n")
@@ -65,6 +73,25 @@ class ActionLogger:
         # Echo to terminal (dim, non-intrusive)
         from src.utils.formatting import print_dim
         print_dim(f"  {log_entry}")
-            
+
+    def log_fix_dispatch(self, check: str) -> None:
+        """Log that a fix handler is being dispatched."""
+        self.log_action("FixDispatch", f"Dispatching fix: {check}")
+
+    def log_fix_result(self, check: str, success: bool, details: str = "") -> None:
+        """Log the outcome of a dispatched fix."""
+        outcome = "PASS" if success else "FAIL"
+        self.log_action("FixDispatch", f"Fix complete: {check}", details=details, outcome=outcome)
+
+    def log_approval_decision(self, approved: list, skipped: list) -> None:
+        """Log user approval/skip decisions from the proposal flow."""
+        if approved:
+            self.log_action("Approval", f"User approved: {', '.join(approved)}", outcome="APPROVED")
+        if skipped:
+            self.log_action("Approval", f"User skipped: {', '.join(skipped)}", outcome="SKIPPED")
+        if not approved and not skipped:
+            self.log_action("Approval", "User skipped all fixes", outcome="SKIPPED")
+
+
 # Global singleton instance
 action_logger = ActionLogger()

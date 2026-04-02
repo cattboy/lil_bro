@@ -1,7 +1,11 @@
 import pytest
 from unittest.mock import patch, MagicMock
+from datetime import datetime
 from src.bootstrapper import is_admin, check_admin, create_restore_point
 from src.utils.errors import AdminRequiredError, RestorePointError
+
+FIXED_DT = datetime(2026, 4, 1, 14, 32, 7)
+FIXED_DESC = "lil_bro Pre-Tuning 2026-04-01 14:32:07"
 
 @patch('src.bootstrapper.ctypes.windll.shell32.IsUserAnAdmin')
 def test_is_admin_true(mock_is_admin):
@@ -19,24 +23,30 @@ def test_check_admin_raises(mock_is_admin):
     with pytest.raises(AdminRequiredError):
         check_admin()
 
+@patch('src.bootstrapper.datetime')
 @patch('src.bootstrapper.is_system_restore_enabled')
 @patch('src.bootstrapper.prompt_approval')
 @patch('src.bootstrapper.subprocess.run')
-def test_create_restore_point_success(mock_run, mock_prompt, mock_is_enabled):
+def test_create_restore_point_success(mock_run, mock_prompt, mock_is_enabled, mock_dt):
+    mock_dt.now.return_value = FIXED_DT
     mock_is_enabled.return_value = True
     mock_prompt.return_value = True
-    
+
     mock_result = MagicMock()
     mock_result.returncode = 0
     mock_run.return_value = mock_result
-    
+
     result = create_restore_point()
     assert result is True
     mock_run.assert_called_once()
+    call_args = mock_run.call_args[0][0]
+    assert FIXED_DESC in " ".join(call_args)
 
+@patch('src.bootstrapper.datetime')
 @patch('src.bootstrapper.is_system_restore_enabled')
 @patch('src.bootstrapper.prompt_approval')
-def test_create_restore_point_rejected(mock_prompt, mock_is_enabled):
+def test_create_restore_point_rejected(mock_prompt, mock_is_enabled, mock_dt):
+    mock_dt.now.return_value = FIXED_DT
     mock_is_enabled.return_value = True
     mock_prompt.return_value = False
     result = create_restore_point()

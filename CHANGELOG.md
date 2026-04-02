@@ -11,9 +11,14 @@ All notable changes to lil_bro are documented here.
 ### Fixed
 - `full_specs.json` now saves to `./lil_bro/full_specs.json` — it was incorrectly placed inside `./lil_bro/logs/` (a subdirectory reserved for logs, not data snapshots).
 
+### Changed
+- Action log (`lil_bro_actions.log`) now captures the full app session — the session start banner writes before the startup thermal scan, so every sidecar activity falls inside the log boundary.
+- Fix dispatch and user approval decisions are now recorded with outcome tags: `[PASS]`/`[FAIL]` per fix, `[APPROVED]`/`[SKIPPED]` per proposal group. The log is now a complete audit trail for every system change lil_bro makes.
+- `action_logger.log_action()` gains an optional `outcome` keyword — existing callers are unchanged, new callers can tag entries for programmatic parsing.
+
 ### For contributors
 - 17 new tests: `test_debug_logger.py` (8 tests — singleton, no duplicate handlers, disabled/enabled path, file write, warning/debug level), `test_action_logger.py` (9 tests)
-- 312 tests total, all passing.
+- 13 additional tests for action logger v2 (outcome param, dispatch/result logging, approval decisions). 325 tests total, all passing.
 
 ---
 

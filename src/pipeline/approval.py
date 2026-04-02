@@ -1,5 +1,6 @@
 """Phase 4 approval flow -- proposal display, selection parsing, and fix execution."""
 
+from src.utils.action_logger import action_logger
 from src.utils.formatting import (
     print_info, print_error, print_success, print_prompt, print_proposal,
 )
@@ -86,8 +87,22 @@ def run_approval_flow(proposals: list[dict], specs: dict) -> None:
         print_prompt(f"Enter numbers 1\u2013{total}, \"all\", or \"skip\": ")
 
     if not selection:
+        action_logger.log_approval_decision(
+            [], [p.get("finding", "") for _, p in auto_fixable]
+        )
         print_info("No changes applied.")
         return
+
+    # Determine which auto-fixable checks were approved vs skipped
+    approved_checks = [
+        proposals[n - 1].get("finding", "") for n in selection
+        if proposals[n - 1].get("can_auto_fix")
+    ]
+    skipped_checks = [
+        p.get("finding", "") for _, p in auto_fixable
+        if p.get("finding") not in approved_checks
+    ]
+    action_logger.log_approval_decision(approved_checks, skipped_checks)
 
     # Map selected numbers to proposals
     selected_proposals = {n: p for n, p in auto_fixable if n in selection}

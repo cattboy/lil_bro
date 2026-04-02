@@ -95,7 +95,7 @@ python -m pytest tests/test_game_mode.py -v
 python -m pytest tests/ --cov=src --cov-report=term-missing
 ```
 
-Current suite: **312 tests**, all passing.
+Current suite: **325 tests**, all passing.
 
 ---
 

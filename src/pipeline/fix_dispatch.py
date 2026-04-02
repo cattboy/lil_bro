@@ -7,6 +7,7 @@ To add a new auto-fixable check, add one handler function and one dict entry.
 
 from collections.abc import Callable
 
+from src.utils.action_logger import action_logger
 from src.utils.formatting import print_success, print_error
 
 
@@ -112,5 +113,9 @@ def execute_fix(check: str, specs: dict) -> bool:
     """
     handler = FIX_REGISTRY.get(check)
     if handler is None:
+        action_logger.log_action("FixDispatch", f"No handler for check: {check}", outcome="FAIL")
         return False
-    return handler(specs)
+    action_logger.log_fix_dispatch(check)
+    result = handler(specs)
+    action_logger.log_fix_result(check, result)
+    return result

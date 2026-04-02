@@ -24,7 +24,6 @@ from src.utils.formatting import (
     prompt_approval,
 )
 from src.utils.errors import LilBroError
-from src.utils.action_logger import action_logger
 from src.utils.debug_logger import get_debug_logger
 from src.pipeline._state import get_llm
 from src.pipeline.thermal_gate import thermal_safety_gate
@@ -33,7 +32,6 @@ from src.pipeline.approval import run_approval_flow
 
 def run_optimization_pipeline():
     """Top-level pipeline entry. Manages LHM sidecar lifecycle."""
-    action_logger.log_session_start()
     lhm = LHMSidecar()
     thermal = ThermalMonitor()
 
@@ -41,7 +39,6 @@ def run_optimization_pipeline():
         _run_pipeline(lhm, thermal)
     finally:
         lhm.stop()
-        action_logger.log_session_end()
 
 
 def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):

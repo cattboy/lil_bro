@@ -143,6 +143,7 @@ def _cleanup_cwd_tempdir() -> None:
         return
     try:
         shutil.rmtree(lil_bro_dir)
+        action_logger.log_action("Cleanup", "Removed runtime temp dir", str(lil_bro_dir))
     except OSError:
         pass
 

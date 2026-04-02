@@ -76,7 +76,7 @@ src/
     cinebench.py         — BenchmarkRunner: Cinebench auto-detect (12 paths) + CPU stress fallback
     thermal_monitor.py   — Background LHM temperature polling during benchmarks
   utils/
-    action_logger.py     — Singleton logger → ./lil_bro_actions.log (CWD root, survives cleanup; echoes to terminal)
+    action_logger.py     — Singleton logger → ./lil_bro_actions.log (CWD root, survives cleanup; echoes to terminal). v2: outcome-tagged entries ([PASS]/[FAIL]/[APPROVED]/[SKIPPED]); log_fix_dispatch/log_fix_result/log_approval_decision helpers; session start/end anchored at app launch in main.py
     debug_logger.py      — Persistent stdlib debug logger → ./lil_bro_debug.log; disabled by default, enabled via --debug flag
     dump_parser.py       — Extracts slim hardware summary from full_specs.json for LLM
     errors.py            — LilBroError, AdminRequiredError, ScannerError, RestorePointError
@@ -133,6 +133,7 @@ memory-bank/           — Project design docs (brief, progress, patterns, activ
 - **Week 7** ✅ — main.py module split: extracted `src/pipeline/` package (banner, menu, approval, fix_dispatch, thermal_gate, phases, _state), dispatch dict pattern, deduped thermal gate, 27 new tests (242 total)
 - **Week 8** ✅ — Bundle thermal sensor server: custom C# lhm-server.exe (LibreHardwareMonitorLib, PawnIO-era v0.9.*), HTTP /data.json sidecar; lhm_sidecar.py tuple return + custom vs full-LHM launch logic; fix CPU sensor derivation (_derive_cpu_temp priority: CPU Package → Tctl/Tdie → safe CPU; AMD Ryzen support; excludes hotspot/VRM/Core Max); 22 new tests (264 total)
 - **Sprint: pawnio-cleanup** ✅ — Build pipeline hardened: `update_pawnio.ps1` integrated as build step [2/5]; fetches latest signed PawnIO.sys from namazso/PawnIO.Setup GitHub releases; WDK source compilation retained as fallback. Debug logging: `debug_logger.py` singleton + `--debug` CLI flag (disabled by default, no overhead); `get_specs_path()` fixed to `./lil_bro/full_specs.json`; `post_run_cleanup.py` cleans `./lil_bro/` on exit while preserving CWD-root logs; 312 tests passing
+- **Sprint: action-logger-tuning** ✅ — Action logger v2: `outcome` param on `log_action()` for programmatic parsing; `log_fix_dispatch/log_fix_result/log_approval_decision` helpers; fix dispatch and approval flow fully instrumented; session start/end moved to `main.py` to capture full app lifecycle (including startup LHM sidecar); 325 tests passing
 
 ---
 
