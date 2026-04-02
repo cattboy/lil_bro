@@ -33,7 +33,7 @@ def get_dxdiag() -> dict[str, Any]:
                     return {
                         "DirectXVersion": root.findtext(".//DirectXVersion"),
                         "DisplayDevices":[{c.tag: c.text for c in d if c.text} for d in root.findall(".//DisplayDevice")],
-                        ##"SoundDevices":[{c.tag: c.text for c in d if c.text} for d in root.findall(".//SoundDevice")],
+                        ## TODO add sound extraction later to improve windows volume mixer settings "SoundDevices":[{c.tag: c.text for c in d if c.text} for d in root.findall(".//SoundDevice")],
                         "LogicalDisks":[{c.tag: c.text for c in d if c.text} for d in root.findall(".//LogicalDisk")]
                     }
                 except ET.ParseError:

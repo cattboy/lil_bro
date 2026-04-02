@@ -2,6 +2,37 @@
 
 All notable changes to lil_bro are documented here.
 
+## [0.9.0] - 2026-03-31
+
+### Added
+- `--debug` flag: run `lil_bro.exe --debug` to capture internal phase events, collector errors, and warnings to `./lil_bro_debug.log` at CWD root. Completely silent by default — no file created, no overhead.
+- Post-run cleanup (`post_run_cleanup.py`): the `./lil_bro/` working directory is automatically removed on exit, keeping the portable .exe folder clean between runs. Persistent logs (`lil_bro_actions.log`, `lil_bro_debug.log`) live at CWD root and survive cleanup.
+
+### Fixed
+- `full_specs.json` now saves to `./lil_bro/full_specs.json` — it was incorrectly placed inside `./lil_bro/logs/` (a subdirectory reserved for logs, not data snapshots).
+
+### Changed
+- Action log (`lil_bro_actions.log`) now captures the full app session — the session start banner writes before the startup thermal scan, so every sidecar activity falls inside the log boundary.
+- Fix dispatch and user approval decisions are now recorded with outcome tags: `[PASS]`/`[FAIL]` per fix, `[APPROVED]`/`[SKIPPED]` per proposal group. The log is now a complete audit trail for every system change lil_bro makes.
+- `action_logger.log_action()` gains an optional `outcome` keyword — existing callers are unchanged, new callers can tag entries for programmatic parsing.
+
+### For contributors
+- 17 new tests: `test_debug_logger.py` (8 tests — singleton, no duplicate handlers, disabled/enabled path, file write, warning/debug level), `test_action_logger.py` (9 tests)
+- 13 additional tests for action logger v2 (outcome param, dispatch/result logging, approval decisions). 325 tests total, all passing.
+
+---
+
+## [0.8.0] - 2026-03-28
+
+### Added
+- Custom `lhm-server.exe` is now bundled inside the portable .exe — no separate install needed. The sidecar runs LibreHardwareMonitorLib with the PawnIO kernel driver for ring-0 temperature access on modern Windows.
+- `update_pawnio.ps1`: automatically fetches the latest WHQL-signed `PawnIO.sys` from namazso/PawnIO.Setup GitHub releases before each build. Falls back to WDK source compilation if offline.
+- `install_deps.ps1`: one-command dev environment setup — installs Python, uv, .NET 8 SDK, WDK, and initializes submodules.
+- CPU sensor derivation rewritten: now correctly picks `CPU Package` → `Tctl/Tdie` → safe CPU fallback, with full AMD Ryzen support. Hotspot, VRM, and Core Max sensors are excluded to avoid false positives.
+
+### For contributors
+- Build pipeline expanded to 5 steps: Clean → PawnIO fetch → lhm-server build → PyInstaller → integrity manifest.
+
 ## [0.7.0] - 2026-03-25
 
 ### Changed

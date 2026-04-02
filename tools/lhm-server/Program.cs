@@ -77,27 +77,58 @@ static SensorNode HardwareToNode(IHardware hw)
 // PawnIO.sys is embedded in this exe at build time.  On first run (admin
 // required), it is extracted to System32\drivers\ and registered as an
 // auto-start kernel service.  Subsequent runs reuse the already-installed
-// service — no admin needed after the first launch.
+// service -- no admin needed after the first launch.
+//
+// SIGNING: PawnIO.sys must be code-signed to load on Windows with Secure Boot.
+// Source-built (unsigned) drivers fail with error 577 (ERROR_DRIVER_BLOCKED).
+// For development: bcdedit /set testsigning on  (then reboot)
+// For production:  use the officially signed PawnIO.sys from pawnio.eu
 
 static bool EnsurePawnIoInstalled()
 {
-    // Check if PawnIO service already exists (sc query returns 0 if present)
-    using var check = Process.Start(new ProcessStartInfo("sc", "query PawnIO")
-    {
-        RedirectStandardOutput = true,
-        RedirectStandardError  = true,
-        UseShellExecute        = false,
-        CreateNoWindow         = true,
-    });
-    check!.WaitForExit();
-    if (check.ExitCode == 0)
-        return true;  // already installed — nothing to do
+    // Check if PawnIO service already exists AND is running.
+    // sc query returns 0 when the service entry exists -- but the service may be
+    // STOPPED with error 577 (unsigned driver rejected by Secure Boot).  We must
+    // inspect the actual state, not just the exit code.
+    var (serviceExists, serviceRunning) = QueryPawnIoService();
 
-    // Locate embedded PawnIO.sys resource
-    var resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("PawnIO.sys");
+    if (serviceExists && serviceRunning)
+        return true;  // already installed and running -- nothing to do
+
+    if (serviceExists && !serviceRunning)
+    {
+        // Service entry exists but driver isn't running -- try to start it.
+        // This handles the reboot case (auto-start service not yet started).
+        if (RunSc("start PawnIO"))
+            return true;
+
+        // Start failed -- stale/broken service entry (e.g. unsigned driver,
+        // error 577).  Delete it so we can re-install cleanly below.
+        Console.Error.WriteLine("[lhm-server] PawnIO service exists but failed to start " +
+                                "-- removing stale entry to retry installation.");
+        RunSc("delete PawnIO");
+    }
+
+    // Locate PawnIO.sys — prefer embedded resource, fall back to file on disk
+    // (PyInstaller bundles PawnIO.sys next to lhm-server.exe in _MEIPASS/tools/).
+    Stream? resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("PawnIO.sys");
+
+    string? diskFallback = null;
     if (resource is null)
     {
-        Console.Error.WriteLine("[lhm-server] PawnIO.sys not embedded in this build — " +
+        // Look next to the running exe (covers PyInstaller extraction and dev tree)
+        var exeDir = Path.GetDirectoryName(Environment.ProcessPath);
+        if (exeDir is not null)
+        {
+            var candidate = Path.Combine(exeDir, "PawnIO.sys");
+            if (File.Exists(candidate))
+                diskFallback = candidate;
+        }
+    }
+
+    if (resource is null && diskFallback is null)
+    {
+        Console.Error.WriteLine("[lhm-server] PawnIO.sys not embedded and not found on disk -- " +
                                 "temperatures may be unavailable.");
         return false;
     }
@@ -108,7 +139,16 @@ static bool EnsurePawnIoInstalled()
     try
     {
         using var fs = File.Create(driverPath);
-        resource.CopyTo(fs);
+        if (resource is not null)
+        {
+            resource.CopyTo(fs);
+            resource.Dispose();
+        }
+        else
+        {
+            using var src = File.OpenRead(diskFallback!);
+            src.CopyTo(fs);
+        }
     }
     catch (Exception ex)
     {
@@ -121,10 +161,20 @@ static bool EnsurePawnIoInstalled()
     if (!RunSc($"create PawnIO binPath= \"{driverPath}\" type= kernel start= auto " +
                "error= normal DisplayName= PawnIO"))
         return false;
-    if (!RunSc("start PawnIO"))
-        return false;
 
-    // Write Uninstall registry key so PawnIo.IsInstalled returns true
+    if (!RunSc("start PawnIO"))
+    {
+        // Driver failed to load -- most likely unsigned (error 577).
+        // Clean up the broken service entry so the next run doesn't think
+        // it's already installed.
+        Console.Error.WriteLine("[lhm-server] PawnIO driver failed to start -- the .sys " +
+                                "file may be unsigned. Enable test-signing mode for " +
+                                "development builds, or use the signed release from pawnio.eu.");
+        RunSc("delete PawnIO");
+        return false;
+    }
+
+    // Write Uninstall registry key so pawnio_check.is_pawnio_installed() returns true
     try
     {
         using var key = Registry.LocalMachine.CreateSubKey(
@@ -132,10 +182,30 @@ static bool EnsurePawnIoInstalled()
         key.SetValue("DisplayVersion", "2.2.0");
         key.SetValue("DisplayName", "PawnIO");
     }
-    catch { /* non-fatal — driver is running regardless */ }
+    catch { /* non-fatal -- driver is running regardless */ }
 
     Console.WriteLine("[lhm-server] PawnIO driver installed successfully.");
     return true;
+}
+
+static (bool exists, bool running) QueryPawnIoService()
+{
+    using var p = Process.Start(new ProcessStartInfo("sc", "query PawnIO")
+    {
+        RedirectStandardOutput = true,
+        RedirectStandardError  = true,
+        UseShellExecute        = false,
+        CreateNoWindow         = true,
+    });
+    p!.WaitForExit();
+
+    if (p.ExitCode != 0)
+        return (false, false);
+
+    // Parse sc query output -- look for "STATE" line containing "RUNNING"
+    var output = p.StandardOutput.ReadToEnd();
+    var running = output.Contains("RUNNING", StringComparison.OrdinalIgnoreCase);
+    return (true, running);
 }
 
 static bool RunSc(string args)
@@ -148,7 +218,14 @@ static bool RunSc(string args)
         RedirectStandardError  = true,
     });
     p!.WaitForExit();
-    return p.ExitCode is 0 or 1056;  // 1056 = service already running
+    if (p.ExitCode is 0 or 1056)  // 1056 = service already running
+        return true;
+    var stderr = p.StandardError.ReadToEnd().Trim();
+    var stdout = p.StandardOutput.ReadToEnd().Trim();
+    Console.Error.WriteLine($"[lhm-server] sc {args.Split(' ')[0]} failed (exit {p.ExitCode})" +
+                            (stdout.Length > 0 ? $": {stdout}" : "") +
+                            (stderr.Length > 0 ? $" | {stderr}" : ""));
+    return false;
 }
 
 EnsurePawnIoInstalled();

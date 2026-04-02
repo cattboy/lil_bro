@@ -1,23 +1,18 @@
 # Active Context
 
 ## Current Work Focus
-- **Week 7 module split complete** — `main.py` extracted into `src/pipeline/` package (8 modules)
-- Branch `feat/week6-terminal-ui` is ready for review/merge; 246 tests, QA health 98/100
+- **Sprint pawnio-cleanup** — Build pipeline hardened; `update_pawnio.ps1` promoted to primary PawnIO.sys acquisition path
+- Branch `sprint/pawnio-cleanup`
 
-## Recent Changes (Week 7)
-- Created `src/pipeline/` package: `__init__.py`, `_state.py`, `banner.py`, `menu.py`, `approval.py`, `fix_dispatch.py`, `thermal_gate.py`, `phases.py`
-- `src/main.py` trimmed from 549 lines to 48 lines (thin entry point only)
-- Dispatch dict pattern: `FIX_REGISTRY: dict[str, Callable[[dict], bool]]` replaces if-elif chain
-- Thermal safety gate deduplicated: single `thermal_safety_gate()` function in `thermal_gate.py`
-- `_llm` state managed via getter/setter in `_state.py` (avoids Python name-binding bug)
-- QA fixes: Callable type annotation (ISSUE-001), `_fix_power_plan` test coverage (ISSUE-002)
-- 31 new tests: `test_parse_selection.py` (12), `test_thermal_gate.py` (6), `test_fix_dispatch.py` (13)
-- 246 tests total, all passing
+## Recent Changes (pawnio-cleanup)
+- `build.py`: added `run_pawnio_update()` function; runs `tools/PawnIO_Latest_Check/update_pawnio.ps1` as step [2/5] before lhm-server build
+- Build steps renumbered 4→5; module docstring updated with step breakdown
+- `CLAUDE.md`: architecture entry for `build.py` and `tools/PawnIO*` entries updated to reflect primary/fallback distinction
+- PawnIO.sys acquisition priority: GitHub signed binary (update_pawnio.ps1) → WDK source compile (tools/PawnIO/build.ps1) → embed skipped
 
 ## Next Steps
-1. Merge `feat/week6-terminal-ui` → `main`
-2. Validate llama-cpp-python on RTX 3080 dev machine (hard gate)
-3. Benchmark Qwen2.5-3B vs 7B on reference hardware for 60-second SLA
+1. Validate llama-cpp-python on RTX 3080 dev machine (hard gate)
+2. Benchmark Qwen2.5-3B vs 7B on reference hardware for 60-second SLA
 
 ## Active Decisions
 - Terminal UI only; PyQt deferred

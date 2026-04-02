@@ -118,6 +118,8 @@ def test_start_exe_not_found(mock_port, mock_find):
 def test_start_launches_full_lhm_successfully(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_admin, mock_sleep):
     mock_proc = MagicMock()
     mock_proc.pid = 12345
+    mock_proc.stderr = None
+    mock_proc.poll.return_value = None
     mock_popen.return_value = mock_proc
 
     mock_mono.side_effect = [0.0, 0.5, 1.0]
@@ -147,6 +149,8 @@ def test_start_launches_custom_server_no_port_flag(mock_port, mock_find, mock_po
     self-exit when lil_bro terminates."""
     mock_proc = MagicMock()
     mock_proc.pid = 99
+    mock_proc.stderr = None
+    mock_proc.poll.return_value = None
     mock_popen.return_value = mock_proc
 
     mock_mono.side_effect = [0.0, 0.5, 1.0]
@@ -172,9 +176,11 @@ def test_start_launches_custom_server_no_port_flag(mock_port, mock_find, mock_po
 @patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
 def test_start_launch_timeout(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep, mock_admin):
     mock_proc = MagicMock()
+    mock_proc.stderr = None
+    mock_proc.poll.return_value = None
     mock_popen.return_value = mock_proc
 
-    mock_mono.side_effect = [0.0, 6.0]
+    mock_mono.side_effect = [0.0, 0.5, 16.0]
 
     sidecar = LHMSidecar()
     assert sidecar.start() is False
@@ -270,6 +276,7 @@ def test_popen_stdin_is_devnull(mock_port, mock_find, mock_popen, mock_resp, moc
     import subprocess as _sp
     mock_proc = MagicMock()
     mock_proc.pid = 42
+    mock_proc.stderr = None
     mock_popen.return_value = mock_proc
     mock_mono.side_effect = [0.0, 0.5]
     mock_resp.side_effect = [True]
@@ -301,3 +308,65 @@ def test_fetch_data_success(mock_urlopen):
 def test_fetch_data_failure(mock_urlopen):
     sidecar = LHMSidecar()
     assert sidecar.fetch_data() is None
+
+
+# ── Early exit on crash ───────────────────────────────────────────────────────
+
+@patch("src.collectors.sub.lhm_sidecar._is_admin", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.time.sleep")
+@patch("src.collectors.sub.lhm_sidecar.time.monotonic")
+@patch("src.collectors.sub.lhm_sidecar._is_lhm_responding", return_value=False)
+@patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\tools\lhm-server.exe", True))
+@patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
+def test_start_early_exit_on_crash(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep, mock_admin):
+    """If the subprocess exits immediately, start() returns False without waiting the full timeout."""
+    mock_proc = MagicMock()
+    mock_proc.stderr = None
+    mock_proc.poll.return_value = 1  # non-None → process exited with code 1
+    mock_proc.returncode = 1
+    mock_popen.return_value = mock_proc
+
+    mock_mono.side_effect = [0.0, 0.5]  # well within the 15s timeout
+
+    sidecar = LHMSidecar()
+    result = sidecar.start()
+
+    assert result is False
+    # Should not have waited the full timeout — only consumed 2 monotonic calls
+    assert mock_mono.call_count == 2
+    # Process ref cleared
+    assert sidecar._process is None
+
+
+# ── Stderr captured on crash ──────────────────────────────────────────────────
+
+@patch("src.collectors.sub.lhm_sidecar._is_admin", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.time.sleep")
+@patch("src.collectors.sub.lhm_sidecar.time.monotonic")
+@patch("src.collectors.sub.lhm_sidecar._is_lhm_responding", return_value=False)
+@patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\tools\lhm-server.exe", True))
+@patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
+def test_stderr_captured_on_crash(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep, mock_admin):
+    """Stderr lines accumulated before crash are printed via print_dim on early exit."""
+    mock_proc = MagicMock()
+    mock_proc.stderr = None
+    mock_proc.poll.return_value = 1
+    mock_proc.returncode = 1
+    mock_popen.return_value = mock_proc
+
+    mock_mono.side_effect = [0.0, 0.5]
+
+    sidecar = LHMSidecar()
+    # Simulate stderr lines already drained before the poll check fires
+    sidecar._stderr_lines = ["Error: PawnIO driver install failed", "Exiting with code 1"]
+
+    with patch("src.collectors.sub.lhm_sidecar.print_dim") as mock_dim:
+        result = sidecar.start()
+
+    assert result is False
+    # Both lines should have been printed
+    printed = [call.args[0] for call in mock_dim.call_args_list]
+    assert any("PawnIO driver install failed" in line for line in printed)
+    assert any("Exiting with code 1" in line for line in printed)

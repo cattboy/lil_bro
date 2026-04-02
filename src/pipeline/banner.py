@@ -7,7 +7,7 @@ from src.utils.formatting import print_accent, print_dim
 def print_banner():
     """Prints the lil_bro ASCII art banner with tagline and privacy notice."""
     banner = f"""{Fore.MAGENTA}{Style.BRIGHT}
-   _   _    __  _           ___
+  _   _    __  _            ___
  | | (_)  / / | |__   _ __ / _ \\
  | | | | / /  | '_ \\ | '__| | | |
  | | | |/ /   | |_) || |  | |_| |

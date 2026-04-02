@@ -18,12 +18,14 @@ if (-not $PawnIOSys) {
                -ForegroundColor Yellow
     $PawnIOBuild = Join-Path $PSScriptRoot "..\..\tools\PawnIO\build.ps1"
     if (Test-Path $PawnIOBuild) {
-        & $PawnIOBuild
-        if ($LASTEXITCODE -ne 0) {
+        try {
+            & $PawnIOBuild
+        } catch {
             Write-Warning (
-                "PawnIO build failed.  lhm-server.exe will be built WITHOUT embedded " +
-                "PawnIO.sys - temperature monitoring will not work until PawnIO is " +
-                "installed separately.  See tools/PawnIO/build.ps1 for requirements."
+                "PawnIO build failed: $_`n" +
+                "  lhm-server.exe will be built WITHOUT embedded PawnIO.sys.`n" +
+                "  Thermal sensors fall back to WMI-only (no ring-0 access).`n" +
+                "  See tools/PawnIO/build.ps1 for WDK requirements."
             )
         }
     } else {
@@ -45,6 +47,10 @@ $sdkVersion = (dotnet --version 2>$null)
 Write-Host "dotnet SDK: $sdkVersion"
 
 Write-Host "Building lhm-server (self-contained win-x64)..."
+# Clean first — incremental builds can miss newly-added EmbeddedResource files
+# (the Condition guard means MSBuild doesn't track PawnIO.sys as an input until
+# it exists, so a stale cache silently omits it).
+dotnet clean "$PSScriptRoot\LhmServer.csproj" -c Release -r win-x64 --nologo 2>$null
 dotnet publish "$PSScriptRoot\LhmServer.csproj" `
     -r win-x64 `
     -c Release `

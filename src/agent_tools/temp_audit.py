@@ -1,5 +1,5 @@
 import os
-from ..utils.formatting import print_step, print_step_done, print_info, print_warning
+from ..utils.formatting import print_step, print_step_done, print_info
 from ..utils.action_logger import action_logger
 
 def _get_temp_targets() -> dict:
@@ -96,37 +96,6 @@ def _format_size(size_bytes: int) -> str:
         return f"{gb:.2f} GB"
     return f"{mb:.2f} MB"
 
-def scan_temp_folders() -> dict:
-    """
-    Scans common Windows temporary directories and calculates their sizes.
-    """
-    print_step("Auditing Temporary Folders")
-    targets = _get_temp_targets()
-    
-    results = {}
-    total_bloat_bytes = 0
-    
-    for name, path in targets.items():
-        size_bytes, count = scan_dir_size(path)
-        total_bloat_bytes += size_bytes
-        results[name] = {"path": path, "size_bytes": size_bytes, "file_count": count}
-        
-    print_step_done(True)
-    
-    # Format the report
-    total_bloat_formatted = _format_size(total_bloat_bytes)
-    
-    if total_bloat_bytes > (1024 * 1024 * 1024): # Over 1 GB
-        print_warning(f"Found {total_bloat_formatted} of temporary files and system bloat across {sum(r['file_count'] for r in results.values())} files.")
-    else:
-        print_info(f"System is relatively clean. Found {total_bloat_formatted} of temp files.")
-        
-    for name, data in results.items():
-        if data['size_bytes'] > 0:
-            print_info(f"  - {name}: {_format_size(data['size_bytes'])} ({data['file_count']} files) -> {data['path']}")
-            
-    return {"total_bytes": total_bloat_bytes, "details": results}
-
 def clean_temp_folders(details: dict) -> tuple[int, int]:
     """
     Deletes files from the directories specified in the scan details.
@@ -136,7 +105,7 @@ def clean_temp_folders(details: dict) -> tuple[int, int]:
     bytes_freed = 0
     files_deleted = 0
     
-    for name, data in details.items():
+    for data in details.values():
         if data['size_bytes'] == 0:
             continue
             
