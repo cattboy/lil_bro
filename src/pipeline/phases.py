@@ -157,7 +157,7 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
         findings.append(thermal_finding)
 
         print()
-        print_accent("Alright, wiggle your mouse for 3 seconds -- we'll measure the polling rate.")
+        print_accent("Alright, wiggle your mouse for 2 seconds -- we'll measure the polling rate.")
         print_prompt("Press Enter when you're ready... ")
         input()
         mouse_result = check_polling_rate()
