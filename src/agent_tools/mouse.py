@@ -82,7 +82,7 @@ def check_polling_rate() -> dict:
     print_step_done(True) # Just to close the line
 
     try:
-        hz = _fallback_measure_rate(3)
+        hz = _fallback_measure_rate(2)
     except Exception as e:
         return {"current_hz": 0, "status": "ERROR", "message": str(e)}
     
