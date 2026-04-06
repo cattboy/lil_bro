@@ -95,7 +95,7 @@ python -m pytest tests/test_game_mode.py -v
 python -m pytest tests/ --cov=src --cov-report=term-missing
 ```
 
-Current suite: **325 tests**, all passing.
+Current suite: **882 tests**, all passing (including 557 new tests for NVIDIA Profile Inspector integration).
 
 ---
 
@@ -129,25 +129,33 @@ The `.spec` file (`lil_bro.spec`) is the PyInstaller build configuration — edi
 ```
 src/
   main.py           — Thin entry point (integrity, admin, banner, menu)
-  pipeline/         — 5-phase pipeline orchestrator, split into 8 modules
+  pipeline/         — Modular 5-phase orchestrator with Phase protocol
     _state.py       — Shared LLM state (get_llm/set_llm)
+    base.py         — PipelineContext dataclass + Phase protocol
     banner.py       — ASCII art banner
     menu.py         — 3-option menu loop + AI model setup
     approval.py     — Proposal display, selection parsing, fix execution
-    fix_dispatch.py — Check→fix dispatch registry (FIX_REGISTRY dict)
+    fix_dispatch.py — Check→fix dispatch registry (@register_fix decorator)
     thermal_gate.py — Pre-benchmark thermal safety gate
-    phases.py       — 5-phase pipeline orchestrator
-  agent_tools/      — One file per system check (game_mode, display, power_plan, ...)
-  collectors/       — Hardware data collection (WMI, dxdiag, nvidia-smi, EDID, ...)
+    startup_thermals.py — Startup thermal scan
+    phase_bootstrap.py  — Phase 1: UAC + System Restore Point
+    phase_scan.py       — Phase 2: Hardware data collection
+    phase_baseline.py   — Phase 3: Baseline benchmark + thermals
+    phase_config.py     — Phase 4: All esports checks + LLM proposals
+    phase_final.py      — Phase 5: Verification benchmark
+    phases.py           — 5-phase orchestrator (legacy, now coordinator)
+  agent_tools/      — One file per system check (display, game_mode, power_plan, nvidia_profile, ...)
+  collectors/       — Hardware data collection (WMI, dxdiag, nvidia-smi, NVIDIA Profile, EDID, ...)
   llm/              — Optional LLM integration (model loader + action proposer)
   benchmarks/       — Cinebench runner + thermal monitor
-  utils/            — Shared helpers (formatting, logging, paths, progress bar, ...)
-tests/              — Unit tests (all mocked)
-docs/               — Design notes, plans, vendor reference docs
+  utils/            — Shared helpers (formatting, logging, paths, progress bar, platform, ...)
+tests/              — Unit tests (all mocked) — 882 total
+docs/               — Design notes, plans, vendor reference docs (NPI settings, etc.)
 tools/
   PawnIO/           — PawnIO kernel driver source + WDK build script
   PawnIO_Latest_Check/ — Auto-updater: fetches signed PawnIO.sys from GitHub releases
   lhm-server/       — Custom C# thermal sensor server (LibreHardwareMonitorLib + PawnIO)
+  nvidiaProfileInspector/ — Bundled NVIDIA Profile Inspector (C# WPF GPU profile editor)
 build.py            — .exe build pipeline (lhm-server + PyInstaller + integrity manifest)
 install_deps.ps1    — One-command dev setup (Python, uv, .NET 8, WDK, submodules)
 lil_bro.spec        — PyInstaller spec
@@ -247,7 +255,9 @@ The lhm-server build auto-triggers `tools/PawnIO/build.ps1` (source build) if `t
 1. Create `src/agent_tools/your_check.py`
 2. Implement a pure `analyze_your_check(specs: dict) -> dict` function (no system calls, reads from specs)
 3. Return a dict with at minimum `check`, `status`, `message`, `can_auto_fix` keys
-4. Wire it into `_run_pipeline()` in `src/pipeline/phases.py`
-5. Add a handler function and registry entry to `src/pipeline/fix_dispatch.py` if `can_auto_fix: True`
-6. Add a fallback template to `_FALLBACK` in `action_proposer.py`
+4. Wire it into `phase_config.py` — add your check function to the run phase method
+5. Add a handler function and registry entry to `src/pipeline/fix_dispatch.py` using `@register_fix("your_check")` decorator if `can_auto_fix: True`
+6. Add a fallback template to `_FALLBACK` in `action_proposer.py` for offline/LLM-fallback scenarios
 7. Write mocked tests in `tests/test_your_check.py`
+
+The Phase protocol (in `base.py`) ensures your check's findings flow cleanly through the orchestrator: Phase 4 (Config) → Fix dispatch → Approval UX → Phase 5 (Verification).

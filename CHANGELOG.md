@@ -4,29 +4,28 @@ All notable changes to lil_bro are documented here.
 
 ## [0.9.1] - 2026-04-06
 
+### Added
+- **NVIDIA Profile Inspector integration** — You can now detect and optimize driver-level GPU settings: detect misconfigured NVIDIA profiles, analyze setting deviations, and apply driver-level perf tuning fixes. Bundled C# NPI tool with Python integration layer.
+- Dedicated NVIDIA GPU profile checks (`nvidia_profile.py`) and fixes (`nvidia_profile_setter.py`) in the esports configuration phase.
+
 ### Fixed
-- **BUG-1**: LHM dual lifecycle — pipeline no longer creates a second LHM sidecar; the startup instance is passed through `menu_loop()` → `run_optimization_pipeline()`.
-- **BUG-2**: `attempt` variable unbound after `for` loop in `startup_thermals.py` — initialized before the loop.
-- **BUG-3**: Cinebench zombie processes — replaced `shell=True` + `start /b /wait` with `subprocess.Popen` + `proc.kill()` + `taskkill /T` on timeout.
-- **BUG-4**: Silent cleanup exceptions — `post_run_cleanup` now logs all swallowed exceptions via `get_debug_logger()`.
-- All subprocess temp files now use CWD-based `get_temp_dir()` instead of `%TEMP%`, preventing `_MEI*` and `.nip` artifacts from scattering into `AppData\Local\Temp`.
-- Stale `_MEI*` directories from prior crashed runs are cleaned up on exit.
+- Thermal sidecar no longer spins up twice — startup LHM instance is now cleanly passed through the pipeline instead of creating a second sidecar.
+- Cinebench process cleanup — now properly kills hanging benchmark processes on timeout instead of leaving zombie processes.
+- Temp file cleanup — all subprocess artifacts (including `.nip` files from NPI) now go to CWD instead of `%TEMP%`, and stale `_MEI*` directories from crashed runs are cleaned up on exit.
+- Thermal gate initialization error and silent exception handling improved with better logging.
 
 ### Changed
-- **Architecture**: Pipeline decomposed from monolithic `phases.py` (220 lines) into `PipelineContext` dataclass + 5 `Phase` protocol classes (`phase_bootstrap`, `phase_scan`, `phase_baseline`, `phase_config`, `phase_final`).
-- **DUP-1**: Consolidated 3 copies of `is_admin()` into canonical `src/utils/platform.py`.
-- **DUP-3**: `ThermalMonitor.get_cpu_peak()` now delegates to `derive_cpu_temp()` instead of duplicating the sensor selection logic.
-- **REFACTOR-2**: Fix dispatch registry uses `@register_fix` decorator instead of a manual dict.
-- **REFACTOR-5**: `ActionLogger` gains `threading.Lock` for thread-safe file writes and injectable `echo_fn` to break circular imports.
-- Renamed `_UNICODE_SAFE` → `_ASCII_FALLBACK` for clarity (behavior unchanged).
-- `winreg` imports made lazy/guarded in `game_mode.py`, `monitor_dumper.py`, `pawnio_check.py`, `post_run_cleanup.py` for cross-platform testability.
-- LLM retry errors now logged via `get_debug_logger()` instead of silently swallowed.
-- Removed dead `poll_count` variable in `mouse.py`.
-- `cinebench.py` uses `Path(__file__)` instead of `os.path` chain for `_REPO_ROOT`.
+- **Pipeline architecture** — Refactored from a monolithic `phases.py` (220 lines) into a modular Phase protocol system: each of the 5 phases (bootstrap, scan, baseline, config, final) is now a separate class with a `run(ctx)` method, sharing state via a `PipelineContext` dataclass. Cleaner orchestration, easier to test, easier to modify.
+- Fix dispatch registry now uses a decorator pattern (`@register_fix`) instead of a manual dict.
+- Consolidated duplicate `is_admin()` checks into a single canonical source in `src/utils/platform.py`.
+- Cleaned up debug variable names (`_UNICODE_SAFE` → `_ASCII_FALLBACK`) and removed dead code for clarity.
+- Windows registry imports made lazy in several modules for better cross-platform test support.
+- LLM retry errors now logged to debug log instead of silently swallowed.
 
 ### For contributors
-- 3 new tests for `_cleanup_stale_mei()` (no-op, orphan removal, current-process skip). 368 tests total, all passing.
-- `CLAUDE.md` updated with subprocess temp file rules.
+- 557 new tests for NVIDIA Profile Inspector integration (including full NPI setting parser tests, profile detection, and fix application). 882 tests total, all passing.
+- Pipeline phases are now independently testable via the Phase protocol.
+- `CLAUDE.md` updated with phase architecture, NPI collector reference, and subprocess temp file rules.
 
 ---
 

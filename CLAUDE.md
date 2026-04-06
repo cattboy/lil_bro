@@ -54,17 +54,25 @@ src/
   pipeline/
     __init__.py          — Package marker
     _state.py            — Shared _llm state (get_llm/set_llm)
+    base.py              — PipelineContext + Phase protocol for modular phases
     banner.py            — ASCII art banner
     menu.py              — 3-option menu loop + AI model setup
     approval.py          — Proposal display, selection parsing, fix execution
     fix_dispatch.py      — Check->fix dispatch registry
     thermal_gate.py      — Pre-benchmark thermal safety check
-    phases.py            — 5-phase pipeline orchestrator
+    phase_bootstrap.py   — Phase 1: Bootstrapping & Safety (UAC, restore point)
+    phase_scan.py        — Phase 2: Deep System Scan (collectors, specs JSON)
+    phase_baseline.py    — Phase 3: Baseline Benchmark (Cinebench single-core, thermals)
+    phase_config.py      — Phase 4: Esports Configuration Check (all checks, LLM proposals, batch approval)
+    phase_final.py       — Phase 5: Final Verification Benchmark (compare delta)
+    phases.py            — 5-phase orchestrator + PipelineContext management
     post_run_cleanup.py  — Deletes ./lil_bro/ on exit; preserves CWD-root persistent logs
+    startup_thermals.py  — Pre-benchmark thermal safety gate
   collectors/
     spec_dumper.py       — Aggregates all system data into unified JSON
-    sub/                 — Individual collectors (WMI, dxdiag, nvidia-smi, EDID, monitor)
-      lhm_sidecar.py    — LibreHardwareMonitor process lifecycle management
+    sub/                 — Individual collectors (WMI, dxdiag, nvidia-smi, EDID, monitor, NVIDIA Profile)
+      lhm_sidecar.py     — LibreHardwareMonitor process lifecycle management
+      nvidia_profile_dumper.py — NVIDIA Profile Inspector profile extraction + setting ID lookups
   agent_tools/           — Modular system checks (one file per check)
     display.py           — Monitor refresh rate analysis
     display_setter.py    — Applies refresh rate changes via Win32 ChangeDisplaySettingsEx
@@ -74,6 +82,8 @@ src/
     rebar.py             — Resizable BAR detection
     temp_audit.py        — Temp folder bloat + cleanup
     mouse.py             — Mouse polling rate
+    nvidia_profile.py    — NVIDIA Profile Inspector setting detection + analysis
+    nvidia_profile_setter.py — Apply NVIDIA Profile Inspector setting changes
     thermal_guidance.py  — Thermal analysis + pre-benchmark idle safety gate
   llm/                   — LLM integration (optional — tool works without it)
     model_loader.py      — GGUF model loading + first-run download from HuggingFace
@@ -97,6 +107,7 @@ tools/
   PawnIO/              — PawnIO kernel driver source + WDK build script (fallback path)
   PawnIO_Latest_Check/ — Primary PawnIO.sys source: fetches latest signed binary from namazso/PawnIO.Setup GitHub releases; WDK build is fallback if offline/unavailable
   lhm-server/          — Custom C# thermal sensor server (LibreHardwareMonitorLib + PawnIO)
+  nvidiaProfileInspector/ — Bundled NVIDIA Profile Inspector tool (C# WPF app for GPU setting management)
 tests/                 — Unit tests, all mocked (no real system modifications)
 docs/                  — All progress docs, plans, reports, and notes go here
 memory-bank/           — Project design docs (brief, progress, patterns, active context)
@@ -104,11 +115,15 @@ memory-bank/           — Project design docs (brief, progress, patterns, activ
 
 ## 5-Phase Pipeline
 
-1. **Bootstrapping & Safety** — UAC check, Restore Point creation
-2. **Deep System Scan** — WMI, dxdiag, nvidia-smi, EDID, monitor enum → unified JSON
-3. **Baseline Benchmark** — Cinebench 2026 single-core + thermals
-4. **Esports Configuration Check** — All agent_tools checks run → LLM proposals (or static fallback) → numbered batch approval UX
-5. **Final Verification Benchmark** — Re-run benchmark, compare delta
+Implemented as modular Phase classes inheriting context via PipelineContext dataclass:
+
+1. **Bootstrap Phase** (`phase_bootstrap.py`) — UAC check, System Restore Point creation
+2. **Scan Phase** (`phase_scan.py`) — WMI, dxdiag, nvidia-smi, NVIDIA Profile Inspector, EDID, monitor enum → unified JSON
+3. **Baseline Bench Phase** (`phase_baseline.py`) — Cinebench 2026 single-core + thermal baseline
+4. **Config Phase** (`phase_config.py`) — All agent_tools checks (display, power, RAM, GPU, thermal, NVIDIA Profile) → LLM proposals (or static fallback) → numbered batch approval UX
+5. **Final Phase** (`phase_final.py`) — Re-run benchmark, compare delta vs baseline
+
+All phases share state via `PipelineContext` (LHM sidecar, thermal monitor, specs, LLM, benchmark results).
 
 ---
 
@@ -140,6 +155,7 @@ memory-bank/           — Project design docs (brief, progress, patterns, activ
 - **Week 8** ✅ — Bundle thermal sensor server: custom C# lhm-server.exe (LibreHardwareMonitorLib, PawnIO-era v0.9.*), HTTP /data.json sidecar; lhm_sidecar.py tuple return + custom vs full-LHM launch logic; fix CPU sensor derivation (_derive_cpu_temp priority: CPU Package → Tctl/Tdie → safe CPU; AMD Ryzen support; excludes hotspot/VRM/Core Max); 22 new tests (264 total)
 - **Sprint: pawnio-cleanup** ✅ — Build pipeline hardened: `update_pawnio.ps1` integrated as build step [2/5]; fetches latest signed PawnIO.sys from namazso/PawnIO.Setup GitHub releases; WDK source compilation retained as fallback. Debug logging: `debug_logger.py` singleton + `--debug` CLI flag (disabled by default, no overhead); `get_specs_path()` fixed to `./lil_bro/full_specs.json`; `post_run_cleanup.py` cleans `./lil_bro/` on exit while preserving CWD-root logs; 312 tests passing
 - **Sprint: action-logger-tuning** ✅ — Action logger v2: `outcome` param on `log_action()` for programmatic parsing; `log_fix_dispatch/log_fix_result/log_approval_decision` helpers; fix dispatch and approval flow fully instrumented; session start/end moved to `main.py` to capture full app lifecycle (including startup LHM sidecar); 325 tests passing
+- **Sprint: nvidia-profile-inspector** ✅ — Pipeline decomposed into Phase classes (base.py + 5 phase files) with PipelineContext state bag; bundled NVIDIA Profile Inspector C# tool (1400+ lines); nvidia_profile_dumper.py for NPI profile extraction; nvidia_profile.py/setter.py agent_tools for detection & fixes; NPI_CustomSettingNames.xml canonical reference; 557 new tests (882 total)
 
 ---
 
