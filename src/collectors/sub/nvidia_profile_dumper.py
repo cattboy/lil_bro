@@ -190,6 +190,13 @@ def get_nvidia_profile() -> dict[str, Any]:
 
         if result.returncode != 0:
             stderr = result.stderr.decode(errors="replace").strip()
+            # rc 3221225477 (0xC0000005) + DrsSession NullRef = NVAPI failed to init (no NVIDIA GPU)
+            if result.returncode == 3221225477 and "DrsSession" in stderr:
+                action_logger.log_action(
+                    "NPI Collector", "Skipped",
+                    "no NVIDIA GPU detected — NVAPI failed to initialize", outcome="SKIP",
+                )
+                return {"available": False, "reason": "No NVIDIA GPU detected"}
             action_logger.log_action("NPI Collector", "Failed", f"rc={result.returncode}: {stderr}", outcome="FAIL")
             return {"available": True, "error": f"NPI export failed (rc={result.returncode}): {stderr}"}
 
