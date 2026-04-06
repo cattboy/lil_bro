@@ -1,6 +1,6 @@
 {
-  "version": "0.9.0",
+  "version": "0.9.1",
   "algorithm": "sha256",
-  "exe_hash": "adac5919f0e2ccdd6aca2af56271d0e56cf11b7073df793329291399048a885d",
+  "exe_hash": "63691335ff5ad3d534c919cd5a7aa335dadba08e606553a2da20c50dd4c37cdf",
   "exe_name": "lil_bro.exe"
 }
