@@ -6,6 +6,8 @@ import subprocess
 import xml.etree.ElementTree as ET
 from typing import Any
 
+from ...utils.paths import get_temp_dir
+
 def get_dxdiag() -> dict[str, Any]:
     """
     Executes DXDiag and parses the resulting XML hardware report.
@@ -17,7 +19,7 @@ def get_dxdiag() -> dict[str, Any]:
         raise RuntimeError("DXDiag is only supported on Windows environments.")
 
     # Utilize a secure, self-cleaning temporary directory
-    with tempfile.TemporaryDirectory() as temp_dir:
+    with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as temp_dir:
         output_path = os.path.join(temp_dir, "dxdiag.xml")
         
         subprocess.run(["dxdiag", "/x", output_path], check=False)

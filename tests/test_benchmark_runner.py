@@ -112,41 +112,49 @@ def test_runner_auto_discovery(mock_find):
 
 # ── BenchmarkRunner.run_benchmark — Cinebench path ──────────────────────────
 
-@patch("src.benchmarks.cinebench.subprocess.run")
+@patch("src.benchmarks.cinebench.subprocess.Popen")
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
-def test_run_cinebench_success(mock_isfile, mock_run):
+def test_run_cinebench_success(mock_isfile, mock_popen):
     """Cinebench runs and returns success with parsed output."""
-    mock_run.return_value = MagicMock(
-        stdout="CB 2024 Score: CPU Multi 15320 pts\n",
-        stderr="",
+    mock_proc = MagicMock()
+    mock_proc.communicate.return_value = (
+        b"CB 2024 Score: CPU Multi 15320 pts\n",
+        b"",
     )
+    mock_proc.pid = 1234
+    mock_popen.return_value = mock_proc
+
     runner = BenchmarkRunner(cinebench_path=r"C:\CB\Cinebench.exe")
     result = runner.run_benchmark(full_suite=False)
 
     assert result["status"] == "success"
     assert result["benchmark"] == "cinebench"
-    # The CLI command should include the single-core flag
-    call_args = mock_run.call_args
+    # The CLI args list should include the single-core flag
+    call_args = mock_popen.call_args
     assert "g_CinebenchCpu1Test=true" in call_args[0][0]
 
 
-@patch("src.benchmarks.cinebench.subprocess.run")
+@patch("src.benchmarks.cinebench.subprocess.Popen")
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
-def test_run_cinebench_full_suite(mock_isfile, mock_run):
+def test_run_cinebench_full_suite(mock_isfile, mock_popen):
     """full_suite=True passes the AllTests flag."""
-    mock_run.return_value = MagicMock(stdout="", stderr="")
+    mock_proc = MagicMock()
+    mock_proc.communicate.return_value = (b"", b"")
+    mock_proc.pid = 1234
+    mock_popen.return_value = mock_proc
+
     runner = BenchmarkRunner(cinebench_path=r"C:\CB\Cinebench.exe")
     runner.run_benchmark(full_suite=True)
-    call_args = mock_run.call_args
+    call_args = mock_popen.call_args
     assert "g_CinebenchAllTests=true" in call_args[0][0]
 
 
 @patch(
-    "src.benchmarks.cinebench.subprocess.run",
+    "src.benchmarks.cinebench.subprocess.Popen",
     side_effect=Exception("crash"),
 )
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
-def test_run_cinebench_error(mock_isfile, mock_run):
+def test_run_cinebench_error(mock_isfile, mock_popen):
     """Cinebench crash → error result."""
     runner = BenchmarkRunner(cinebench_path=r"C:\CB\Cinebench.exe")
     result = runner.run_benchmark()

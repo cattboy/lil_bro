@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-from ...utils.paths import get_appdata_dir
+from ...utils.paths import get_appdata_dir, get_temp_dir
 from ...utils.action_logger import action_logger
 
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -173,7 +173,7 @@ def get_nvidia_profile() -> dict[str, Any]:
         return {"available": False, "reason": "NPI binary not found"}
 
     action_logger.log_action("NPI Collector", "Invoked", npi_exe)
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as tmpdir:
         try:
             result = subprocess.run(
                 [npi_exe, "-exportCustomized"],

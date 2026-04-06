@@ -36,6 +36,11 @@
 - Always implement multi-method fallbacks — never hard-fail when a tool (nvidia-smi, dxdiag, etc.) is missing. Fall back to WMI or registry alternatives.
 - Terminal UI only — do not introduce PyQt or GUI dependencies until explicitly requested.
 
+### Subprocess & Temp Files
+- **All subprocess temp files must be stored in CWD, not `%TEMP%`.** Use `get_temp_dir()` from `src/utils/paths.py` as the `dir=` argument for `tempfile.TemporaryDirectory()` and `tempfile.mkstemp()`. This ensures all runtime artifacts live under `./lil_bro/` and get cleaned up on exit via `post_run_cleanup.py`.
+- Any new code spawning subprocesses that produce temp files must use `dir=str(get_temp_dir())` — never rely on the system default temp directory.
+- PyInstaller's `runtime_tmpdir='.'` in `lil_bro.spec` ensures `_MEI*` extraction dirs are created in CWD. Stale `_MEI*` dirs from crashes are cleaned up by `_cleanup_stale_mei()` in `post_run_cleanup.py`.
+
 ---
 
 ## Architecture

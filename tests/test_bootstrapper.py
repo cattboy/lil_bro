@@ -7,12 +7,12 @@ from src.utils.errors import AdminRequiredError, RestorePointError
 FIXED_DT = datetime(2026, 4, 1, 14, 32, 7)
 FIXED_DESC = "lil_bro Pre-Tuning 2026-04-01 14:32:07"
 
-@patch('src.bootstrapper.ctypes.windll.shell32.IsUserAnAdmin')
+@patch('src.utils.platform.ctypes.windll.shell32.IsUserAnAdmin')
 def test_is_admin_true(mock_is_admin):
     mock_is_admin.return_value = 1
     assert is_admin() is True
 
-@patch('src.bootstrapper.ctypes.windll.shell32.IsUserAnAdmin')
+@patch('src.utils.platform.ctypes.windll.shell32.IsUserAnAdmin')
 def test_is_admin_false(mock_is_admin):
     mock_is_admin.return_value = 0
     assert is_admin() is False
