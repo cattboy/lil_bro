@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from ...utils.paths import get_appdata_dir
+from ...utils.action_logger import action_logger
 
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
@@ -168,8 +169,10 @@ def get_nvidia_profile() -> dict[str, Any]:
     """
     npi_exe = find_npi_exe()
     if npi_exe is None:
+        action_logger.log_action("NPI Collector", "Skipped", "binary not found", outcome="SKIP")
         return {"available": False, "reason": "NPI binary not found"}
 
+    action_logger.log_action("NPI Collector", "Invoked", npi_exe)
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
             result = subprocess.run(
@@ -179,21 +182,26 @@ def get_nvidia_profile() -> dict[str, Any]:
                 timeout=15,
             )
         except subprocess.TimeoutExpired:
+            action_logger.log_action("NPI Collector", "Timeout", "export timed out after 15s", outcome="FAIL")
             return {"available": True, "error": "NPI export timed out"}
         except FileNotFoundError:
+            action_logger.log_action("NPI Collector", "Skipped", "binary not found at runtime", outcome="SKIP")
             return {"available": False, "reason": "NPI binary not found"}
 
         if result.returncode != 0:
             stderr = result.stderr.decode(errors="replace").strip()
+            action_logger.log_action("NPI Collector", "Failed", f"rc={result.returncode}: {stderr}", outcome="FAIL")
             return {"available": True, "error": f"NPI export failed (rc={result.returncode}): {stderr}"}
 
         nip_files = list(Path(tmpdir).glob("*.nip"))
         if not nip_files:
+            action_logger.log_action("NPI Collector", "Failed", "no .nip file produced", outcome="FAIL")
             return {"available": True, "error": "NPI export produced no .nip file"}
 
         try:
             raw_settings = parse_nip(str(nip_files[0]))
         except (ET.ParseError, UnicodeDecodeError, ValueError) as e:
+            action_logger.log_action("NPI Collector", "ParseError", str(e), outcome="FAIL")
             return {"available": True, "error": f"Failed to parse .nip XML: {e}"}
 
     return {

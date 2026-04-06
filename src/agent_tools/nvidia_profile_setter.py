@@ -251,6 +251,8 @@ def fix_nvidia_profile(
             changes.append(f"FPS cap={calculate_fps_cap(refresh_hz)}")
         if gpu_generation and gpu_generation in DLSS_PRESETS:
             changes.append(f"DLSS={DLSS_PRESETS[gpu_generation][0]}")
+        if bios_rebar is True:
+            changes.append("ReBar=ON")
         changes.extend(["G-Sync=ON", "VSync=ForceOn", "PowerMgmt=MaxPerf"])
         action_logger.log_action("NPI Fix", "Applied", ", ".join(changes))
         return True
