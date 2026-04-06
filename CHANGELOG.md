@@ -2,6 +2,34 @@
 
 All notable changes to lil_bro are documented here.
 
+## [0.9.1] - 2026-04-06
+
+### Fixed
+- **BUG-1**: LHM dual lifecycle — pipeline no longer creates a second LHM sidecar; the startup instance is passed through `menu_loop()` → `run_optimization_pipeline()`.
+- **BUG-2**: `attempt` variable unbound after `for` loop in `startup_thermals.py` — initialized before the loop.
+- **BUG-3**: Cinebench zombie processes — replaced `shell=True` + `start /b /wait` with `subprocess.Popen` + `proc.kill()` + `taskkill /T` on timeout.
+- **BUG-4**: Silent cleanup exceptions — `post_run_cleanup` now logs all swallowed exceptions via `get_debug_logger()`.
+- All subprocess temp files now use CWD-based `get_temp_dir()` instead of `%TEMP%`, preventing `_MEI*` and `.nip` artifacts from scattering into `AppData\Local\Temp`.
+- Stale `_MEI*` directories from prior crashed runs are cleaned up on exit.
+
+### Changed
+- **Architecture**: Pipeline decomposed from monolithic `phases.py` (220 lines) into `PipelineContext` dataclass + 5 `Phase` protocol classes (`phase_bootstrap`, `phase_scan`, `phase_baseline`, `phase_config`, `phase_final`).
+- **DUP-1**: Consolidated 3 copies of `is_admin()` into canonical `src/utils/platform.py`.
+- **DUP-3**: `ThermalMonitor.get_cpu_peak()` now delegates to `derive_cpu_temp()` instead of duplicating the sensor selection logic.
+- **REFACTOR-2**: Fix dispatch registry uses `@register_fix` decorator instead of a manual dict.
+- **REFACTOR-5**: `ActionLogger` gains `threading.Lock` for thread-safe file writes and injectable `echo_fn` to break circular imports.
+- Renamed `_UNICODE_SAFE` → `_ASCII_FALLBACK` for clarity (behavior unchanged).
+- `winreg` imports made lazy/guarded in `game_mode.py`, `monitor_dumper.py`, `pawnio_check.py`, `post_run_cleanup.py` for cross-platform testability.
+- LLM retry errors now logged via `get_debug_logger()` instead of silently swallowed.
+- Removed dead `poll_count` variable in `mouse.py`.
+- `cinebench.py` uses `Path(__file__)` instead of `os.path` chain for `_REPO_ROOT`.
+
+### For contributors
+- 3 new tests for `_cleanup_stale_mei()` (no-op, orphan removal, current-process skip). 368 tests total, all passing.
+- `CLAUDE.md` updated with subprocess temp file rules.
+
+---
+
 ## [0.9.0] - 2026-03-31
 
 ### Added
