@@ -28,24 +28,25 @@ _NPI_SEARCH_PATHS = [
     os.path.join(_PROJECT_ROOT, "tools", "nvidiaProfileInspector", "nvidiaProfileInspector.exe"),
 ]
 
-# Canonical setting IDs (decimal) from NPI_CustomSettingNames.xml hex codes.
-# The .nip XML uses decimal SettingIDs — these are the converted values.
+# Canonical setting IDs from docs/NPI_CustomSettingNames.xml.
+# Python hex literals are identical to decimal at runtime -- hex is used
+# for easy cross-referencing with the XML HexSettingID values.
 SETTING_IDS: dict[str, int] = {
-    "gsync_global_feature":     278196567,   # 0x1094F157
-    "gsync_global_mode":        278196727,   # 0x1094F1F7
-    "gsync_app_mode":           294973784,   # 0x1194F158
-    "gsync_app_state":          279476687,   # 0x10A879CF
-    "gsync_app_requested":      279476652,   # 0x10A879AC
-    "gsync_indicator_overlay":  268604728,   # 0x10029538
-    "gsync_support_indicator":  9303312,     # 0x008DF510
-    "vsync":                    11041231,    # 0x00A879CF
-    "vsync_tear_control":       5912412,     # 0x005A375C
-    "vsync_smooth_afr":         270198627,   # 0x101AE763
-    "fps_limiter_v3":           277041154,   # 0x10835002
-    "rebar_enable":             983226,      # 0x000F00BA
-    "dlss_preset_profile":      6505105,     # 0x00634291
-    "dlss_preset_letter":       283385331,   # 0x10E41DF3
-    "power_mgmt":               274029608,   # 0x10555C28
+    "gsync_global_feature":     0x1094F157,  # GSYNC - Global Feature
+    "gsync_global_mode":        0x1094F1F7,  # GSYNC - Global Mode
+    "gsync_app_mode":           0x1194F158,  # GSYNC - Application Mode
+    "gsync_app_state":          0x10A879CF,  # GSYNC - Application State
+    "gsync_app_requested":      0x10A879AC,  # GSYNC - Application Requested State
+    "gsync_indicator_overlay":  0x10029538,  # GSYNC - Indicator Overlay
+    "gsync_support_indicator":  0x008DF510,  # GSYNC - Support Indicator Overlay
+    "vsync":                    0x00A879CF,  # Vertical Sync
+    "vsync_tear_control":       0x005A375C,  # Vertical Sync - Tear Control
+    "vsync_smooth_afr":         0x101AE763,  # Vertical Sync - Smooth AFR Behavior
+    "fps_limiter_v3":           0x10835002,  # Frame Rate Limiter V3
+    "rebar_enable":             0x000F00BA,  # rBAR - Enable
+    "dlss_preset_profile":      0x00634291,  # DLSS - Forced Model Preset Profile
+    "dlss_preset_letter":       0x10E41DF3,  # DLSS - Forced Preset Letter
+    "power_mgmt":               0x1057EB71,  # Power Management - Mode
 }
 
 # Target values for optimal gaming configuration.

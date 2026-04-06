@@ -24,6 +24,7 @@
   - `nvidia_smi.txt` — nvidia-smi XML output schema; reference for `get_nvidia_smi()` in `spec_dumper.py`
   - `ami_smi.txt` — AMD SMI output schema; reference for `get_amd_smi()` in `spec_dumper.py`
   - `cinebench.md` — Cinebench CLI flags and result file format; reference for `benchmarks/cinebench.py`
+  - **docs/NPI_CustomSettingNames.xml** is the canonical reference for all NVIDIA Profile Inspector setting IDs. Cross-reference any SETTING_IDS changes in nvidia_profile_dumper.py against this file's HexSettingID values.
 
 ### Safety & User Trust
 - Every system modification must call `prompt_approval()` before executing — no silent changes, ever.
