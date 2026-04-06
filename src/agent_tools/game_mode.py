@@ -1,4 +1,8 @@
-import winreg
+try:
+    import winreg
+except ImportError:
+    winreg = None  # type: ignore  # not available on non-Windows
+
 from ..utils.errors import ScannerError
 from ..utils.action_logger import action_logger
 

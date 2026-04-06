@@ -7,7 +7,7 @@ init(autoreset=True)
 
 # Detect non-UTF-8 terminals (Windows CMD CP437, piped stdout, frozen builds).
 # When True, icon-bearing functions use ASCII fallbacks instead of Unicode symbols.
-_UNICODE_SAFE = getattr(sys.stdout, 'encoding', 'utf-8') not in ('utf-8', 'utf-8-sig')
+_ASCII_FALLBACK = getattr(sys.stdout, 'encoding', 'utf-8') not in ('utf-8', 'utf-8-sig')
 
 
 def print_header(title: str):
@@ -16,22 +16,22 @@ def print_header(title: str):
 
 def print_success(message: str):
     """Prints a success message in green."""
-    icon = "OK" if _UNICODE_SAFE else "\u2713"
+    icon = "OK" if _ASCII_FALLBACK else "\u2713"
     print(f"{Fore.GREEN}{icon} {message}{Style.RESET_ALL}")
 
 def print_warning(message: str):
     """Prints a warning message in yellow."""
-    icon = "WARN" if _UNICODE_SAFE else "\u26a0"
+    icon = "WARN" if _ASCII_FALLBACK else "\u26a0"
     print(f"{Fore.YELLOW}{icon} {message}{Style.RESET_ALL}")
 
 def print_error(message: str):
     """Prints an error message in red."""
-    icon = "FAIL" if _UNICODE_SAFE else "\u2717"
+    icon = "FAIL" if _ASCII_FALLBACK else "\u2717"
     print(f"{Fore.RED}{icon} {message}{Style.RESET_ALL}")
 
 def print_info(message: str):
     """Prints an informational message."""
-    icon = "INFO" if _UNICODE_SAFE else "\u2139"
+    icon = "INFO" if _ASCII_FALLBACK else "\u2139"
     print(f"{Fore.BLUE}{icon} {message}{Style.RESET_ALL}")
 
 def print_step(message: str):
@@ -65,7 +65,7 @@ def print_key_value(label: str, value: str, value_color=Fore.CYAN):
 def print_section_divider(label: str = None):
     """Prints a terminal-width divider line with an optional centered label."""
     cols = max(20, shutil.get_terminal_size(fallback=(80, 24)).columns)
-    dash = "-" if _UNICODE_SAFE else "\u2500"
+    dash = "-" if _ASCII_FALLBACK else "\u2500"
     if label:
         side = (cols - len(label) - 2) // 2
         line = f"{dash * side} {label} {dash * (cols - side - len(label) - 2)}"
