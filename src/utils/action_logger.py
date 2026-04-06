@@ -1,15 +1,20 @@
 import os
+import threading
+from collections.abc import Callable
 from datetime import datetime
+from typing import Optional
 
 from .paths import get_action_log_path
 
 
 class ActionLogger:
-    def __init__(self, log_path: str = None):
+    def __init__(self, log_path: str = None, echo_fn: Optional[Callable[[str], None]] = None):
         if log_path:
             self.log_path = log_path
         else:
             self.log_path = str(get_action_log_path())
+        self._lock = threading.Lock()
+        self._echo_fn = echo_fn
 
     def log_session_start(self):
         """Write a === separator block to mark the beginning of a new run."""
@@ -20,16 +25,17 @@ class ActionLogger:
         header = f"[{timestamp}] SESSION START  |  lil_bro v{__version__}"
 
         try:
-            existing = os.path.isfile(self.log_path) and os.path.getsize(self.log_path) > 0
-            leading_newline = "\n" if existing else ""
-            block = f"{leading_newline}{separator}\n{header}\n{separator}\n"
-            with open(self.log_path, "a", encoding="utf-8") as f:
-                f.write(block)
+            with self._lock:
+                existing = os.path.isfile(self.log_path) and os.path.getsize(self.log_path) > 0
+                leading_newline = "\n" if existing else ""
+                block = f"{leading_newline}{separator}\n{header}\n{separator}\n"
+                with open(self.log_path, "a", encoding="utf-8") as f:
+                    f.write(block)
         except Exception as e:
             print(f"Failed to write session start to action log: {e}")
 
-        from src.utils.formatting import print_dim
-        print_dim(f"  {header}")
+        if self._echo_fn:
+            self._echo_fn(f"  {header}")
 
     def log_session_end(self):
         """Write a session end marker line."""
@@ -37,13 +43,14 @@ class ActionLogger:
         line = f"[{timestamp}] SESSION END"
 
         try:
-            with open(self.log_path, "a", encoding="utf-8") as f:
-                f.write(line + "\n")
+            with self._lock:
+                with open(self.log_path, "a", encoding="utf-8") as f:
+                    f.write(line + "\n")
         except Exception as e:
             print(f"Failed to write session end to action log: {e}")
 
-        from src.utils.formatting import print_dim
-        print_dim(f"  {line}")
+        if self._echo_fn:
+            self._echo_fn(f"  {line}")
 
     def log_action(self, component: str, action: str, details: str = "", outcome: str = ""):
         """
@@ -64,15 +71,15 @@ class ActionLogger:
             log_entry += f" | {details}"
 
         try:
-            with open(self.log_path, "a", encoding="utf-8") as f:
-                f.write(log_entry + "\n")
+            with self._lock:
+                with open(self.log_path, "a", encoding="utf-8") as f:
+                    f.write(log_entry + "\n")
         except Exception as e:
             # Fallback for testing environments
             print(f"Failed to write to action log: {e}")
 
-        # Echo to terminal (dim, non-intrusive)
-        from src.utils.formatting import print_dim
-        print_dim(f"  {log_entry}")
+        if self._echo_fn:
+            self._echo_fn(f"  {log_entry}")
 
     def log_fix_dispatch(self, check: str) -> None:
         """Log that a fix handler is being dispatched."""

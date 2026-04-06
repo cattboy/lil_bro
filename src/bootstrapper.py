@@ -1,4 +1,3 @@
-import ctypes
 import os
 import sys
 import subprocess
@@ -6,13 +5,7 @@ from datetime import datetime
 from .utils.errors import AdminRequiredError, RestorePointError
 from .utils.formatting import prompt_approval, print_step, print_step_done, print_error, print_success
 from .utils.action_logger import action_logger
-
-def is_admin() -> bool:
-    """Check if the current process has administrative privileges."""
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin() != 0
-    except Exception:
-        return False
+from .utils.platform import is_admin
 
 def check_admin():
     """Ensure we have admin privileges, or raise an error."""

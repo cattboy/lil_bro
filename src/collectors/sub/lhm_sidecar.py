@@ -25,6 +25,7 @@ from typing import Optional
 
 from ...utils.formatting import print_step, print_step_done, print_warning, print_info, print_dim
 from ...utils.action_logger import action_logger
+from ...utils.platform import is_admin
 
 LHM_PORT = 8085
 LHM_URL = f"http://localhost:{LHM_PORT}/data.json"
@@ -49,14 +50,6 @@ _LHM_SEARCH_PATHS = [
     r"C:\Program Files (x86)\LibreHardwareMonitor\LibreHardwareMonitor.exe",
     os.path.expandvars(r"%LOCALAPPDATA%\LibreHardwareMonitor\LibreHardwareMonitor.exe"),
 ]
-
-
-def _is_admin() -> bool:
-    """Return True if the current process has administrator privileges."""
-    try:
-        return bool(ctypes.windll.shell32.IsUserAnAdmin())
-    except Exception:
-        return False
 
 
 def _find_elevated_pid(exe_name: str) -> Optional[int]:
@@ -185,7 +178,7 @@ class LHMSidecar:
         cmd = [exe] if is_custom else [exe, "--http-port", str(LHM_PORT)]
 
         try:
-            if _is_admin():
+            if is_admin():
                 # Running as admin — subprocess inherits the token directly.
                 self._process = subprocess.Popen(
                     cmd + parent_flag,

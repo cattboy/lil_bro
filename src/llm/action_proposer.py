@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from src.utils.debug_logger import get_debug_logger
+
 _SYSTEM_PROMPT = (
     "You are a gaming PC configuration assistant. You will receive a JSON object with "
     "hardware info and a list of configuration findings. For each FAIL finding, output a "
@@ -115,7 +117,7 @@ def _call_llm(llm: Any, llm_input: dict) -> list[dict] | None:
             if proposals is not None:
                 return proposals
         except Exception:
-            pass
+            get_debug_logger().warning("LLM completion attempt failed", exc_info=True)
     return None
 
 
