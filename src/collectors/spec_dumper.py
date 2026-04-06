@@ -5,6 +5,7 @@ from .sub.amd_smi_dumper import get_amd_smi
 from .sub.dxdiag_dumper import get_dxdiag
 from .sub.libra_hm_dumper import get_lhm_data
 from .sub.monitor_dumper import get_monitor_refresh_capabilities
+from .sub.nvidia_profile_dumper import get_nvidia_profile
 from .sub.nvidia_smi_dumper import get_nvidia_smi
 from .sub.wmi_dumper import get_wmi_specs
 from ..agent_tools.power_plan import get_active_power_plan
@@ -58,6 +59,7 @@ def dump_system_specs(output_path: str | None = None) -> str:
         "PowerPlan": _collect_power_plan(),
         "GameMode": _collect_game_mode(),
         "TempFolders": _safe_collect(get_temp_sizes),
+        "NVIDIAProfile": _safe_collect(get_nvidia_profile),
     }
 
     try:

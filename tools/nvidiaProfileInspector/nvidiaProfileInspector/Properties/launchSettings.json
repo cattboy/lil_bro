@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "nvidiaProfileInspector": {
+      "commandName": "Project"
+    }
+  }
+}

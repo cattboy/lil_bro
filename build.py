@@ -110,23 +110,41 @@ def build_lhm_server():
         print(f"  Built: {lhm_exe} ({size_mb:.1f} MB)")
 
 
+def check_npi_binary():
+    """Warn if nvidiaProfileInspector.exe is missing from the expected location."""
+    npi_exe = ROOT / "tools" / "nvidiaProfileInspector" / "nvidiaProfileInspector" / "bin" / "Release" / "net48" / "nvidiaProfileInspector.exe"
+    if npi_exe.exists():
+        size_mb = npi_exe.stat().st_size / (1024 * 1024)
+        print(f"  Found: {npi_exe} ({size_mb:.1f} MB)")
+    else:
+        print(
+            "  WARNING: tools/nvidiaProfileInspector/nvidiaProfileInspector.exe not found.\n"
+            "  GPU profile optimization (G-Sync, VSync, DLSS, FPS cap) will be unavailable.\n"
+            "  Build the modified NPI fork and place the exe at that path."
+            # TODO CLAUDE this should build the code from source in C:\1_Coding\2026\lil_bro\tools\nvidiaProfileInspector\nvidiaProfileInspector using "dotnet build -c Release"
+        )
+
+
 def main():
     print("lil_bro build pipeline")
     print("=" * 40)
 
     if "--clean" in sys.argv:
-        print("\n[1/4] Cleaning...")
+        print("\n[1/5] Cleaning...")
         clean()
     else:
-        print("\n[1/4] Clean skipped (use --clean to force)")
+        print("\n[1/5] Clean skipped (use --clean to force)")
 
-    print("\n[2/4] Building lhm-server (thermal sensor server)...")
+    print("\n[2/5] Checking NPI binary (GPU profile optimizer)...")
+    check_npi_binary()
+
+    print("\n[3/5] Building lhm-server (thermal sensor server)...")
     build_lhm_server()
 
-    print("\n[3/4] Building with PyInstaller...")
+    print("\n[4/5] Building with PyInstaller...")
     exe_path = run_pyinstaller()
 
-    print("\n[4/4] Generating integrity manifest...")
+    print("\n[5/5] Generating integrity manifest...")
     generate_manifest(exe_path)
 
     print("\n" + "=" * 40)

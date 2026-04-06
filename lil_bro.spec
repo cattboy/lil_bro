@@ -18,11 +18,16 @@ ROOT = os.path.abspath('.')
 _lhm_server_exe = os.path.join(ROOT, 'tools', 'lhm-server', 'dist', 'lhm-server.exe')
 _lhm_license    = os.path.join(ROOT, 'tools', 'lhm-server', 'LICENSE-LHM.txt')
 
+# Include NVIDIA Profile Inspector binary (committed to repo, modified fork with -exportCustomized).
+_npi_exe = os.path.join(ROOT, 'tools', 'nvidiaProfileInspector', 'nvidiaProfileInspector.exe')
+
 _extra_datas = []
 if os.path.isfile(_lhm_server_exe):
     _extra_datas.append((_lhm_server_exe, 'tools'))
 if os.path.isfile(_lhm_license):
     _extra_datas.append((_lhm_license, 'tools'))
+if os.path.isfile(_npi_exe):
+    _extra_datas.append((_npi_exe, 'tools'))
 
 a = Analysis(
     [os.path.join(ROOT, 'src', 'main.py')],
