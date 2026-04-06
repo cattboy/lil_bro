@@ -1,6 +1,6 @@
 import winreg
 from ..utils.errors import ScannerError
-from ..utils.formatting import print_step, print_step_done, print_warning, print_success, print_error
+from ..utils.action_logger import action_logger
 
 def analyze_game_mode(specs: dict) -> dict:
     """
@@ -49,6 +49,11 @@ def set_game_mode(enabled: bool) -> bool:
             winreg.KEY_SET_VALUE,
         ) as key:
             winreg.SetValueEx(key, "AutoGameModeEnabled", 0, winreg.REG_DWORD, 1 if enabled else 0)
+        action_logger.log_action(
+            "Game Mode",
+            f"Set AutoGameModeEnabled = {1 if enabled else 0}",
+            r"HKCU\SOFTWARE\Microsoft\GameBar",
+        )
         return True
     except Exception as e:
         raise ScannerError(f"Failed to set Game Mode: {e}")
@@ -76,33 +81,3 @@ def get_game_mode_status() -> bool:
         return True
     except Exception as e:
         raise ScannerError(f"Error reading Game Mode registry key: {e}")
-
-def check_game_mode() -> dict:
-    """
-    Runs the Windows Game Mode check.
-    """
-    print_step("Scanning Windows Game Mode status")
-    
-    try:
-        is_enabled = get_game_mode_status()
-        print_step_done(True)
-        
-        result = {
-            "enabled": is_enabled,
-            "status": "OK"
-        }
-        
-        if not is_enabled:
-            result["status"] = "WARNING"
-            result["message"] = "Windows Game Mode is DISABLED. It is recommended to enable this in Windows Settings (Settings > Gaming > Game Mode) for better performance and resource allocation during gaming."
-            print_warning(result["message"])
-        else:
-            result["message"] = "Windows Game Mode is ENABLED."
-            print_success(result["message"])
-            
-        return result
-        
-    except ScannerError as e:
-        print_step_done(False)
-        print_error(str(e))
-        return {"enabled": False, "status": "ERROR", "message": str(e)}

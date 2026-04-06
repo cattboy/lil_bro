@@ -1,6 +1,3 @@
-import os
-import pytest
-from unittest.mock import patch
 from pathlib import Path
 
 from src.utils.paths import (
@@ -8,51 +5,54 @@ from src.utils.paths import (
     get_logs_dir,
     get_specs_path,
     get_action_log_path,
+    get_debug_log_path,
 )
 
 
-@patch.dict(os.environ, {"APPDATA": "/tmp/fake_appdata"})
 def test_get_appdata_dir(tmp_path, monkeypatch):
-    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
     result = get_appdata_dir()
     assert result == tmp_path / "lil_bro"
     assert result.exists()
 
 
-@patch.dict(os.environ, {"APPDATA": "/tmp/fake_appdata"})
 def test_get_logs_dir(tmp_path, monkeypatch):
-    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
     result = get_logs_dir()
     assert result == tmp_path / "lil_bro" / "logs"
     assert result.exists()
 
 
-@patch.dict(os.environ, {"APPDATA": "/tmp/fake_appdata"})
 def test_get_specs_path(tmp_path, monkeypatch):
-    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
     result = get_specs_path()
     assert result.name == "full_specs.json"
-    assert "lil_bro" in str(result)
-    assert "logs" in str(result)
+    assert result == tmp_path / "lil_bro" / "full_specs.json"
+    assert "logs" not in str(result)  # data snapshot, not a log
 
 
-@patch.dict(os.environ, {"APPDATA": "/tmp/fake_appdata"})
 def test_get_action_log_path(tmp_path, monkeypatch):
-    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
     result = get_action_log_path()
     assert result.name == "lil_bro_actions.log"
-    assert "lil_bro" in str(result)
+    assert result == tmp_path / "lil_bro_actions.log"  # CWD root, survives cleanup
+
+
+def test_get_debug_log_path(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = get_debug_log_path()
+    assert result.name == "lil_bro_debug.log"
+    assert result == tmp_path / "lil_bro_debug.log"  # CWD root, survives cleanup
 
 
 def test_appdata_dir_creates_parents(tmp_path, monkeypatch):
-    deep = tmp_path / "nested" / "deep"
-    monkeypatch.setenv("APPDATA", str(deep))
+    monkeypatch.chdir(tmp_path)
     result = get_appdata_dir()
     assert result.exists()
 
 
-def test_fallback_when_no_appdata_env(tmp_path, monkeypatch):
-    """When APPDATA is not set, falls back to Path.home() / AppData / Roaming."""
-    monkeypatch.delenv("APPDATA", raising=False)
+def test_cwd_based_path(tmp_path, monkeypatch):
+    """get_appdata_dir() is relative to CWD, not %APPDATA%."""
+    monkeypatch.chdir(tmp_path)
     result = get_appdata_dir()
-    assert "lil_bro" in str(result)
+    assert result == Path.cwd() / "lil_bro"

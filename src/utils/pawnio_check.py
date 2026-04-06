@@ -2,15 +2,15 @@
 
 import winreg
 
-_PAWNIO_UNINSTALL_KEY = (
-    r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO"
-)
+# PawnIO is a kernel driver service — its registry presence is under Services,
+# not the Uninstall hive (which is only for MSI/NSIS installers).
+_PAWNIO_SERVICE_KEY = r"SYSTEM\CurrentControlSet\Services\PawnIO"
 
 
 def is_pawnio_installed() -> bool:
-    """Return True if PawnIO driver is registered in the Windows Uninstall registry."""
+    """Return True if the PawnIO kernel driver service is registered."""
     try:
-        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _PAWNIO_UNINSTALL_KEY):
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _PAWNIO_SERVICE_KEY):
             return True
     except FileNotFoundError:
         return False

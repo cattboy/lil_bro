@@ -5,6 +5,14 @@ Usage:
     python build.py          # Full build + integrity manifest
     python build.py --clean  # Clean dist/ and build/ first
 
+Steps:
+    [1/5] Clean (optional, --clean flag)
+    [2/5] Fetch latest signed PawnIO.sys from GitHub (update_pawnio.ps1)
+          Falls back to WDK source build if offline / rate-limited / 7-Zip absent.
+    [3/5] Build lhm-server.exe (requires .NET 8 SDK; embeds PawnIO.sys)
+    [4/5] Build lil_bro.exe with PyInstaller
+    [5/5] Generate SHA-256 integrity manifest
+
 Requires: pyinstaller (listed in [project.optional-dependencies] dev)
 """
 
@@ -75,6 +83,44 @@ def generate_manifest(exe_path: Path):
     manifest_path.write_text(json.dumps(manifest, indent=2))
     print(f"  Manifest: {manifest_path}")
     print(f"  SHA-256:  {exe_hash[:32]}...")
+
+
+def run_pawnio_update():
+    """Try to fetch the latest signed PawnIO.sys from GitHub releases.
+
+    Runs tools/PawnIO_Latest_Check/update_pawnio.ps1, which:
+      1. Checks namazso/PawnIO.Setup for a newer release
+      2. Downloads + SHA256-verifies PawnIO_setup.exe if newer
+      3. Extracts the signed PawnIO.sys to tools/PawnIO/dist/PawnIO.sys
+
+    Non-fatal: network failures, rate limits, and missing 7-Zip all exit 0
+    from the script.  If PawnIO.sys is already up to date, this is a no-op.
+    On any failure the lhm-server build falls back to WDK source compilation.
+    """
+    script = ROOT / "tools" / "PawnIO_Latest_Check" / "update_pawnio.ps1"
+    if not script.exists():
+        print("  SKIP: tools/PawnIO_Latest_Check/update_pawnio.ps1 not found")
+        return
+
+    result = subprocess.run(
+        ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(script)],
+        cwd=str(script.parent),
+    )
+
+    target_sys = ROOT / "tools" / "PawnIO" / "dist" / "PawnIO.sys"
+    if result.returncode != 0:
+        print(
+            "  WARNING: PawnIO update script failed — "
+            "lhm-server build will fall back to WDK source compilation."
+        )
+    elif target_sys.exists():
+        size_kb = target_sys.stat().st_size / 1024
+        print(f"  PawnIO.sys ready: {target_sys} ({size_kb:.1f} KB)")
+    else:
+        print(
+            "  WARNING: update_pawnio.ps1 exited cleanly but PawnIO.sys not found — "
+            "lhm-server build will fall back to WDK source compilation."
+        )
 
 
 def build_lhm_server():
@@ -172,6 +218,8 @@ def main():
 
     print("\n[2/5] Building NPI (GPU profile optimizer)...")
     build_npi()
+    print("\n[2/5] Fetching latest signed PawnIO.sys from GitHub...")
+    run_pawnio_update()
 
     print("\n[3/5] Building lhm-server (thermal sensor server)...")
     build_lhm_server()

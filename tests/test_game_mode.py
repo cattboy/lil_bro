@@ -1,6 +1,6 @@
 import pytest
-from unittest.mock import patch, MagicMock, call
-from src.agent_tools.game_mode import get_game_mode_status, check_game_mode, analyze_game_mode, set_game_mode
+from unittest.mock import patch, MagicMock
+from src.agent_tools.game_mode import get_game_mode_status, analyze_game_mode, set_game_mode
 from src.utils.errors import ScannerError
 
 @patch('src.agent_tools.game_mode.winreg')
@@ -9,7 +9,7 @@ def test_get_game_mode_enabled(mock_winreg):
     mock_key = MagicMock()
     mock_winreg.OpenKey.return_value.__enter__.return_value = mock_key
     mock_winreg.QueryValueEx.return_value = (1, 4) # 4 is REG_DWORD
-    
+
     assert get_game_mode_status() is True
 
 @patch('src.agent_tools.game_mode.winreg')
@@ -17,7 +17,7 @@ def test_get_game_mode_disabled(mock_winreg):
     mock_key = MagicMock()
     mock_winreg.OpenKey.return_value.__enter__.return_value = mock_key
     mock_winreg.QueryValueEx.return_value = (0, 4)
-    
+
     assert get_game_mode_status() is False
 
 @patch('src.agent_tools.game_mode.winreg')
@@ -26,29 +26,10 @@ def test_get_game_mode_missing_key(mock_winreg):
     # Missing key implies default behavior (Enabled)
     assert get_game_mode_status() is True
 
-@patch('src.agent_tools.game_mode.get_game_mode_status')
-def test_check_game_mode_ok(mock_get_status):
-    mock_get_status.return_value = True
-    result = check_game_mode()
-    assert result["status"] == "OK"
-    assert result["enabled"] is True
 
-@patch('src.agent_tools.game_mode.get_game_mode_status')
-def test_check_game_mode_warning(mock_get_status):
-    mock_get_status.return_value = False
-    result = check_game_mode()
-    assert result["status"] == "WARNING"
-    assert result["enabled"] is False
-
-@patch('src.agent_tools.game_mode.get_game_mode_status')
-def test_check_game_mode_error(mock_get_status):
-    mock_get_status.side_effect = ScannerError("Registry locked")
-    result = check_game_mode()
-    assert result["status"] == "ERROR"
-
-
+@patch('src.agent_tools.game_mode.action_logger')
 @patch('src.agent_tools.game_mode.winreg')
-def test_set_game_mode_enable(mock_winreg):
+def test_set_game_mode_enable(mock_winreg, mock_logger):
     mock_key = MagicMock()
     mock_winreg.CreateKeyEx.return_value.__enter__.return_value = mock_key
     mock_winreg.REG_DWORD = 4
@@ -57,10 +38,14 @@ def test_set_game_mode_enable(mock_winreg):
 
     assert result is True
     mock_winreg.SetValueEx.assert_called_once_with(mock_key, "AutoGameModeEnabled", 0, 4, 1)
+    mock_logger.log_action.assert_called_once_with(
+        "Game Mode", "Set AutoGameModeEnabled = 1", r"HKCU\SOFTWARE\Microsoft\GameBar"
+    )
 
 
+@patch('src.agent_tools.game_mode.action_logger')
 @patch('src.agent_tools.game_mode.winreg')
-def test_set_game_mode_disable(mock_winreg):
+def test_set_game_mode_disable(mock_winreg, mock_logger):
     mock_key = MagicMock()
     mock_winreg.CreateKeyEx.return_value.__enter__.return_value = mock_key
     mock_winreg.REG_DWORD = 4
@@ -69,6 +54,9 @@ def test_set_game_mode_disable(mock_winreg):
 
     assert result is True
     mock_winreg.SetValueEx.assert_called_once_with(mock_key, "AutoGameModeEnabled", 0, 4, 0)
+    mock_logger.log_action.assert_called_once_with(
+        "Game Mode", "Set AutoGameModeEnabled = 0", r"HKCU\SOFTWARE\Microsoft\GameBar"
+    )
 
 
 @patch('src.agent_tools.game_mode.winreg')

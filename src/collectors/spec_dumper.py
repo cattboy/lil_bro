@@ -13,6 +13,7 @@ from ..agent_tools.game_mode import get_game_mode_status
 from ..agent_tools.temp_audit import get_temp_sizes
 from ..utils.formatting import print_step, print_step_done, print_error, print_warning
 from ..utils.paths import get_specs_path
+from ..utils.debug_logger import get_debug_logger
 
 
 def _safe_collect(fn, *args, **kwargs):
@@ -20,6 +21,7 @@ def _safe_collect(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except Exception as e:
+        get_debug_logger().warning("Collector %s failed: %s", getattr(fn, "__name__", repr(fn)), e)
         return {"error": str(e)}
 
 
@@ -41,7 +43,7 @@ def _collect_game_mode() -> dict:
 def dump_system_specs(output_path: str | None = None) -> str:
     """
     Consolidates data from all hardware tools into a single JSON file.
-    Defaults to <project_root>/logs/full_specs.json.
+    Defaults to ./lil_bro/full_specs.json.
     """
     if output_path is None:
         output_path = str(get_specs_path())
@@ -65,9 +67,11 @@ def dump_system_specs(output_path: str | None = None) -> str:
     try:
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(specs, f, indent=2, default=str)
+        get_debug_logger().info("System specs saved to %s", output_path)
         print_step_done(True)
         return output_path
     except Exception as e:
+        get_debug_logger().error("Failed to save specs to %s: %s", output_path, e)
         print_step_done(False)
         print_error(f"Failed to save {output_path}: {e}")
         return ""

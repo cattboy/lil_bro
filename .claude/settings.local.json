@@ -26,8 +26,8 @@
       "Bash(python build.py --clean)",
       "Bash(git fetch:*)",
       "Bash(git clone:*)",
-      "Read(//c/Users/Owner/.gstack/analytics/**)",
-      "Read(//c/Users/Owner/.gstack/**)"
+      "Bash(python -m pytest tests/test_lhm_sidecar.py -v)",
+      "Bash(curl -s http://localhost:8085/data.json)"
     ]
   }
 }
