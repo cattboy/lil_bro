@@ -7,6 +7,7 @@ from src.agent_tools.display import analyze_display
 from src.agent_tools.game_mode import analyze_game_mode
 from src.agent_tools.power_plan import analyze_power_plan
 from src.agent_tools.xmp_check import analyze_xmp
+from src.agent_tools.nvidia_profile import analyze_nvidia_profile
 from src.agent_tools.rebar import analyze_rebar
 from src.agent_tools.temp_audit import analyze_temp_folders
 from src.agent_tools.mouse import check_polling_rate
@@ -148,6 +149,10 @@ def _run_pipeline(lhm: LHMSidecar, thermal: ThermalMonitor):
             analyze_rebar(specs),
             analyze_temp_folders(specs),
         ]
+
+        nvidia_finding = analyze_nvidia_profile(specs)
+        if nvidia_finding["status"] != "SKIPPED":
+            findings.append(nvidia_finding)
 
         thermal_finding = analyze_thermals(
             peak_temps,

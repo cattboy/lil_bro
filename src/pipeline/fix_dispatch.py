@@ -93,6 +93,25 @@ def _fix_game_mode(specs: dict) -> bool:
         return False
 
 
+def _fix_nvidia_profile(specs: dict) -> bool:
+    """Applies optimized NVIDIA driver profile via NPI."""
+    from src.agent_tools.nvidia_profile_setter import fix_nvidia_profile
+
+    try:
+        fix_nvidia_profile(specs)
+        print_success(
+            "[nvidia_profile] NVIDIA driver profile optimized "
+            "(G-Sync, VSync, FPS cap, DLSS, power management)."
+        )
+        return True
+    except FileNotFoundError as e:
+        print_error(f"[nvidia_profile] {e}")
+        return False
+    except Exception as e:
+        print_error(f"[nvidia_profile] Failed: {e}")
+        return False
+
+
 # ---- Dispatch Registry ----
 # Key: check name (matches proposal["finding"])
 # Value: callable with signature (specs: dict) -> bool
@@ -101,6 +120,7 @@ FIX_REGISTRY: dict[str, Callable[[dict], bool]] = {
     "power_plan": _fix_power_plan,
     "temp_folders": _fix_temp_folders,
     "game_mode": _fix_game_mode,
+    "nvidia_profile": _fix_nvidia_profile,
 }
 
 

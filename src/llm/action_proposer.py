@@ -67,6 +67,13 @@ def build_llm_input(hardware: dict, findings: list[dict]) -> dict:
                 "cpu_peak": f.get("cpu_peak"),
                 "gpu_peak": f.get("gpu_peak"),
             })
+        elif check == "nvidia_profile":
+            entry.update({
+                "gpu_model": f.get("current", {}).get("gpu_model", "Unknown"),
+                "missing_optimizations": [
+                    s["name"] for s in f.get("sub_findings", []) if not s.get("ok")
+                ],
+            })
 
         llm_findings.append(entry)
 
@@ -197,6 +204,17 @@ _FALLBACK: dict[str, dict] = {
         ),
         "proposed_action": "Improve cooling: clean dust filters, check thermal paste, optimize case airflow (manual)",
         "can_auto_fix": False,
+    },
+    "nvidia_profile": {
+        "finding": "nvidia_profile",
+        "severity": "HIGH",
+        "explanation": (
+            "Your NVIDIA driver profile isn't optimized for gaming — G-Sync, VSync, "
+            "FPS cap, and DLSS settings aren't configured for your hardware. "
+            "This is like buying a sports car and leaving it in eco mode."
+        ),
+        "proposed_action": "Apply optimized NVIDIA driver profile (G-Sync + VSync + FPS cap + ReBar + DLSS)",
+        "can_auto_fix": True,
     },
 }
 

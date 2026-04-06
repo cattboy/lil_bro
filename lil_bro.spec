@@ -19,11 +19,16 @@ _lhm_server_exe = os.path.join(ROOT, 'tools', 'lhm-server', 'dist', 'lhm-server.
 _lhm_license    = os.path.join(ROOT, 'tools', 'lhm-server', 'LICENSE-LHM.txt')
 _pawnio_sys     = os.path.join(ROOT, 'tools', 'PawnIO', 'dist', 'PawnIO.sys')
 
+# Include NVIDIA Profile Inspector binary (committed to repo, modified fork with -exportCustomized).
+_npi_exe = os.path.join(ROOT, 'tools', 'nvidiaProfileInspector', 'nvidiaProfileInspector.exe')
+
 _extra_datas = []
 if os.path.isfile(_lhm_server_exe):
     _extra_datas.append((_lhm_server_exe, 'tools'))
 if os.path.isfile(_lhm_license):
     _extra_datas.append((_lhm_license, 'tools'))
+if os.path.isfile(_npi_exe):
+    _extra_datas.append((_npi_exe, 'tools'))
 # Bundle PawnIO.sys alongside lhm-server.exe as a disk fallback — the .NET
 # EmbeddedResource can silently miss it on incremental builds.
 if os.path.isfile(_pawnio_sys):
