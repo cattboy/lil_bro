@@ -43,3 +43,14 @@ def get_action_log_path() -> Path:
 def get_debug_log_path() -> Path:
     """Return the path for the persistent debug log (CWD root, survives cleanup)."""
     return Path.cwd() / "lil_bro_debug.log"
+
+
+def get_temp_dir() -> Path:
+    """Return ``./lil_bro/tmp/``, creating it if needed.
+
+    All subprocess temp files must use this instead of ``tempfile.gettempdir()``
+    to avoid scattering artifacts in ``%TEMP%``.
+    """
+    d = get_appdata_dir() / "tmp"
+    d.mkdir(parents=True, exist_ok=True)
+    return d

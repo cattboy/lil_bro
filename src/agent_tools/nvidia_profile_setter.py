@@ -18,7 +18,7 @@ from typing import Any
 from ..collectors.sub.nvidia_profile_dumper import (
     SETTING_IDS, TARGET_VALUES, find_npi_exe,
 )
-from ..utils.paths import get_appdata_dir
+from ..utils.paths import get_appdata_dir, get_temp_dir
 from ..utils.action_logger import action_logger
 
 
@@ -54,7 +54,7 @@ def backup_nvidia_profile(npi_exe: str) -> str:
     backup_name = f"nv_profile_{timestamp}.nip"
     backup_path = backup_dir / backup_name
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as tmpdir:
         exported = _export_current_profile(npi_exe, tmpdir)
         shutil.copy2(exported, str(backup_path))
 
@@ -128,7 +128,7 @@ def build_optimized_nip(source_nip_path: str, target_settings: dict[int, int]) -
             ET.SubElement(ps, "ValueType").text = "Dword"
 
     # Write modified XML to temp file, preserving UTF-16 encoding
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".nip")
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".nip", dir=str(get_temp_dir()))
     os.close(tmp_fd)
 
     tree = ET.ElementTree(root)
@@ -188,7 +188,7 @@ def fix_nvidia_profile(
     action_logger.log_action("NPI Fix", "Backup created", backup_path)
 
     # 2. Export fresh .nip for modification
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as tmpdir:
         source_nip = _export_current_profile(npi_exe, tmpdir)
 
         # 3. Calculate target settings

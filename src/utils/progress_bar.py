@@ -17,7 +17,7 @@ import time
 
 from colorama import Fore, Style
 
-from src.utils.formatting import _UNICODE_SAFE
+from src.utils.formatting import _ASCII_FALLBACK
 
 _FPS = 10  # animation redraws per second
 
@@ -49,7 +49,7 @@ class AnimatedProgressBar:
             self._bar_width = 30
 
         # Unicode vs ASCII character sets
-        if _UNICODE_SAFE:
+        if _ASCII_FALLBACK:
             self._fill_char = "#"
             self._glow_chars = ["=", "-", "."]
             self._empty_char = "."

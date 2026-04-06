@@ -2,7 +2,7 @@
 tests/test_formatting.py — Design system compliance + formatting function tests.
 
 Covers:
-  - _UNICODE_SAFE detection (3 tests)
+  - _ASCII_FALLBACK detection (3 tests)
   - Unicode fallbacks for icon-bearing functions (8 tests)
   - print_key_value (3 tests)
   - print_section_divider (4 tests)
@@ -25,7 +25,7 @@ from colorama import Fore, Style
 import src.utils.formatting as formatting
 
 
-# ── _UNICODE_SAFE detection (3 tests) ───────────────────────────────────────
+# ── _ASCII_FALLBACK detection (3 tests) ───────────────────────────────────────
 # These test the init-time flag by reloading the module with patched encoding.
 # They don't use capsys (reload disrupts it) — they only check the flag value.
 
@@ -38,24 +38,24 @@ class _FakeStdout:
 
 
 def test_unicode_safe_utf8():
-    """UTF-8 terminal → _UNICODE_SAFE is False (Unicode icons used)."""
+    """UTF-8 terminal → _ASCII_FALLBACK is False (Unicode icons used)."""
     saved = sys.stdout
     try:
         sys.stdout = _FakeStdout('utf-8')
         importlib.reload(formatting)
-        assert formatting._UNICODE_SAFE is False
+        assert formatting._ASCII_FALLBACK is False
     finally:
         sys.stdout = saved
         importlib.reload(formatting)
 
 
 def test_unicode_safe_cp437():
-    """CP437 terminal (Windows CMD) → _UNICODE_SAFE is True (ASCII fallbacks)."""
+    """CP437 terminal (Windows CMD) → _ASCII_FALLBACK is True (ASCII fallbacks)."""
     saved = sys.stdout
     try:
         sys.stdout = _FakeStdout('cp437')
         importlib.reload(formatting)
-        assert formatting._UNICODE_SAFE is True
+        assert formatting._ASCII_FALLBACK is True
     finally:
         sys.stdout = saved
         importlib.reload(formatting)
@@ -76,18 +76,18 @@ def test_unicode_safe_no_encoding_attr():
     try:
         sys.stdout = bare
         importlib.reload(formatting)
-        assert formatting._UNICODE_SAFE is False
+        assert formatting._ASCII_FALLBACK is False
     finally:
         sys.stdout = saved
         importlib.reload(formatting)
 
 
 # ── Unicode fallbacks (8 tests) ─────────────────────────────────────────────
-# Monkeypatch _UNICODE_SAFE directly to avoid module reload issues with capsys.
+# Monkeypatch _ASCII_FALLBACK directly to avoid module reload issues with capsys.
 
 def test_print_success_unicode(capsys, monkeypatch):
     """Unicode mode: print_success uses ✓."""
-    monkeypatch.setattr(formatting, '_UNICODE_SAFE', False)
+    monkeypatch.setattr(formatting, '_ASCII_FALLBACK', False)
     formatting.print_success("done")
     out = capsys.readouterr().out
     assert "\u2713" in out
@@ -95,7 +95,7 @@ def test_print_success_unicode(capsys, monkeypatch):
 
 def test_print_success_ascii(capsys, monkeypatch):
     """ASCII mode: print_success uses OK."""
-    monkeypatch.setattr(formatting, '_UNICODE_SAFE', True)
+    monkeypatch.setattr(formatting, '_ASCII_FALLBACK', True)
     formatting.print_success("done")
     out = capsys.readouterr().out
     assert "OK " in out
@@ -103,7 +103,7 @@ def test_print_success_ascii(capsys, monkeypatch):
 
 def test_print_warning_unicode(capsys, monkeypatch):
     """Unicode mode: print_warning uses ⚠."""
-    monkeypatch.setattr(formatting, '_UNICODE_SAFE', False)
+    monkeypatch.setattr(formatting, '_ASCII_FALLBACK', False)
     formatting.print_warning("caution")
     out = capsys.readouterr().out
     assert "\u26a0" in out
@@ -111,7 +111,7 @@ def test_print_warning_unicode(capsys, monkeypatch):
 
 def test_print_warning_ascii(capsys, monkeypatch):
     """ASCII mode: print_warning uses WARN."""
-    monkeypatch.setattr(formatting, '_UNICODE_SAFE', True)
+    monkeypatch.setattr(formatting, '_ASCII_FALLBACK', True)
     formatting.print_warning("caution")
     out = capsys.readouterr().out
     assert "WARN " in out
@@ -119,7 +119,7 @@ def test_print_warning_ascii(capsys, monkeypatch):
 
 def test_print_error_unicode(capsys, monkeypatch):
     """Unicode mode: print_error uses ✗."""
-    monkeypatch.setattr(formatting, '_UNICODE_SAFE', False)
+    monkeypatch.setattr(formatting, '_ASCII_FALLBACK', False)
     formatting.print_error("broke")
     out = capsys.readouterr().out
     assert "\u2717" in out
@@ -127,7 +127,7 @@ def test_print_error_unicode(capsys, monkeypatch):
 
 def test_print_error_ascii(capsys, monkeypatch):
     """ASCII mode: print_error uses FAIL."""
-    monkeypatch.setattr(formatting, '_UNICODE_SAFE', True)
+    monkeypatch.setattr(formatting, '_ASCII_FALLBACK', True)
     formatting.print_error("broke")
     out = capsys.readouterr().out
     assert "FAIL " in out
@@ -135,7 +135,7 @@ def test_print_error_ascii(capsys, monkeypatch):
 
 def test_print_info_unicode(capsys, monkeypatch):
     """Unicode mode: print_info uses ℹ."""
-    monkeypatch.setattr(formatting, '_UNICODE_SAFE', False)
+    monkeypatch.setattr(formatting, '_ASCII_FALLBACK', False)
     formatting.print_info("note")
     out = capsys.readouterr().out
     assert "\u2139" in out
@@ -143,7 +143,7 @@ def test_print_info_unicode(capsys, monkeypatch):
 
 def test_print_info_ascii(capsys, monkeypatch):
     """ASCII mode: print_info uses INFO."""
-    monkeypatch.setattr(formatting, '_UNICODE_SAFE', True)
+    monkeypatch.setattr(formatting, '_ASCII_FALLBACK', True)
     formatting.print_info("note")
     out = capsys.readouterr().out
     assert "INFO " in out

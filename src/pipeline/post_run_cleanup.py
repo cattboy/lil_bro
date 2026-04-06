@@ -16,25 +16,18 @@ import os
 import shutil
 import subprocess
 import time
-import winreg
 from pathlib import Path
 from typing import Optional
 
 from src.collectors.sub.lhm_sidecar import LHMSidecar
 from src.utils.formatting import print_info, print_warning, print_dim
 from src.utils.action_logger import action_logger
+from src.utils.debug_logger import get_debug_logger
+from src.utils.platform import is_admin
 
 _PAWNIO_SERVICE = "PawnIO"
 _PAWNIO_UNINSTALL_KEY = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO"
 _MOVEFILE_DELAY_UNTIL_REBOOT = 4
-
-
-def _is_admin() -> bool:
-    """Return True if the current process has administrator privileges."""
-    try:
-        return bool(ctypes.windll.shell32.IsUserAnAdmin())
-    except Exception:
-        return False
 
 
 def _pawnio_service_exists() -> bool:
@@ -88,7 +81,7 @@ def _uninstall_pawnio() -> None:
     Requires admin privileges -- skips silently if not elevated, since PawnIO
     would not have been installed without admin in the first place.
     """
-    if not _is_admin():
+    if not is_admin():
         return
 
     pawnio_exists = _pawnio_service_exists()
@@ -131,6 +124,7 @@ def _uninstall_pawnio() -> None:
 
     # 4. Remove the Uninstall sentinel key written by lhm-server on install
     try:
+        import winreg
         winreg.DeleteKey(winreg.HKEY_LOCAL_MACHINE, _PAWNIO_UNINSTALL_KEY)
     except (FileNotFoundError, OSError):
         pass
@@ -148,6 +142,31 @@ def _cleanup_cwd_tempdir() -> None:
         pass
 
 
+def _cleanup_stale_mei() -> None:
+    """Remove orphaned _MEI* directories left by prior crashed runs.
+
+    PyInstaller onefile extracts to CWD/_MEIxxxxxx (via runtime_tmpdir='.').
+    Normal exits clean up automatically, but crashes leave orphans.
+    Skip the current process's own _MEI directory (sys._MEIPASS).
+    """
+    import sys as _sys
+
+    current_mei = getattr(_sys, "_MEIPASS", None)
+    cwd = Path.cwd()
+
+    for entry in cwd.iterdir():
+        if not entry.is_dir() or not entry.name.startswith("_MEI"):
+            continue
+        # Don't delete our own extraction directory
+        if current_mei and entry == Path(current_mei):
+            continue
+        try:
+            shutil.rmtree(entry)
+            action_logger.log_action("Cleanup", "Removed stale PyInstaller dir", str(entry))
+        except OSError:
+            pass
+
+
 def post_run_cleanup(lhm: Optional[LHMSidecar]) -> None:
     """Tear down all services and remove all runtime artifacts.
 
@@ -162,18 +181,24 @@ def post_run_cleanup(lhm: Optional[LHMSidecar]) -> None:
         try:
             lhm.stop()
         except Exception:
-            pass
+            get_debug_logger().warning("LHM sidecar stop failed during cleanup", exc_info=True)
 
     # 2. Uninstall PawnIO kernel driver + service + registry
     try:
         _uninstall_pawnio()
     except Exception:
-        pass
+        get_debug_logger().warning("PawnIO uninstall failed during cleanup", exc_info=True)
 
     # 3. Remove CWD ./lil_bro/ temp folder
     try:
         _cleanup_cwd_tempdir()
     except Exception:
-        pass
+        get_debug_logger().warning("Temp dir cleanup failed during cleanup", exc_info=True)
+
+    # 4. Remove orphaned _MEI* dirs from prior crashed runs
+    try:
+        _cleanup_stale_mei()
+    except Exception:
+        get_debug_logger().warning("Stale _MEI cleanup failed during cleanup", exc_info=True)
 
     print_dim("  Cleanup complete.")

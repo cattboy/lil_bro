@@ -95,6 +95,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    runtime_tmpdir='.',  # Extract _MEI* to CWD, not %TEMP% — keep all artifacts local
     uac_admin=True,     # Embeds requireAdministrator manifest
     icon=None,          # TODO: Add icon when ready
 )

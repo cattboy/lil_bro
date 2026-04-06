@@ -12,6 +12,7 @@ import multiprocessing
 import os
 import subprocess
 import time
+from pathlib import Path
 from typing import Optional
 
 from ..utils.formatting import (
@@ -25,7 +26,7 @@ from ..utils.formatting import (
 
 # ── Cinebench discovery ──────────────────────────────────────────────────────
 
-_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
 
 _CINEBENCH_SEARCH_PATHS = [
     # Bundled with lil_bro (future installer puts it here)
@@ -182,23 +183,26 @@ class BenchmarkRunner:
         cb_flag = "g_CinebenchAllTests=true" if full_suite else "g_CinebenchCpu1Test=true"
 
         try:
-            # 'start /b /wait "parentconsole"' captures console output from the GUI app
-            cmd = (
-                f'start /b /wait "parentconsole" '
-                f'"{self.cinebench_path}" {cb_flag}'
+            proc = subprocess.Popen(
+                [str(self.cinebench_path), cb_flag],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
-
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=_CINEBENCH_TIMEOUT,
-            )
+            try:
+                stdout, stderr = proc.communicate(timeout=_CINEBENCH_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    capture_output=True,
+                )
+                proc.communicate()
+                raise
 
             print_step_done(True)
 
-            out = (result.stdout or "") + "\n" + (result.stderr or "")
+            out = (stdout.decode("utf-8", errors="replace") + "\n" +
+                   stderr.decode("utf-8", errors="replace"))
             scores = self._parse_output(out)
 
             return {

@@ -8,11 +8,12 @@ from src.utils.formatting import (
     print_header, print_info, print_warning, print_error,
     print_success, print_key_value, print_prompt,
 )
+from src.collectors.sub.lhm_sidecar import LHMSidecar
 from src.pipeline._state import get_llm, set_llm
 from src.pipeline.phases import run_optimization_pipeline
 
 
-def menu_loop():
+def menu_loop(startup_lhm: LHMSidecar):
     """3-option main menu: Pipeline, AI Setup, Exit."""
     while True:
         print_header("Main Menu")
@@ -31,7 +32,7 @@ def menu_loop():
         choice = input().strip()
 
         if choice == '1':
-            run_optimization_pipeline()
+            run_optimization_pipeline(startup_lhm, llm=get_llm())
         elif choice == '2':
             setup_ai_model()
         elif choice == '3':

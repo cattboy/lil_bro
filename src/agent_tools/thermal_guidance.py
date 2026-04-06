@@ -47,7 +47,7 @@ def analyze_thermals(
 
     # Derive peaks if not provided
     if cpu_peak is None:
-        cpu_peak = _derive_cpu_temp(peak_temps)
+        cpu_peak = derive_cpu_temp(peak_temps)
 
     if gpu_peak is None:
         gpu_temps = [v for k, v in peak_temps.items() if "gpu" in k.lower()]
@@ -138,7 +138,7 @@ def _gpu_guidance(peak: float) -> str:
 _CPU_EXCLUDE_TERMS = ("hotspot", "hot spot", "vrm", "vr ", "core max", "max core")
 
 
-def _derive_cpu_temp(temps: dict[str, float]) -> Optional[float]:
+def derive_cpu_temp(temps: dict[str, float]) -> Optional[float]:
     """Extract the CPU die temperature from a sensor snapshot.
 
     Priority order:
@@ -169,7 +169,7 @@ def _derive_cpu_temp(temps: dict[str, float]) -> Optional[float]:
     return max(safe) if safe else None
 
 
-def _derive_gpu_temp(temps: dict[str, float]) -> Optional[float]:
+def derive_gpu_temp(temps: dict[str, float]) -> Optional[float]:
     """Pick the most representative GPU temperature from a snapshot."""
     gpu = [v for k, v in temps.items() if "gpu" in k.lower()]
     return max(gpu) if gpu else None
@@ -208,9 +208,9 @@ def check_idle_thermals(
         }
 
     if cpu_temp is None:
-        cpu_temp = _derive_cpu_temp(temps)
+        cpu_temp = derive_cpu_temp(temps)
     if gpu_temp is None:
-        gpu_temp = _derive_gpu_temp(temps)
+        gpu_temp = derive_gpu_temp(temps)
 
     warnings = []
 

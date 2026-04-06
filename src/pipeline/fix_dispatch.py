@@ -2,7 +2,7 @@
 Fix dispatch registry -- maps check names to executable fix functions.
 
 Each fix handler has the signature: (specs: dict) -> bool
-To add a new auto-fixable check, add one handler function and one dict entry.
+To add a new auto-fixable check, decorate the handler with @register_fix("check_name").
 """
 
 from collections.abc import Callable
@@ -10,7 +10,18 @@ from collections.abc import Callable
 from src.utils.action_logger import action_logger
 from src.utils.formatting import print_success, print_error
 
+FIX_REGISTRY: dict[str, Callable[[dict], bool]] = {}
 
+
+def register_fix(check_name: str) -> Callable:
+    """Decorator that registers a fix handler under the given check name."""
+    def decorator(fn: Callable[[dict], bool]) -> Callable[[dict], bool]:
+        FIX_REGISTRY[check_name] = fn
+        return fn
+    return decorator
+
+
+@register_fix("display")
 def _fix_display(specs: dict) -> bool:
     """Sets monitor to highest available refresh rate."""
     from src.collectors.sub.monitor_dumper import get_all_displays
@@ -41,6 +52,7 @@ def _fix_display(specs: dict) -> bool:
         return False
 
 
+@register_fix("power_plan")
 def _fix_power_plan(specs: dict) -> bool:
     """Switches to a high-performance power plan."""
     from src.agent_tools.power_plan import (
@@ -67,6 +79,7 @@ def _fix_power_plan(specs: dict) -> bool:
         return False
 
 
+@register_fix("temp_folders")
 def _fix_temp_folders(specs: dict) -> bool:
     """Cleans temporary file directories."""
     from src.agent_tools.temp_audit import clean_temp_folders
@@ -80,6 +93,7 @@ def _fix_temp_folders(specs: dict) -> bool:
         return False
 
 
+@register_fix("game_mode")
 def _fix_game_mode(specs: dict) -> bool:
     """Enables Windows Game Mode via registry."""
     from src.agent_tools.game_mode import set_game_mode
@@ -93,6 +107,7 @@ def _fix_game_mode(specs: dict) -> bool:
         return False
 
 
+@register_fix("nvidia_profile")
 def _fix_nvidia_profile(specs: dict) -> bool:
     """Applies optimized NVIDIA driver profile via NPI."""
     from src.agent_tools.nvidia_profile_setter import fix_nvidia_profile
@@ -110,18 +125,6 @@ def _fix_nvidia_profile(specs: dict) -> bool:
     except Exception as e:
         print_error(f"[nvidia_profile] Failed: {e}")
         return False
-
-
-# ---- Dispatch Registry ----
-# Key: check name (matches proposal["finding"])
-# Value: callable with signature (specs: dict) -> bool
-FIX_REGISTRY: dict[str, Callable[[dict], bool]] = {
-    "display": _fix_display,
-    "power_plan": _fix_power_plan,
-    "temp_folders": _fix_temp_folders,
-    "game_mode": _fix_game_mode,
-    "nvidia_profile": _fix_nvidia_profile,
-}
 
 
 def execute_fix(check: str, specs: dict) -> bool:

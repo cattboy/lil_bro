@@ -109,7 +109,7 @@ def test_start_exe_not_found(mock_port, mock_find):
 # ── LHMSidecar.start — successful launch (full LHM) ──────────────────────────
 
 @patch("src.collectors.sub.lhm_sidecar.time.sleep")
-@patch("src.collectors.sub.lhm_sidecar._is_admin", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.is_admin", return_value=True)
 @patch("src.collectors.sub.lhm_sidecar.time.monotonic")
 @patch("src.collectors.sub.lhm_sidecar._is_lhm_responding")
 @patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
@@ -136,7 +136,7 @@ def test_start_launches_full_lhm_successfully(mock_port, mock_find, mock_popen, 
 
 # ── LHMSidecar.start — custom server launches without --http-port ─────────────
 
-@patch("src.collectors.sub.lhm_sidecar._is_admin", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.is_admin", return_value=True)
 @patch("src.collectors.sub.lhm_sidecar.time.sleep")
 @patch("src.collectors.sub.lhm_sidecar.time.monotonic")
 @patch("src.collectors.sub.lhm_sidecar._is_lhm_responding")
@@ -167,7 +167,7 @@ def test_start_launches_custom_server_no_port_flag(mock_port, mock_find, mock_po
 
 # ── LHMSidecar.start — launch timeout ────────────────────────────────────────
 
-@patch("src.collectors.sub.lhm_sidecar._is_admin", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.is_admin", return_value=True)
 @patch("src.collectors.sub.lhm_sidecar.time.sleep")
 @patch("src.collectors.sub.lhm_sidecar.time.monotonic")
 @patch("src.collectors.sub.lhm_sidecar._is_lhm_responding", return_value=False)
@@ -262,7 +262,7 @@ def test_kill_process_clears_process_ref():
 
 # ── Regression: ISSUE-004 — lhm-server.exe corrupts parent console input mode ──
 
-@patch("src.collectors.sub.lhm_sidecar._is_admin", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.is_admin", return_value=True)
 @patch("src.collectors.sub.lhm_sidecar.time.sleep")
 @patch("src.collectors.sub.lhm_sidecar.time.monotonic")
 @patch("src.collectors.sub.lhm_sidecar._is_lhm_responding")
@@ -312,7 +312,7 @@ def test_fetch_data_failure(mock_urlopen):
 
 # ── Early exit on crash ───────────────────────────────────────────────────────
 
-@patch("src.collectors.sub.lhm_sidecar._is_admin", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.is_admin", return_value=True)
 @patch("src.collectors.sub.lhm_sidecar.time.sleep")
 @patch("src.collectors.sub.lhm_sidecar.time.monotonic")
 @patch("src.collectors.sub.lhm_sidecar._is_lhm_responding", return_value=False)
@@ -341,7 +341,7 @@ def test_start_early_exit_on_crash(mock_port, mock_find, mock_popen, mock_resp, 
 
 # ── Stderr captured on crash ──────────────────────────────────────────────────
 
-@patch("src.collectors.sub.lhm_sidecar._is_admin", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.is_admin", return_value=True)
 @patch("src.collectors.sub.lhm_sidecar.time.sleep")
 @patch("src.collectors.sub.lhm_sidecar.time.monotonic")
 @patch("src.collectors.sub.lhm_sidecar._is_lhm_responding", return_value=False)

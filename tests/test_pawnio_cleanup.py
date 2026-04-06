@@ -110,7 +110,7 @@ class TestUninstallPawnio:
 
     def test_skips_when_not_admin(self):
         from src.pipeline.post_run_cleanup import _uninstall_pawnio
-        with patch("src.pipeline.post_run_cleanup._is_admin", return_value=False), \
+        with patch("src.pipeline.post_run_cleanup.is_admin", return_value=False), \
              patch("subprocess.run") as mock_run:
             _uninstall_pawnio()
             mock_run.assert_not_called()
@@ -118,7 +118,7 @@ class TestUninstallPawnio:
     def test_skips_when_nothing_to_clean(self):
         from src.pipeline.post_run_cleanup import _uninstall_pawnio
         sc_not_found = self._make_sc_result(1060)
-        with patch("src.pipeline.post_run_cleanup._is_admin", return_value=True), \
+        with patch("src.pipeline.post_run_cleanup.is_admin", return_value=True), \
              patch("subprocess.run", return_value=sc_not_found), \
              patch("os.path.isfile", return_value=False), \
              patch("os.remove") as mock_remove:
@@ -132,7 +132,7 @@ class TestUninstallPawnio:
         sc_deleted = self._make_sc_result(0)
         sc_calls = iter([sc_found, sc_found, sc_deleted])
 
-        with patch("src.pipeline.post_run_cleanup._is_admin", return_value=True), \
+        with patch("src.pipeline.post_run_cleanup.is_admin", return_value=True), \
              patch("subprocess.run", side_effect=lambda *a, **kw: next(sc_calls)), \
              patch("os.path.isfile", return_value=True), \
              patch("os.remove") as mock_remove, \
@@ -151,7 +151,7 @@ class TestUninstallPawnio:
         mock_kernel32 = MagicMock()
         mock_kernel32.MoveFileExW.return_value = 1  # success
 
-        with patch("src.pipeline.post_run_cleanup._is_admin", return_value=True), \
+        with patch("src.pipeline.post_run_cleanup.is_admin", return_value=True), \
              patch("subprocess.run", side_effect=lambda *a, **kw: next(sc_calls)), \
              patch("os.path.isfile", return_value=True), \
              patch("os.remove", side_effect=PermissionError("locked")), \
@@ -167,3 +167,41 @@ class TestUninstallPawnio:
             args = mock_kernel32.MoveFileExW.call_args[0]
             assert args[1] is None
             assert args[2] == 4
+
+
+# ---------------------------------------------------------------------------
+# _cleanup_stale_mei — orphaned PyInstaller extraction dirs
+# ---------------------------------------------------------------------------
+
+class TestCleanupStaleMei:
+
+    def test_no_mei_dirs_is_noop(self, tmp_path, monkeypatch):
+        """When CWD has no _MEI dirs, nothing happens."""
+        from src.pipeline.post_run_cleanup import _cleanup_stale_mei
+        (tmp_path / "somefile.txt").touch()
+        monkeypatch.chdir(tmp_path)
+        _cleanup_stale_mei()  # must not crash
+
+    def test_removes_orphaned_mei_dir(self, tmp_path, monkeypatch):
+        """Orphaned _MEI dirs (not our own) must be removed."""
+        from src.pipeline.post_run_cleanup import _cleanup_stale_mei
+        orphan = tmp_path / "_MEI123456"
+        orphan.mkdir()
+        (orphan / "dummy.dll").touch()
+        monkeypatch.chdir(tmp_path)
+        assert orphan.exists()
+        _cleanup_stale_mei()
+        assert not orphan.exists()
+
+    def test_skips_current_process_meipass(self, tmp_path, monkeypatch):
+        """Must NOT delete our own _MEIPASS directory."""
+        from src.pipeline.post_run_cleanup import _cleanup_stale_mei
+        our_mei = tmp_path / "_MEI999999"
+        our_mei.mkdir()
+        other_mei = tmp_path / "_MEI111111"
+        other_mei.mkdir()
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr("sys._MEIPASS", str(our_mei), raising=False)
+        _cleanup_stale_mei()
+        assert our_mei.exists(), "Must not delete current process _MEIPASS"
+        assert not other_mei.exists(), "Must delete orphaned _MEI dirs"

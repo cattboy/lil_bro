@@ -16,6 +16,7 @@ uv.lock
 .claude/skills/gstack/
 .claude/skills/browse/dist/
 
+#builds
 build/
 dist/
 
@@ -35,9 +36,10 @@ dist/
 /docs/LibreHardwareMonitor/
 /docs/completed/
 
-
+#logs
 lil_bro_actions.log
 lil_bro_debug.log
 lil_bro.spec
+
 
 /resolve

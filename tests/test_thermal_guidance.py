@@ -2,7 +2,7 @@ import pytest
 from src.agent_tools.thermal_guidance import (
     analyze_thermals,
     check_idle_thermals,
-    _derive_cpu_temp,
+    derive_cpu_temp,
     CPU_WARN_THRESHOLD,
     GPU_WARN_THRESHOLD,
     CPU_IDLE_WARN,
@@ -243,7 +243,7 @@ def test_idle_gpu_extreme_heat_brand_voice():
     assert "that's cooked" in result["message"]
 
 
-# ── _derive_cpu_temp sensor selection ────────────────────────────────────────
+# ── derive_cpu_temp sensor selection ────────────────────────────────────────
 
 def test_derive_cpu_prefers_package():
     """CPU Package is always preferred over any other sensor."""
@@ -252,7 +252,7 @@ def test_derive_cpu_prefers_package():
         "Intel Core i7 > CPU Core #1": 70.0,
         "Intel Core i7 > CPU Core Max": 71.5,
     }
-    assert _derive_cpu_temp(temps) == 72.0
+    assert derive_cpu_temp(temps) == 72.0
 
 
 def test_derive_cpu_amd_tctl_tdie():
@@ -261,13 +261,13 @@ def test_derive_cpu_amd_tctl_tdie():
         "AMD Ryzen 9 5900X > Core (Tctl/Tdie)": 68.0,
         "AMD Ryzen 9 5900X > Core #1": 65.0,
     }
-    assert _derive_cpu_temp(temps) == 68.0
+    assert derive_cpu_temp(temps) == 68.0
 
 
 def test_derive_cpu_amd_tdie_label():
     """Tdie label variant also matches the AMD fallback."""
     temps = {"AMD Ryzen 7 7700X > Tdie": 62.0}
-    assert _derive_cpu_temp(temps) == 62.0
+    assert derive_cpu_temp(temps) == 62.0
 
 
 def test_derive_cpu_excludes_hotspot():
@@ -277,7 +277,7 @@ def test_derive_cpu_excludes_hotspot():
         "Intel Core i9 > CPU Core #1": 82.0,
     }
     # Hot Spot excluded; falls through to P3 (generic cpu sensor without hotspot)
-    result = _derive_cpu_temp(temps)
+    result = derive_cpu_temp(temps)
     assert result == 82.0
 
 
@@ -288,7 +288,7 @@ def test_derive_cpu_excludes_core_max():
         "Intel Core i7 > CPU Core #1": 80.0,
         "Intel Core i7 > CPU Core #2": 78.0,
     }
-    result = _derive_cpu_temp(temps)
+    result = derive_cpu_temp(temps)
     assert result == 80.0  # max of non-excluded cores, not Core Max
 
 
@@ -298,14 +298,14 @@ def test_derive_cpu_excludes_vrm():
         "Nuvoton NCT6796D > CPU VRM": 65.0,
         "Intel Core i7 > CPU Core #1": 55.0,
     }
-    result = _derive_cpu_temp(temps)
+    result = derive_cpu_temp(temps)
     assert result == 55.0
 
 
 def test_derive_cpu_no_match_returns_none():
     """Returns None when no identifiable CPU sensor is present."""
     temps = {"NVIDIA RTX 3080 > GPU Core": 70.0}
-    assert _derive_cpu_temp(temps) is None
+    assert derive_cpu_temp(temps) is None
 
 
 def test_derive_cpu_package_beats_tctl():
@@ -314,13 +314,13 @@ def test_derive_cpu_package_beats_tctl():
         "AMD Ryzen 9 7950X > CPU Package": 75.0,
         "AMD Ryzen 9 7950X > Core (Tctl/Tdie)": 80.0,
     }
-    assert _derive_cpu_temp(temps) == 75.0
+    assert derive_cpu_temp(temps) == 75.0
 
 
 def test_derive_cpu_gpu_sensor_not_matched():
     """A sensor whose key contains 'gpu' is not returned as a CPU temp."""
     temps = {"NVIDIA RTX 3080 > GPU Core": 70.0}
-    assert _derive_cpu_temp(temps) is None
+    assert derive_cpu_temp(temps) is None
 
 
 def test_analyze_thermals_derives_amd_cpu_peak():

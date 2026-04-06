@@ -14,8 +14,7 @@ def _fallback_measure_rate(duration_seconds: int) -> float:
     start_time = time.time()
     last_pos = POINT(0, 0)
     samples = 0
-    poll_count = 0
-    
+
     while (time.time() - start_time) < duration_seconds:
         current_pos = POINT()
         ctypes.windll.user32.GetCursorPos(ctypes.byref(current_pos))

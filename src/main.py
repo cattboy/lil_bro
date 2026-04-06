@@ -13,7 +13,7 @@ import multiprocessing
 import sys
 
 from src.utils.action_logger import action_logger
-from src.utils.formatting import print_info, print_warning, print_error, print_accent, resize_console_window
+from src.utils.formatting import print_info, print_warning, print_error, print_accent, print_dim, resize_console_window
 from src.utils.errors import AdminRequiredError
 from src.bootstrapper import check_admin
 from src.pipeline.banner import print_banner
@@ -38,6 +38,7 @@ def _parse_args() -> argparse.Namespace:
 
 def main():
     multiprocessing.freeze_support()
+    action_logger._echo_fn = print_dim
     args = _parse_args()
 
     if args.debug:
@@ -63,7 +64,7 @@ def main():
 
         action_logger.log_session_start()
         startup_lhm, _ = run_startup_thermal_scan()
-        menu_loop()
+        menu_loop(startup_lhm)
 
     except KeyboardInterrupt:
         print_accent("\nCtrl+C detected. Exiting...")

@@ -54,6 +54,7 @@ def run_startup_thermal_scan() -> tuple[LHMSidecar, bool]:
 
     # Retry until sensors populate (LHM HTTP-ready ≠ sensors enumerated)
     temps: dict = {}
+    attempt = 0
     for attempt in range(_SENSOR_RETRIES):
         temps = fetch_snapshot()
         if temps:

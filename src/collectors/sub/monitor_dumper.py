@@ -1,6 +1,5 @@
 import ctypes
 from ctypes import wintypes
-import winreg
 
 # EnumDisplaySettings Win32 API via ctypes ✅ Best approach
 # This calls the Windows ChangeDisplaySettingsEx / 
@@ -133,6 +132,7 @@ def get_edid_max_refresh_from_registry() -> list[dict]:
     monitor-declared max vertical refresh from the Monitor Range Limits
     descriptor (tag 0xFD). This is the hardware ground truth.
     """
+    import winreg
     results = []
     base_key = r"SYSTEM\CurrentControlSet\Enum\DISPLAY"
     try:
