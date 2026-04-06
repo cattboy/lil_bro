@@ -1,7 +1,6 @@
 import subprocess
 import re
 from ..utils.errors import ScannerError
-from ..utils.formatting import print_step, print_step_done, print_warning, print_success, print_error, print_info, prompt_approval
 from ..utils.action_logger import action_logger
 
 # Common Windows Power Plan GUIDs
@@ -162,90 +161,3 @@ def create_high_performance_plan() -> tuple[str, str]:
         return guid, "High performance"
     except subprocess.CalledProcessError as e:
         raise ScannerError(f"Failed to create new power plan: {e.stderr}")
-
-def check_power_plan() -> dict:
-    """
-    Runs the Power Plan check, prompting to switch if not optimal.
-    """
-    print_step("Scanning Active Power Plan")
-    
-    try:
-        guid, name = get_active_power_plan()
-        print_step_done(True)
-        
-        result = {
-            "active_plan": name,
-            "guid": guid,
-            "status": "OK"
-        }
-        
-        # Check if it's High or Ultimate performance
-        is_high_perf = (
-            guid == "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c" or  # High Performance
-            guid == "e9a42b02-d5df-448d-aa00-03f14749eb61" or  # Ultimate Performance
-            "performance" in name.lower() or
-            "ultimate" in name.lower()
-        )
-        
-        if is_high_perf:
-            result["message"] = f"Power plan is optimal: '{name}'."
-            print_success(result["message"])
-            return result
-            
-        result["status"] = "WARNING"
-        result["message"] = f"Current power plan is '{name}'. For gaming, 'High Performance' or 'Ultimate Performance' is recommended."
-        print_warning(result["message"])
-        
-        # Determine the best available plan
-        print_info("Checking available system power plans...")
-        available_plans = list_available_plans()
-        
-        # Priority 1: Ultimate Performance
-        target_plan = next((p for p in available_plans if p[0] == "e9a42b02-d5df-448d-aa00-03f14749eb61"), None)
-        
-        # Priority 2: High Performance
-        if not target_plan:
-            target_plan = next((p for p in available_plans if p[0] == "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"), None)
-            
-        # Also check by name string in case of OEM variant
-        if not target_plan:
-            target_plan = next((p for p in available_plans if "ultimate" in p[1].lower()), None)
-        if not target_plan:
-            target_plan = next((p for p in available_plans if "performance" in p[1].lower()), None)
-            
-        new_plan_created = False
-        
-        if target_plan:
-            target_guid, target_name = target_plan
-        else:
-            print_info("No High Performance plan found on system. We can create one.")
-            target_name = "High performance"
-            new_plan_created = True
-
-        if prompt_approval(f"Would you like to switch to the '{target_name}' power plan?"):
-            print_step(f"Activating {target_name} plan")
-            
-            try:
-                # Need to create it first if we couldn't find it
-                if new_plan_created:
-                    target_guid, _ = create_high_performance_plan()
-                    
-                set_active_plan(target_guid)
-                print_step_done(True)
-                print_success(f"Successfully switched to '{target_name}'.")
-                result["status"] = "OK" # Fixed
-                result["active_plan"] = target_name
-                result["message"] = f"Switched to optimal plan: '{target_name}'."
-            except ScannerError as e:
-                print_step_done(False)
-                print_error(f"Failed to switch power plan: {e}")
-                result["message"] = f"Failed to switch power plan: {e}"
-        else:
-            print_info("Power plan change skipped.")
-            
-        return result
-        
-    except ScannerError as e:
-        print_step_done(False)
-        print_error(str(e))
-        return {"active_plan": "Unknown", "guid": "", "status": "ERROR", "message": str(e)}

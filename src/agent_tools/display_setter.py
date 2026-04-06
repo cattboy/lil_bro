@@ -1,7 +1,5 @@
 import ctypes
 from ctypes import wintypes
-from ..utils.formatting import prompt_approval
-from ..utils.action_logger import action_logger
 
 ### exact match (find a mode that exactly matches target Hz) and best available (find the highest Hz the monitor supports):
 ### Key design decisions to call out
@@ -110,7 +108,7 @@ def find_best_mode(
 ) -> DEVMODE | None:
     """
     Finds the best DEVMODE to apply.
-    
+
     - If target_hz is given: find a mode matching that exact Hz at the current resolution.
     - If target_hz is None: find the highest Hz mode at the current resolution.
     - If require_same_resolution=False: allow resolution changes too (picks highest
@@ -184,130 +182,3 @@ def apply_display_mode(
     message = DISP_CHANGE_MESSAGES.get(result, f"Unknown return code: {result}")
     success = result in (DISP_CHANGE_SUCCESSFUL, DISP_CHANGE_RESTART)
     return success, message
-
-
-# ── High-level convenience functions ──────────────────────────────────────────
-
-def set_max_refresh_rate(
-    device_name: str,
-    persist: bool = True,
-    dry_run: bool = False,
-) -> dict:
-    """
-    One-shot: find and apply the maximum refresh rate for a display,
-    keeping the current resolution intact.
-    """
-    current = _get_current_mode(device_name)
-    if current is None:
-        return {"success": False, "error": "Could not read current display mode"}
-
-    current_hz = current.dmDisplayFrequency
-    best_mode  = find_best_mode(device_name, target_hz=None, require_same_resolution=True)
-
-    if best_mode is None:
-        return {"success": False, "error": "No candidate modes found"}
-
-    if best_mode.dmDisplayFrequency <= current_hz:
-        return {
-            "success": True,
-            "already_optimal": True,
-            "current_hz": current_hz,
-            "message": "Already at or above the best available refresh rate"
-        }
-
-    # Validate first (dry run), then apply if valid
-    ok, msg = apply_display_mode(device_name, best_mode, persist=persist, dry_run=True)
-    if not ok:
-        return {"success": False, "error": f"Validation failed: {msg}"}
-
-    if dry_run:
-        return {
-            "success": True,
-            "dry_run": True,
-            "would_change_from_hz": current_hz,
-            "would_change_to_hz": best_mode.dmDisplayFrequency,
-            "resolution": f"{best_mode.dmPelsWidth}x{best_mode.dmPelsHeight}",
-        }
-
-    if not prompt_approval(f"Set refresh rate to {best_mode.dmDisplayFrequency}Hz on {device_name}?"):
-        return {"success": False, "cancelled": True, "message": "User declined refresh rate change."}
-
-    ok, msg = apply_display_mode(device_name, best_mode, persist=persist, dry_run=False)
-    if ok:
-        action_logger.log_action(
-            "Display",
-            f"Refresh rate changed {current_hz}Hz \u2192 {best_mode.dmDisplayFrequency}Hz on {device_name}",
-            f"persisted={persist}",
-        )
-    return {
-        "success": ok,
-        "changed_from_hz": current_hz,
-        "changed_to_hz":   best_mode.dmDisplayFrequency if ok else current_hz,
-        "resolution":      f"{best_mode.dmPelsWidth}x{best_mode.dmPelsHeight}",
-        "persisted":       persist,
-        "message":         msg,
-    }
-
-
-def set_refresh_rate(
-    device_name: str,
-    target_hz: int,
-    persist: bool = True,
-    dry_run: bool = False,
-) -> dict:
-    """
-    Set a specific refresh rate. Useful if you want 120Hz not 165Hz,
-    e.g. for OLED burn-in reasons or compatibility.
-    """
-    mode = find_best_mode(device_name, target_hz=target_hz, require_same_resolution=True)
-    if mode is None:
-        return {
-            "success": False,
-            "error": f"{target_hz}Hz not found in supported modes for {device_name}"
-        }
-
-    ok, msg = apply_display_mode(device_name, mode, persist=persist, dry_run=True)
-    if not ok:
-        return {"success": False, "error": f"Validation failed: {msg}"}
-
-    if dry_run:
-        return {"success": True, "dry_run": True, "would_apply_hz": target_hz}
-
-    if not prompt_approval(f"Set refresh rate to {target_hz}Hz on {device_name}?"):
-        return {"success": False, "cancelled": True, "message": "User declined refresh rate change."}
-
-    ok, msg = apply_display_mode(device_name, mode, persist=persist, dry_run=False)
-    if ok:
-        action_logger.log_action(
-            "Display",
-            f"Refresh rate set to {target_hz}Hz on {device_name}",
-            f"persisted={persist}",
-        )
-    return {"success": ok, "applied_hz": target_hz if ok else None, "message": msg}
-
-
-# ── Scan all monitors and fix any running below max ───────────────────────────
-
-def fix_all_monitors(persist: bool = True, dry_run: bool = False) -> list[dict]:
-    """
-    Iterates all active displays and upgrades any running below
-    their maximum supported refresh rate.
-    """
-    from ..collectors.sub.monitor_dumper import get_all_displays
-    results = []
-    for device in get_all_displays():
-        result = set_max_refresh_rate(device, persist=persist, dry_run=dry_run)
-        result["device"] = device
-        results.append(result)
-    return results
-
-
-if __name__ == "__main__":
-    import json
-    # Dry run first to see what would change
-    print("=== Dry Run ===")
-    print(json.dumps(fix_all_monitors(dry_run=True), indent=2))
-
-    # Uncomment to actually apply:
-    # print("=== Applying ===")
-    # print(json.dumps(fix_all_monitors(dry_run=False), indent=2))

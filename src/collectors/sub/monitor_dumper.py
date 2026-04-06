@@ -100,8 +100,6 @@ def get_current_refresh(device_name: str | None = None) -> int:
 
 def get_all_displays() -> list[str]:
     """Returns device names like ['\\\\.\\DISPLAY1', '\\\\.\\DISPLAY2', ...]"""
-    from ctypes import wintypes
-    
     class DISPLAY_DEVICE(ctypes.Structure):
         _fields_ = [
             ("cb",           wintypes.DWORD),
