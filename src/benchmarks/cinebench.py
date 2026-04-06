@@ -8,13 +8,18 @@ monitoring while producing a relative before/after score.
 """
 
 import math
+import msvcrt
 import multiprocessing
 import os
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Optional
 
+from .thermal_monitor import ThermalWatchdog
+
+from ..utils.action_logger import action_logger
 from ..utils.formatting import (
     print_step,
     print_step_done,
@@ -52,6 +57,22 @@ _CINEBENCH_SEARCH_PATHS = [
 ]
 
 _CINEBENCH_TIMEOUT = 600  # 10 minutes max for a single run
+
+
+def _keyboard_abort_watcher(abort_event: threading.Event) -> None:
+    """
+    Background thread — sets abort_event when Q or q is pressed.
+
+    Uses ``msvcrt.kbhit()`` (Windows, no Enter required).  Polls every 50 ms
+    so it stays responsive without busy-spinning.
+    """
+    while not abort_event.is_set():
+        if msvcrt.kbhit():
+            key = msvcrt.getch()
+            if key in (b"q", b"Q"):
+                abort_event.set()
+                return
+        time.sleep(0.05)
 
 
 def find_cinebench() -> Optional[str]:
@@ -150,18 +171,19 @@ class BenchmarkRunner:
             self.cinebench_path = find_cinebench()
         self.has_cinebench = self.cinebench_path is not None
 
-    def run_benchmark(self, full_suite: bool = False) -> dict:
+    def run_benchmark(self, full_suite: bool = False, lhm_available: bool = False) -> dict:
         """
         Run a benchmark — Cinebench if installed, CPU stress fallback otherwise.
 
         Args:
             full_suite: If True and Cinebench is available, run all test modes.
                         If False, run CPU single-core only.
+            lhm_available: If True, enables the thermal watchdog during the run.
         Returns:
             dict with ``status``, ``benchmark``, ``scores``, and extra metadata.
         """
         if self.has_cinebench:
-            return self._run_cinebench(full_suite)
+            return self._run_cinebench(full_suite, lhm_available)
 
         print_warning("Cinebench not found — falling back to built-in CPU stress test.")
         if not prompt_approval("Run built-in CPU stress test instead?"):
@@ -170,7 +192,7 @@ class BenchmarkRunner:
 
     # ── Cinebench ─────────────────────────────────────────────────────────
 
-    def _run_cinebench(self, full_suite: bool) -> dict:
+    def _run_cinebench(self, full_suite: bool, lhm_available: bool = False) -> dict:
         """Launch Cinebench via CLI and capture results."""
         mode = "All Tests" if full_suite else "CPU Single-Core"
         print_step(f"Running Cinebench ({mode})")
@@ -178,9 +200,24 @@ class BenchmarkRunner:
             "This will take several minutes. "
             "Your PC will be under high load — avoid heavy tasks."
         )
+        print_info("Press Q to abort the benchmark at any time.")
 
         # Build CLI args per docs/vendor-supplied/cinebench.md
         cb_flag = "g_CinebenchAllTests=true" if full_suite else "g_CinebenchCpu1Test=true"
+
+        abort_event = threading.Event()
+
+        # Keyboard watcher — active for the full duration of the run
+        kb_thread = threading.Thread(
+            target=_keyboard_abort_watcher, args=(abort_event,), daemon=True
+        )
+        kb_thread.start()
+
+        # Thermal watchdog — only when LHM sensor data is available
+        watchdog: Optional[ThermalWatchdog] = None
+        if lhm_available:
+            watchdog = ThermalWatchdog(abort_event)
+            watchdog.start()
 
         try:
             proc = subprocess.Popen(
@@ -188,16 +225,53 @@ class BenchmarkRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
+
+            start = time.monotonic()
             try:
-                stdout, stderr = proc.communicate(timeout=_CINEBENCH_TIMEOUT)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                    capture_output=True,
-                )
-                proc.communicate()
-                raise
+                while proc.poll() is None:
+                    if abort_event.is_set():
+                        proc.kill()
+                        subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                            capture_output=True,
+                        )
+                        proc.communicate()  # drain pipes
+                        reason = (
+                            watchdog.abort_reason
+                            if watchdog and watchdog.abort_reason
+                            else "Aborted by user (Q key)."
+                        )
+                        print_step_done(False)
+                        print_warning(f"Benchmark aborted: {reason}")
+                        action_logger.log_action(
+                            "Cinebench",
+                            "Benchmark aborted",
+                            details=reason,
+                            outcome="FAIL",
+                        )
+                        return {
+                            "status": "aborted",
+                            "benchmark": "cinebench",
+                            "message": reason,
+                        }
+                    if time.monotonic() - start >= _CINEBENCH_TIMEOUT:
+                        proc.kill()
+                        subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                            capture_output=True,
+                        )
+                        proc.communicate()
+                        raise subprocess.TimeoutExpired(
+                            str(self.cinebench_path), _CINEBENCH_TIMEOUT
+                        )
+                    time.sleep(0.5)
+
+                stdout, stderr = proc.communicate()  # normal completion
+
+            finally:
+                abort_event.set()  # signal keyboard watcher to exit cleanly
+                if watchdog:
+                    watchdog.stop()
 
             print_step_done(True)
 
@@ -215,11 +289,23 @@ class BenchmarkRunner:
         except subprocess.TimeoutExpired:
             print_step_done(False)
             print_error("Cinebench timed out after 10 minutes.")
+            action_logger.log_action(
+                "Cinebench",
+                "Benchmark timed out",
+                details="Cinebench did not complete within 10 minutes.",
+                outcome="FAIL",
+            )
             return {"status": "error", "benchmark": "cinebench", "message": "Timed out"}
 
         except Exception as e:
             print_step_done(False)
             print_error(f"Cinebench failed: {e}")
+            action_logger.log_action(
+                "Cinebench",
+                "Benchmark failed",
+                details=str(e),
+                outcome="FAIL",
+            )
             return {"status": "error", "benchmark": "cinebench", "message": str(e)}
 
     @staticmethod

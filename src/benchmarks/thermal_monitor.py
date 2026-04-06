@@ -188,3 +188,93 @@ class ThermalMonitor:
         with self._lock:
             gpu_temps = [v for k, v in self._peak_temps.items() if "gpu" in k.lower()]
             return max(gpu_temps) if gpu_temps else None
+
+
+# ── Thermal watchdog ─────────────────────────────────────────────────────────
+
+_WATCHDOG_THRESHOLD = 95.0      # °C — abort limit for CPU and GPU
+_WATCHDOG_SUSTAINED_SECS = 5    # consecutive seconds over limit before abort
+_WATCHDOG_POLL_INTERVAL = 1.0   # seconds between polls
+
+
+class ThermalWatchdog:
+    """
+    Background thermal watchdog — aborts a benchmark if CPU or GPU temperature
+    stays critically high for a sustained period.
+
+    Follows the same daemon-thread + threading.Event stop pattern as ThermalMonitor.
+
+    Usage::
+
+        abort_event = threading.Event()
+        watchdog = ThermalWatchdog(abort_event)
+        watchdog.start()
+        # ... benchmark runs ...
+        watchdog.stop()
+        if watchdog.abort_reason:
+            print(watchdog.abort_reason)
+    """
+
+    def __init__(
+        self,
+        abort_event: threading.Event,
+        threshold: float = _WATCHDOG_THRESHOLD,
+        sustained_secs: int = _WATCHDOG_SUSTAINED_SECS,
+        poll_interval: float = _WATCHDOG_POLL_INTERVAL,
+    ):
+        self._abort_event = abort_event
+        self._threshold = threshold
+        self._sustained_secs = sustained_secs
+        self._interval = poll_interval
+        self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
+        self.abort_reason: Optional[str] = None  # written before abort_event fires
+
+    def start(self) -> None:
+        """Begin background temperature watchdog."""
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self.abort_reason = None
+        self._thread = threading.Thread(target=self._poll_loop, daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        """Stop the watchdog thread."""
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+            self._thread = None
+
+    def _poll_loop(self) -> None:
+        """Polling loop — tracks consecutive seconds over threshold per component."""
+        cpu_streak = 0
+        gpu_streak = 0
+
+        while not self._stop_event.is_set():
+            temps = _fetch_temps()
+            if temps:
+                cpu_temp = derive_cpu_temp(temps)
+                gpu_vals = [v for k, v in temps.items() if "gpu" in k.lower()]
+                gpu_temp = max(gpu_vals) if gpu_vals else None
+
+                cpu_streak = cpu_streak + 1 if (cpu_temp and cpu_temp >= self._threshold) else 0
+                gpu_streak = gpu_streak + 1 if (gpu_temp and gpu_temp >= self._threshold) else 0
+
+                if cpu_streak >= self._sustained_secs:
+                    self.abort_reason = (
+                        f"CPU held at {cpu_temp:.0f}\u00b0C for {self._sustained_secs}+ seconds"
+                        " \u2014 benchmark aborted to prevent thermal damage."
+                    )
+                    self._abort_event.set()
+                    return
+
+                if gpu_streak >= self._sustained_secs:
+                    self.abort_reason = (
+                        f"GPU held at {gpu_temp:.0f}\u00b0C for {self._sustained_secs}+ seconds"
+                        " \u2014 benchmark aborted to prevent thermal damage."
+                    )
+                    self._abort_event.set()
+                    return
+
+            self._stop_event.wait(self._interval)
