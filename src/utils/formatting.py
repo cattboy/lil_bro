@@ -111,14 +111,14 @@ def print_proposal(num: int, severity: str, title: str,
 
 def prompt_confirm(question: str) -> bool:
     """Branded yes/no prompt for non-system decisions (e.g. model download)."""
-    print(f"{Fore.MAGENTA}{question} [y/N]: {Style.RESET_ALL}", end="", flush=True)
+    print(f"{Fore.MAGENTA}{question} [y/n]: {Style.RESET_ALL}", end="", flush=True)
     return input().strip().lower() in ("y", "yes")
 
 def prompt_approval(action_description: str) -> bool:
     """Prompts the user for yes/no approval for a specific action."""
     print(f"\n{Fore.MAGENTA}{Style.BRIGHT}? Requires Approval:{Style.RESET_ALL} {action_description}")
     while True:
-        response = input(f"Proceed? [y/N]: ").strip().lower()
+        response = input(f"Proceed? [y/n]: ").strip().lower()
         if response in ['y', 'yes']:
             return True
         if response in ['n', 'no', '']:

@@ -1,8 +1,45 @@
 """Shared thermal safety gate -- used before both benchmark phases."""
 
+from src.pipeline.base import PipelineContext
 from src.benchmarks.thermal_monitor import fetch_snapshot
 from src.agent_tools.thermal_guidance import check_idle_thermals
 from src.utils.formatting import print_info, print_success, print_warning, prompt_approval
+from src.utils.action_logger import action_logger
+
+
+def require_thermal_protection(phase_name: str, ctx: PipelineContext) -> bool:
+    """Check that LHM and sensor data are available before a benchmark.
+
+    Returns True if the benchmark should be SKIPPED (missing thermal protection).
+    Logs and prints warnings when skipping.
+    """
+    if not ctx.lhm_available:
+        action_logger.log_action(
+            phase_name,
+            "Benchmark skipped \u2014 LHM unavailable",
+            details="No thermal protection available. LHM did not load.",
+            outcome="SKIPPED",
+        )
+        print_warning(
+            f"LibreHardwareMonitor is not running \u2014 skipping {phase_name.lower()} benchmark. "
+            "Thermal monitoring is required to run safely."
+        )
+        return True
+
+    if not fetch_snapshot():
+        action_logger.log_action(
+            phase_name,
+            "Benchmark skipped \u2014 no sensor data",
+            details="LHM is running but returned no temperature readings. Cannot guarantee thermal safety.",
+            outcome="SKIPPED",
+        )
+        print_warning(
+            f"LHM is running but no temperature sensor data is available \u2014 skipping {phase_name.lower()} benchmark just incase. "
+            "lil_bro always lookin' out for the fam."
+        )
+        return True
+
+    return False
 
 
 def thermal_safety_gate(

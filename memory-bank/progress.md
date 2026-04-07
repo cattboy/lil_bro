@@ -20,7 +20,7 @@
 - [x] Deep scan: LibreHardwareMonitor sidecar launch + baseline logging
 
 ### Phase 3: Feature Modules
-#### Configuration Check ("Esports Check")
+#### Configuration Check ("Optimization Check")
 - [x] Monitor refresh rate detection (WMI + EDID)
 - [x] Mouse polling rate detection (`GetMouseMovePointsEx`)
 - [x] Windows Game Mode check (registry)

@@ -67,8 +67,8 @@ def create_restore_point(description: str | None = None):
             print_error("Cannot create a system restore point while System Protection is disabled.")
             return False
 
-    if not prompt_approval(f"Create a System Restore Point ('{description}')? This is highly recommended before any system changes."):
-        print_error("System Restore Point creation bypassed by user.")
+    if not prompt_approval("Create a System Restore Point? HIGHLY recommended, save your game before you feed... incase you want to revert lil_bros work"):
+        print_error("System Restore Point creation bypassed, yolo mode activated.")
         return False
         
     print_step("Creating System Restore Point (this may take a minute)")
@@ -87,7 +87,8 @@ def create_restore_point(description: str | None = None):
         if result.returncode == 0:
             print_step_done(success=True)
             print_success(f"Restore point '{description}' created successfully.")
-            print_success("If anything goes wrong, you can boot into Windows Recovery Environment and restore this snapshot.")
+            print_success("If anything goes wrong, click Start -> Type 'Create a Restore Point -> Click 'System Restore' -> 'Next' 'Next' Select the restore'")
+            print_success(f"OR boot into Windows Recovery Environment and restore this snapshot '{description}'.")
             action_logger.log_action("System Restore", f"Created Restore Point: {description}", f"Execution: {ps_command}")
             return True
         else:

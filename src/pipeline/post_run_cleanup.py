@@ -174,7 +174,7 @@ def post_run_cleanup(lhm: Optional[LHMSidecar]) -> None:
     for the sidecar handle (e.g. if startup failed before LHM launched).
     Swallows all exceptions -- cleanup must never mask the original error.
     """
-    print_info("Cleaning up...")
+    print_info("Cleaning up... lil_bro always leaves your system clean and tidy, like a true bro should.")
 
     # 1. Kill the LHM sidecar process
     if lhm is not None:
@@ -201,4 +201,4 @@ def post_run_cleanup(lhm: Optional[LHMSidecar]) -> None:
     except Exception:
         get_debug_logger().warning("Stale _MEI cleanup failed during cleanup", exc_info=True)
 
-    print_dim("  Cleanup complete.")
+    print_dim("  Cleanup complete. lil_bro leaves no trace, just like a true bro should.")

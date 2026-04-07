@@ -141,7 +141,7 @@ src/
     phase_bootstrap.py  — Phase 1: UAC + System Restore Point
     phase_scan.py       — Phase 2: Hardware data collection
     phase_baseline.py   — Phase 3: Baseline benchmark + thermals
-    phase_config.py     — Phase 4: All esports checks + LLM proposals
+    phase_config.py     — Phase 4: All optimization checks + LLM proposals
     phase_final.py      — Phase 5: Verification benchmark
     phases.py           — 5-phase orchestrator (legacy, now coordinator)
   agent_tools/      — One file per system check (display, game_mode, power_plan, nvidia_profile, ...)

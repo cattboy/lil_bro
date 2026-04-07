@@ -1,7 +1,6 @@
 """Main menu loop and AI model setup."""
 
 import sys
-from colorama import Fore, Style
 
 from src.llm.model_loader import load_model, get_model_status
 from src.utils.formatting import (
@@ -19,13 +18,13 @@ def menu_loop(startup_lhm: LHMSidecar):
         print_header("Main Menu")
 
         if get_llm() is not None:
-            print_key_value("AI Model", "ready", value_color=Fore.GREEN)
+            print_key_value("AI Model", "ready")
         else:
-            print_key_value("AI Model", "not loaded", value_color=Fore.YELLOW)
+            print_key_value("AI Model", "not loaded")
 
-        print(f"  {Fore.CYAN}1.{Style.RESET_ALL} Run Full Esports Optimization Pipeline")
-        print(f"  {Fore.CYAN}2.{Style.RESET_ALL} Setup AI Model")
-        print(f"  {Fore.CYAN}3.{Style.RESET_ALL} Exit")
+        print("  1. Run Full Optimization Pipeline")
+        print("  2. Setup AI Model")
+        print("  3. Exit")
 
         print()
         print_prompt("Select an option [1-3]: ")
@@ -36,7 +35,7 @@ def menu_loop(startup_lhm: LHMSidecar):
         elif choice == '2':
             setup_ai_model()
         elif choice == '3':
-            print_info("shutting down, stay sweaty lil_bro.")
+            print_info("shutting down, self destructing in 5, 4, ...")
             sys.exit(0)
         else:
             print_error("Invalid choice. Try again.")

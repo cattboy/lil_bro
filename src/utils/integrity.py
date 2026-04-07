@@ -58,7 +58,11 @@ def verify_integrity(silent_pass: bool = True) -> bool:
             print_warning = lambda m: print(f"WARNING: {m}")
 
         print_warning(
-            "Integrity check failed — lil_bro.exe may have been modified or corrupted."
+            "Integrity check failed — lil_bro.exe may have been modified or corrupted.\n"
+            "DO NOT USE THIS LIL_BRO.exe\n"
+            "Only use lil_bro.exe from github releases page\n"
+            "https://github.com/cattboy/lil_bro/releases" \
+            "\n"
         )
         print_warning(
             f"  Expected: {expected_hash[:16]}...  Got: {actual[:16]}..."

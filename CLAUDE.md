@@ -63,7 +63,7 @@ src/
     phase_bootstrap.py   — Phase 1: Bootstrapping & Safety (UAC, restore point)
     phase_scan.py        — Phase 2: Deep System Scan (collectors, specs JSON)
     phase_baseline.py    — Phase 3: Baseline Benchmark (Cinebench single-core, thermals)
-    phase_config.py      — Phase 4: Esports Configuration Check (all checks, LLM proposals, batch approval)
+    phase_config.py      — Phase 4: Optimization Configuration Check (all checks, LLM proposals, batch approval)
     phase_final.py       — Phase 5: Final Verification Benchmark (compare delta)
     phases.py            — 5-phase orchestrator + PipelineContext management
     post_run_cleanup.py  — Deletes ./lil_bro/ on exit; preserves CWD-root persistent logs
@@ -145,7 +145,7 @@ All phases share state via `PipelineContext` (LHM sidecar, thermal monitor, spec
 
 ## Development Roadmap
 
-- **Week 1** ✅ — PoC complete: all esports checks, temp audit, Cinebench, collectors
+- **Week 1** ✅ — PoC complete: all optimization checks, temp audit, Cinebench, collectors
 - **Week 2** ✅ — LLM integration: model loader, action proposer, batch approval UX, static fallback
 - **Week 3** ✅ — LHM sidecar, thermal monitor, thermal guidance, benchmark runner rework, pre-benchmark safety gate
 - **Week 4** ✅ — PyInstaller portable .exe, %APPDATA% path relocation, SHA-256 integrity verification

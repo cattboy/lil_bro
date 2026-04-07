@@ -197,8 +197,8 @@ class BenchmarkRunner:
         mode = "All Tests" if full_suite else "CPU Single-Core"
         print_step(f"Running Cinebench ({mode})")
         print_info(
-            "This will take several minutes. "
-            "Your PC will be under high load — avoid heavy tasks."
+            "This will take several minutes. NO TOUCHY /afk a bit while lil_bro runs the benchmark. "
+            "Your PC will be under high load, set fans to WARP SPEED."
         )
         print_info("Press Q to abort the benchmark at any time.")
 

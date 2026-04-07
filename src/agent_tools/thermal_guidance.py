@@ -217,8 +217,8 @@ def check_idle_thermals(
     if cpu_temp is not None and cpu_temp >= CPU_IDLE_WARN:
         if cpu_temp >= 80.0:
             warnings.append(
-                f"CPU is at {cpu_temp:.0f}°C AT IDLE — clean yo fans or repaste "
-                f"your CPU, your PC is dying yo. Under load this thing will hit "
+                f"HAALLLPP CPU is at {cpu_temp:.0f}°C AT IDLE — clean yo fans or repaste "
+                f"the PC, lil_bro's home is on FIRE. Under work-loads this thing will hit "
                 f"{cpu_temp + 15:.0f}°C+ and throttle hard."
             )
         else:

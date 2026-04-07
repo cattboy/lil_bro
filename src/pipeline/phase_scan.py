@@ -26,7 +26,7 @@ class ScanPhase:
 
         dump_path = dump_system_specs()
         if dump_path:
-            print_info(f"Full system specs saved to {dump_path}")
+            print_info(f"Full system specs temporarily saved to {dump_path}")
             try:
                 with open(dump_path, "r", encoding="utf-8") as f:
                     ctx.specs = json.load(f)

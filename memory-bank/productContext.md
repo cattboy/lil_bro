@@ -16,7 +16,7 @@ Most gamers own powerful hardware but unknowingly leave performance on the table
 2. App requests admin privileges, creates a System Restore Point for safety
 3. Performs a deep system scan (dxdiag, NVIDIA profile, thermal baselines)
 4. Presents two pathways:
-   - **Configuration Check** ("Esports Check") — audit settings and flag misconfigurations
+   - **Configuration Check** ("Optimization Check") — audit settings and flag misconfigurations
    - **Speed Up My PC** — benchmark, debloat, fix, and re-verify
 5. Every action requires **human-in-the-loop approval** before execution
 

@@ -20,6 +20,7 @@ from src.utils.formatting import (
     print_success,
     print_warning,
     print_dim,
+    print_accent,
     print_key_value,
     print_step,
     print_step_done,
@@ -73,11 +74,13 @@ def run_startup_thermal_scan() -> tuple[LHMSidecar, bool]:
     gpu_temp = result.get("gpu_temp")
 
     if cpu_temp is None and gpu_temp is None:
-        print_dim("No sensor readings returned — temperature display skipped.")
+        print_accent("  No sensor readings returned — temperature display skipped.  "
+                  "lil_bro inhales motherboard electrons using LibreHardwareMonitor."
+                  "\n  Visit open source https://github.com/LibreHardwareMonitor/LibreHardwareMonitor ")
         if not is_pawnio_installed():
-            print_dim(
-                "  Hint: run lil_bro as administrator once to auto-install"
-                " the PawnIO thermal driver. pawnio.sys is required visit https://github.com/namazso/PawnIO.Setup/releases for more info."
+            print_accent(
+                "  Hint: lil_bro auto-installs the PawnIO.sys driver to see inside your PC. If it failed for some reason, retry running lil_bro.\n"
+                "  See https://github.com/namazso/PawnIO.Setup/releases to install it yourself."
             )
         print()
         return lhm, True

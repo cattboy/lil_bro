@@ -1,4 +1,4 @@
-"""Phase 4 — Esports Configuration Check: analyze, propose, approve."""
+"""Phase 4 — Optimization Configuration Check: analyze, propose, approve."""
 
 from src.pipeline.base import PipelineContext
 from src.agent_tools.display import analyze_display
@@ -23,8 +23,8 @@ from src.pipeline.approval import run_approval_flow
 class ConfigPhase:
     def run(self, ctx: PipelineContext) -> None:
         log = get_debug_logger()
-        log.info("Phase 4: Apply Esports Configurations")
-        print_header("Phase 4: Apply Esports Configurations")
+        log.info("Phase 4: Apply Optimization Configurations")
+        print_header("Phase 4: Apply Optimization Configurations")
 
         if not ctx.specs:
             print_warning("No system data available -- skipping configuration checks.")

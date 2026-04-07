@@ -31,7 +31,7 @@ Before doing *anything*, the application needs to secure the environment.
 ### Phase 3: Implementing the "Choices" UI
 The tool presents the extracted system specs to the local LLM, asking it to summarize the hardware, and then presents the user with the two main pathways in a clean terminal or simple PyQt graphical interface.
 
-#### Choice 1: The Configuration Check (The "Esports Check")
+#### Choice 1: The Configuration Check (The "Optimization Check")
 This module focuses on ensuring high-end hardware isn't bottlenecked by bad Windows settings.
 *   **Monitor Refresh Rate Check:** Python queries Windows Management Instrumentation (WMI) `Win32_VideoController` to check `CurrentRefreshRate`. If the user's monitor supports 240Hz (checked via EDID registry keys) but Windows is set to 60Hz, flag it.
 *   **Mouse Polling Rate Check:** *Note: Windows does not natively expose mouse polling rates easily.* The tool can hook into `GetMouseMovePointsEx` to sample USB HID report rates when the user wiggles the mouse for 3 seconds, detecting if it's stuck at 125Hz/500Hz instead of 1000Hz/4000Hz.
