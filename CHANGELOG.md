@@ -6,7 +6,7 @@ All notable changes to lil_bro are documented here.
 
 ### Added
 - **NVIDIA Profile Inspector integration** — You can now detect and optimize driver-level GPU settings: detect misconfigured NVIDIA profiles, analyze setting deviations, and apply driver-level perf tuning fixes. Bundled C# NPI tool with Python integration layer.
-- Dedicated NVIDIA GPU profile checks (`nvidia_profile.py`) and fixes (`nvidia_profile_setter.py`) in the esports configuration phase.
+- Dedicated NVIDIA GPU profile checks (`nvidia_profile.py`) and fixes (`nvidia_profile_setter.py`) in the optimization configuration phase.
 
 ### Fixed
 - Thermal sidecar no longer spins up twice — startup LHM instance is now cleanly passed through the pipeline instead of creating a second sidecar.

@@ -33,7 +33,31 @@ def verify_integrity(silent_pass: bool = True) -> bool:
     manifest_path = exe_dir / "integrity.json"
 
     if not manifest_path.exists():
-        return True  # No manifest — skip
+        try:
+            from .formatting import print_error, print_warning, print_info
+        except ImportError:
+            print_error   = lambda m: print(f"FAIL {m}")
+            print_warning = lambda m: print(f"WARN {m}")
+            print_info    = lambda m: print(f"INFO {m}")
+
+        print_error("integrity.json not found — cannot verify lil_bro.exe is safe.")
+        print()
+        print_info(
+            "integrity.json is a security manifest that confirms your copy of\n"
+            "  lil_bro.exe has not been tampered with or corrupted."
+        )
+        print()
+        print_warning("To fix this:")
+        print_warning("  1. Make sure integrity.json is in the same folder as lil_bro.exe.")
+        print_warning("  2. If it is missing, re-extract the original .rar/.zip file.")
+        print_warning(
+            "  3. If this copy was given to you by someone you don't trust, or\n"
+            "     downloaded from a random website — DO NOT USE IT.\n"
+            "     Download a fresh copy from the official release page:\n"
+            "     https://github.com/cattboy/lil_bro/releases"
+        )
+        input("\nPress ENTER to exit...")
+        sys.exit(1)
 
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))

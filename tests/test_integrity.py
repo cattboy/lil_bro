@@ -34,14 +34,19 @@ def test_get_exe_dir_frozen(mock_sys):
 
 # ── Frozen mode — no manifest ────────────────────────────────────────────────
 
+@patch("builtins.input", return_value="")
 @patch("src.utils.integrity.sys")
-def test_frozen_no_manifest(mock_sys, tmp_path):
-    """Frozen mode with no integrity.json → skip (return True)."""
+def test_frozen_no_manifest(mock_sys, mock_input, tmp_path):
+    """Frozen mode with no integrity.json → print error and sys.exit(1)."""
     mock_sys.frozen = True
     mock_sys.executable = str(tmp_path / "lil_bro.exe")
+    mock_sys.exit.side_effect = SystemExit(1)
     # Create a fake exe but no manifest
     (tmp_path / "lil_bro.exe").write_bytes(b"fake exe")
-    assert verify_integrity() is True
+    with pytest.raises(SystemExit) as exc_info:
+        verify_integrity()
+    assert exc_info.value.code == 1
+    mock_sys.exit.assert_called_once_with(1)
 
 
 # ── Frozen mode — hash matches ───────────────────────────────────────────────
