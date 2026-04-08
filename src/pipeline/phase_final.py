@@ -12,6 +12,12 @@ class FinalBenchPhase:
         log.info("Phase 5: Final Verification Benchmark")
         print_header("Phase 5: Final Verification Benchmark")
 
+        # Guard: if Phase 3 was skipped (ctx.runner never set), skip Phase 5 too.
+        # This can happen if LHM had no sensor data during Phase 3 but loads it by Phase 5.
+        if ctx.runner is None:
+            print_info("Final benchmark was skipped -- baseline benchmark did not run.")
+            return
+
         if require_thermal_protection("FinalBench", ctx):
             print_info("Final benchmark was skipped -- no comparison available.")
             return

@@ -29,6 +29,36 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
+### T-003 — Deduplicate DEVMODE struct + mode enumeration
+**Priority:** P2
+**Effort:** S human / S with CC
+**Why:** `display_setter.py` and `monitor_dumper.py` each define a `DEVMODE` ctypes struct and `_enum_all_modes()` logic independently. Risk of silent divergence if one copy is updated without the other.
+**Fix:** Extract shared struct + enumeration helpers to `src/utils/display_utils.py`. Both files import from there.
+**Blocked by:** Nothing.
+**Added:** 2026-04-07 (from /plan-eng-review, Priority 2 deferred item)
+
+---
+
+### T-004 — Type PipelineContext.llm properly
+**Priority:** P2
+**Effort:** XS human / XS with CC
+**Why:** `llm: object = None` in `base.py` defeats type checking. If the wrong object is passed, the error surfaces deep in `action_proposer.py` with no useful traceback. A Protocol or proper Optional type fixes this at zero runtime cost.
+**Fix:** Define a `LLMProtocol` with `__call__` signature, or import `Optional[Llama]` under a `TYPE_CHECKING` guard in `base.py`.
+**Blocked by:** Nothing.
+**Added:** 2026-04-07 (from /plan-eng-review, Priority 2 deferred item)
+
+---
+
+### T-005 — Phase execution status visible to orchestrator
+**Priority:** P3
+**Effort:** S human / S with CC
+**Why:** The orchestrator's `for phase in _PHASES` loop has no visibility into whether each phase actually ran, was skipped, or failed. If lil_bro ever adds conditional phases or user-selectable phase skipping, phase 5 can silently operate on stale/missing context.
+**Fix:** Have `Phase.run()` return a `PhaseResult(status: "completed"|"skipped"|"failed")` instead of `None`. Orchestrator collects results and can gate downstream phases.
+**Blocked by:** Nothing. Can be done incrementally — return None and PhaseResult are both valid under duck typing initially.
+**Added:** 2026-04-07 (from /plan-eng-review, Priority 3 deferred item)
+
+---
+
 ## Completed
 
 *(none yet)*

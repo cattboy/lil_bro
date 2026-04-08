@@ -229,11 +229,12 @@ class TestCalculateFpsCap:
         from src.agent_tools.nvidia_profile import calculate_fps_cap
         assert calculate_fps_cap(hz) == expected
 
-    def test_setter_matches_analyzer(self):
+    def test_single_canonical_definition(self):
+        """calculate_fps_cap has one canonical definition in nvidia_profile_dumper."""
+        from src.collectors.sub.nvidia_profile_dumper import calculate_fps_cap as d_cap
         from src.agent_tools.nvidia_profile import calculate_fps_cap as a_cap
-        from src.agent_tools.nvidia_profile_setter import calculate_fps_cap as s_cap
         for hz in (60, 120, 144, 165, 240, 360, 480):
-            assert a_cap(hz) == s_cap(hz)
+            assert a_cap(hz) == d_cap(hz)
 
 
 # ── 5. GPU generation detection ──────────────────────────────────────────────
@@ -484,7 +485,8 @@ class TestFixNvidiaProfile:
         Path(str(tmp_path / "modified.nip")).write_bytes(b"x")
 
         from src.agent_tools.nvidia_profile_setter import fix_nvidia_profile
-        with pytest.raises(RuntimeError, match="Profile import failed"):
+        from src.utils.errors import SetterError
+        with pytest.raises(SetterError, match="Profile import failed"):
             fix_nvidia_profile(self._make_specs())
 
 

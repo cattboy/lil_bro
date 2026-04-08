@@ -16,8 +16,9 @@ from pathlib import Path
 from typing import Any
 
 from ..collectors.sub.nvidia_profile_dumper import (
-    SETTING_IDS, TARGET_VALUES, find_npi_exe,
+    SETTING_IDS, TARGET_VALUES, find_npi_exe, calculate_fps_cap,
 )
+from ..utils.errors import SetterError
 from ..utils.paths import get_appdata_dir, get_temp_dir
 from ..utils.action_logger import action_logger
 
@@ -39,11 +40,11 @@ def _export_current_profile(npi_exe: str, dest_dir: str) -> str:
     )
     if result.returncode != 0:
         stderr = result.stderr.decode(errors="replace").strip()
-        raise RuntimeError(f"NPI export failed (rc={result.returncode}): {stderr}")
+        raise SetterError(f"NPI export failed (rc={result.returncode}): {stderr}")
 
     nip_files = list(Path(dest_dir).glob("*.nip"))
     if not nip_files:
-        raise RuntimeError("NPI export produced no .nip file")
+        raise SetterError("NPI export produced no .nip file")
     return str(nip_files[0])
 
 
@@ -60,14 +61,6 @@ def backup_nvidia_profile(npi_exe: str) -> str:
 
     action_logger.log_action("NPI Backup", "Created", str(backup_path))
     return str(backup_path)
-
-
-def calculate_fps_cap(refresh_hz: int) -> int:
-    """Blur Busters formula: cap = round(refresh_hz - refresh_hz^2 / 4096).
-
-    Produces 226 for 240Hz, 328 for 360Hz, 424 for 480Hz.
-    """
-    return round(refresh_hz - (refresh_hz * refresh_hz / 4096))
 
 
 def build_optimized_nip(source_nip_path: str, target_settings: dict[int, int]) -> str:
@@ -209,6 +202,7 @@ def fix_nvidia_profile(
         # FPS cap
         if refresh_hz is None:
             refresh_hz = _get_primary_refresh_hz(specs)
+        cap: int | None = None
         if refresh_hz and refresh_hz > 0:
             cap = calculate_fps_cap(refresh_hz)
             target[SETTING_IDS["fps_limiter_v3"]] = cap
@@ -247,8 +241,8 @@ def fix_nvidia_profile(
 
     if ok:
         changes = []
-        if refresh_hz:
-            changes.append(f"FPS cap={calculate_fps_cap(refresh_hz)}")
+        if cap is not None:
+            changes.append(f"FPS cap={cap}")
         if gpu_generation and gpu_generation in DLSS_PRESETS:
             changes.append(f"DLSS={DLSS_PRESETS[gpu_generation][0]}")
         if bios_rebar is True:
@@ -258,4 +252,4 @@ def fix_nvidia_profile(
         return True
 
     action_logger.log_action("NPI Fix", "FAILED", msg)
-    raise RuntimeError(f"Profile import failed — original profile preserved at {backup_path}. Error: {msg}")
+    raise SetterError(f"Profile import failed — original profile preserved at {backup_path}. Error: {msg}")
