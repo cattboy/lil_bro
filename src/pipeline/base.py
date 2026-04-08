@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from src.collectors.sub.lhm_sidecar import LHMSidecar
     from src.benchmarks.thermal_monitor import ThermalMonitor
     from src.benchmarks.cinebench import BenchmarkRunner
+    from llama_cpp import Llama  # type: ignore
 
 
 class PipelineAborted(Exception):
@@ -29,7 +30,7 @@ class PipelineContext:
     thermal: "ThermalMonitor"
 
     # Optional LLM instance — None when model isn't loaded
-    llm: object = None
+    llm: Optional[Llama] = None
 
     # Set by ScanPhase
     lhm_available: bool = False

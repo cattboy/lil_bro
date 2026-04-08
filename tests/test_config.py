@@ -74,3 +74,11 @@ class TestConfigFileLoading:
             import src.config as cfg_module
             result = cfg_module._load_config()
         assert result.benchmark.cinebench_timeout == 600
+
+
+class TestConfigSingleton:
+    def test_same_object_on_repeated_imports(self):
+        """Module-level config is the same object on repeated imports."""
+        import src.config as cfg1
+        import src.config as cfg2
+        assert cfg1.config is cfg2.config

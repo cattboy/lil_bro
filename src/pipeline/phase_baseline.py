@@ -10,7 +10,8 @@ from src.utils.action_logger import action_logger
 from src.utils.debug_logger import get_debug_logger
 
 
-_SKIP_RESULT = {"status": "skipped", "message": "Benchmark skipped — no thermal protection."}
+_SKIP_RESULT     = {"status": "skipped", "message": "Benchmark skipped — no thermal protection."}
+_SKIP_RESULT_HOT = {"status": "skipped", "message": "Benchmark skipped — idle temps too high."}
 
 
 class BaselineBenchPhase:
@@ -27,10 +28,9 @@ class BaselineBenchPhase:
         ctx.runner = BenchmarkRunner()
         benchmark_skipped = thermal_safety_gate(ctx.lhm_available)
 
-        ctx.baseline_result = {"status": "skipped", "message": "Skipped due to high idle temps"}
-        ctx.peak_temps = {}
-
         if benchmark_skipped:
+            ctx.baseline_result = dict(_SKIP_RESULT_HOT)
+            ctx.peak_temps = {}
             action_logger.log_action(
                 "BaselineBench",
                 "Benchmark skipped — idle temps too high",
@@ -41,16 +41,17 @@ class BaselineBenchPhase:
 
         ctx.thermal.start()
         print_info("Thermal monitoring active -- sampling temperatures during benchmark.")
-
-        ctx.baseline_result = ctx.runner.run_benchmark(
-            full_suite=False, lhm_available=ctx.lhm_available
-        )
+        try:
+            ctx.baseline_result = ctx.runner.run_benchmark(
+                full_suite=False, lhm_available=ctx.lhm_available
+            )
+        finally:
+            ctx.thermal.stop()
 
         if ctx.baseline_result.get("status") == "success":
             print_success("Baseline Benchmark Complete!")
             print_info(f"Scores: {ctx.baseline_result.get('scores', {})}")
 
-        ctx.thermal.stop()
         ctx.peak_temps = ctx.thermal.get_peak_temps()
         if ctx.peak_temps:
             cpu_peak = ctx.thermal.get_cpu_peak()

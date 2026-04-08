@@ -26,10 +26,10 @@ class TestFinalBenchPhaseRunnerGuard:
         # Should return without raising AttributeError
         phase.run(ctx)
         captured = capsys.readouterr()
-        assert "skipped" in captured.out.lower() or True  # no crash is the key assertion
+        assert "skipped" in captured.out.lower()
 
-    @patch("src.pipeline.phase_final.require_thermal_protection", return_value=True)
-    def test_skips_on_thermal_protection_when_runner_set(self, mock_thermal):
+    @patch("src.pipeline.phase_final.run_thermal_guard", return_value=True)
+    def test_skips_on_thermal_protection_when_runner_set(self, mock_guard):
         """Phase 5 skips via thermal gate when runner exists but LHM unavailable."""
         mock_runner = MagicMock()
         ctx = _make_ctx(runner=mock_runner, lhm_available=False)
@@ -37,9 +37,8 @@ class TestFinalBenchPhaseRunnerGuard:
         phase.run(ctx)
         mock_runner.run_benchmark.assert_not_called()
 
-    @patch("src.pipeline.phase_final.thermal_safety_gate", return_value=False)
-    @patch("src.pipeline.phase_final.require_thermal_protection", return_value=False)
-    def test_runs_benchmark_when_runner_set_and_thermals_ok(self, mock_require, mock_gate):
+    @patch("src.pipeline.phase_final.run_thermal_guard", return_value=False)
+    def test_runs_benchmark_when_runner_set_and_thermals_ok(self, mock_guard):
         """Phase 5 calls run_benchmark when runner exists and thermals are safe."""
         mock_runner = MagicMock()
         mock_runner.run_benchmark.return_value = {"status": "success", "scores": {"single": 100}}

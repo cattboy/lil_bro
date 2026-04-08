@@ -61,4 +61,12 @@ Format: Priority | Effort (human / CC) | Context
 
 ## Completed
 
-*(none yet)*
+### T-003 — Deduplicate DEVMODE struct + mode enumeration
+**Completed**: 2026-04-08
+`src/utils/display_utils.py` created with canonical `DEVMODE` struct and `enum_raw_modes()`. Both `monitor_dumper.py` and `display_setter.py` now import from there. Local definitions removed. 5 tests in `tests/test_display_utils.py`.
+
+---
+
+### T-004 — Type PipelineContext.llm properly
+**Completed**: 2026-04-08
+`llm: object = None` changed to `llm: Optional[Llama] = None` in `src/pipeline/base.py`. `Llama` added to `TYPE_CHECKING` import block alongside the other forward-reference types.

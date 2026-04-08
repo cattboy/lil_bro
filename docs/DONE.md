@@ -2,13 +2,13 @@
 
 **Branch**: `refactor/priority-1-improvements`
 **Plan source**: `docs/REFACTORING_PLAN.md`
-**Last updated**: 2026-04-07
+**Last updated**: 2026-04-08
 
 ---
 
-## Completed (Priority 1)
+## Completed (Priority 1 + Priority 2-A)
 
-All 9 files in the Priority 1 scope are done. 377 tests pass, 0 regressions.
+Priority 1 scope (9 files) and Priority 2-A scope (7 files + 2 new test files) are done. 387 tests pass, 0 regressions.
 
 ### Issue 1.1 — Phase 5 crashes when Phase 3 was skipped
 **Fix**: Null guard at the top of `FinalBenchPhase.run()` before thermal checks.
@@ -33,6 +33,34 @@ All 9 files in the Priority 1 scope are done. 377 tests pass, 0 regressions.
 - `src/config.py` — new file: `BenchmarkConfig`, `ThermalConfig`, `AppConfig`, `_load_config()`
 - `tests/test_config.py` — 7 new tests (defaults, missing file, valid JSON, malformed, partial, empty)
 
+### Issue 3.2 (config.py) — already listed above under Priority 1.
+
+---
+
+## Completed (Priority 2-A)
+
+### T-004 — Type `PipelineContext.llm` properly
+**Fix**: Added `from llama_cpp import Llama` to the `TYPE_CHECKING` block in `base.py`; changed field from `llm: object = None` to `llm: Optional[Llama] = None`.
+- `src/pipeline/base.py` — 2-line change (import + annotation)
+
+### Issue 1.2 — Context field defaults unconditionally pre-assigned in phase_baseline.py
+**Fix**: Added `_SKIP_RESULT_HOT` named constant; moved the pre-assignment of `ctx.baseline_result` and `ctx.peak_temps` inside the `if benchmark_skipped:` block so the success path no longer overwrites stale sentinel values.
+- `src/pipeline/phase_baseline.py` — `_SKIP_RESULT_HOT` added, 2 lines moved inside guard
+
+### Issue 1.4 — Thermal guard pattern duplicated across both benchmark phases
+**Fix**: Added `run_thermal_guard(phase_name, ctx, **kwargs) -> bool` combinator to `thermal_gate.py`. Phase 5 now calls this single function instead of two separate checks. Phase 3 retains the two-step explicit pattern to preserve the `ctx.runner is None` sentinel semantics.
+- `src/pipeline/thermal_gate.py` — `run_thermal_guard()` added
+- `src/pipeline/phase_final.py` — replaced 2-step thermal pattern with `run_thermal_guard`; import updated
+- `tests/test_thermal_gate.py` — 4 new tests for `run_thermal_guard`
+- `tests/test_phase_final.py` — 2 existing tests updated to patch `run_thermal_guard` (was `require_thermal_protection` / `thermal_safety_gate`)
+
+### T-003 — DEVMODE struct duplicated in monitor_dumper.py and display_setter.py
+**Fix**: Single canonical `DEVMODE` struct and `enum_raw_modes()` in `src/utils/display_utils.py`; both callers import from there.
+- `src/utils/display_utils.py` — new file: `DEVMODE`, `enum_raw_modes()`, constants
+- `src/collectors/sub/monitor_dumper.py` — local DEVMODE removed; imports from display_utils; `enum_display_modes()` delegates to `enum_raw_modes`
+- `src/agent_tools/display_setter.py` — local DEVMODE and `_enum_all_modes()` removed; imports from display_utils; `find_best_mode()` uses `enum_raw_modes`
+- `tests/test_display_utils.py` — new file: 5 tests (struct fields, constants, single canonical definition)
+
 ---
 
 ## Outstanding
@@ -41,14 +69,9 @@ All 9 files in the Priority 1 scope are done. 377 tests pass, 0 regressions.
 
 | ID | Issue | Files | Effort |
 |----|-------|-------|--------|
-| 1.2 | Context field defaults scattered — `ctx.baseline_result` and `ctx.peak_temps` initialized in multiple places | `phase_baseline.py`, `base.py` | XS |
 | 1.3 | LLM stored as `object` in global `_state.py` — untestable, weakly typed | `_state.py`, `menu.py`, `phase_config.py` | S |
-| 1.4 | Thermal duplicate pattern in phase_baseline and phase_final — both call `require_thermal_protection()` with identical pattern | `phase_baseline.py`, `phase_final.py`, `thermal_gate.py` | S |
-| 2.2 | DEVMODE struct + mode enumeration duplicated in display_setter and monitor_dumper | `display_setter.py`, `monitor_dumper.py` | S |
 | 2.4 | No CollectorResult type, no unified subprocess wrapper, no specs schema | Multiple | M |
 | 3.1 | Fallback logic scattered — LLM, Cinebench, model, thermal each have separate ad-hoc fallback paths | Multiple | M |
-| T-003 | DEVMODE struct dedup (see TODOS.md) | `display_setter.py`, `monitor_dumper.py` | S |
-| T-004 | Type `PipelineContext.llm` properly — currently `object` (see TODOS.md) | `base.py` | XS |
 
 ### Priority 3 (Nice to Have)
 

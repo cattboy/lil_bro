@@ -1,6 +1,51 @@
-"""Tests for src.pipeline.thermal_gate.thermal_safety_gate."""
-from unittest.mock import patch
-from src.pipeline.thermal_gate import thermal_safety_gate
+"""Tests for src.pipeline.thermal_gate — thermal_safety_gate and run_thermal_guard."""
+from unittest.mock import MagicMock, patch
+from src.pipeline.thermal_gate import thermal_safety_gate, run_thermal_guard
+
+
+def _make_ctx(**kwargs):
+    ctx = MagicMock()
+    ctx.lhm_available = kwargs.get("lhm_available", True)
+    return ctx
+
+
+class TestRunThermalGuard:
+    @patch("src.pipeline.thermal_gate.require_thermal_protection", return_value=True)
+    def test_returns_true_when_no_protection(self, mock_require):
+        """require_thermal_protection=True short-circuits and returns True."""
+        ctx = _make_ctx(lhm_available=True)
+        assert run_thermal_guard("TestPhase", ctx) is True
+        mock_require.assert_called_once_with("TestPhase", ctx)
+
+    @patch("src.pipeline.thermal_gate.thermal_safety_gate", return_value=True)
+    @patch("src.pipeline.thermal_gate.require_thermal_protection", return_value=False)
+    def test_returns_true_when_temps_too_hot(self, mock_require, mock_gate):
+        """thermal_safety_gate=True (temps high, user declines) returns True."""
+        ctx = _make_ctx(lhm_available=True)
+        assert run_thermal_guard("TestPhase", ctx) is True
+
+    @patch("src.pipeline.thermal_gate.thermal_safety_gate", return_value=False)
+    @patch("src.pipeline.thermal_gate.require_thermal_protection", return_value=False)
+    def test_returns_false_when_safe(self, mock_require, mock_gate):
+        """Both checks pass — benchmark should proceed."""
+        ctx = _make_ctx(lhm_available=True)
+        assert run_thermal_guard("TestPhase", ctx) is False
+
+    @patch("src.pipeline.thermal_gate.thermal_safety_gate", return_value=False)
+    @patch("src.pipeline.thermal_gate.require_thermal_protection", return_value=False)
+    def test_passes_kwargs_to_safety_gate(self, mock_require, mock_gate):
+        """Custom skip_message and approval_prompt are forwarded to thermal_safety_gate."""
+        ctx = _make_ctx(lhm_available=True)
+        run_thermal_guard(
+            "TestPhase", ctx,
+            skip_message="Custom skip",
+            approval_prompt="Custom prompt?",
+        )
+        mock_gate.assert_called_once_with(
+            True,
+            skip_message="Custom skip",
+            approval_prompt="Custom prompt?",
+        )
 
 
 class TestThermalSafetyGate:
