@@ -2,7 +2,7 @@
 
 **Branch**: `refactor/priority-1-improvements`
 **Plan source**: `docs/REFACTORING_PLAN.md`
-**Last updated**: 2026-04-09
+**Last updated**: 2026-04-09 (Priority 3-A bundle)
 
 ---
 
@@ -73,6 +73,28 @@ Priority 1 scope (9 files), Priority 2-A scope (7 files + 2 new test files), and
 
 ---
 
+---
+
+## Completed (Priority 3-A)
+
+### Issue 3.5 — Circular import guard in integrity.py
+**Fix**: Moved `from .formatting import ...` to module top level; removed two `try/except ImportError` blocks inside `verify_integrity()`. No actual circular dependency existed — `formatting.py` only imports `shutil`, `sys`, and `colorama`.
+- `src/utils/integrity.py` — 2 lazy import blocks replaced by 1 top-level import
+
+### Issue 1.6 — phase_config.py had zero error handling
+**Fix**: Wrapped the entire analysis/proposal/approval block in `try/except`. `PipelineAborted` re-raises (user declined); all other `Exception` types are logged + warned, then swallowed so Phase 5 still runs.
+- `src/pipeline/phase_config.py` — try/except added; unused `print_info` import removed
+- `tests/test_phase_config.py` — new file: 2 tests (unexpected exception caught, PipelineAborted propagates)
+
+### T-002 — UnicodeEncodeError on Windows CMD (CP437 terminals)
+**Fix**: Added `sys.stdout.reconfigure(errors="replace")` early in `main()` via `isinstance` check. Non-encodable LLM output characters (e.g. curly quotes, em dashes) now print as `?` instead of crashing.
+- `src/main.py` — 3-line guard added before any print calls
+- `tests/test_formatting.py` — 1 new test: all `print_*` functions accept Unicode strings without raising
+
+388 → 391 tests passing.
+
+---
+
 ## Outstanding
 
 ### Priority 2 (Should Do)
@@ -87,13 +109,13 @@ Priority 1 scope (9 files), Priority 2-A scope (7 files + 2 new test files), and
 | ID | Issue | Files | Effort |
 |----|-------|-------|--------|
 | 1.5 | Phase execution status not visible to orchestrator — no ran/skipped/failed signal | `phases.py` | S |
-| 1.6 | Error handling inconsistent across phases — some catch, some don't | All `phase_*.py` | M |
+| 1.6 | ~~Error handling inconsistent across phases~~ | ✅ Done (phase_config.py — Priority 3-A) | — |
 | 2.5 | Setter interface contract missing — each setter has a different signature | All setter files, `fix_dispatch.py` | M |
 | 3.3 | Observability/metrics missing — no timing, no success ratio, no aggregation | N/A | L |
 | 3.4 | Lifecycle management split — LHM and ThermalMonitor ownership unclear | `main.py`, `lhm_sidecar.py`, `phase_*.py` | M |
-| 3.5 | Circular import guard in integrity.py (lazy import to avoid cycle) | `integrity.py` | XS |
+| 3.5 | ~~Circular import guard in integrity.py~~ | ✅ Done (Priority 3-A) | — |
 | T-001 | Future-proof formatting.py for GUI backend (see TODOS.md) | `formatting.py` | M |
-| T-002 | Harden LLM output against UnicodeEncodeError on Windows CMD (see TODOS.md) | `formatting.py` | S |
+| T-002 | ~~UnicodeEncodeError on Windows CMD~~ | ✅ Done (main.py — Priority 3-A) | — |
 | T-005 | Phase.run() return PhaseResult instead of None (see TODOS.md) | `phases.py`, all `phase_*.py` | S |
 
 ---

@@ -435,3 +435,23 @@ def test_design_md_all_tokens_mapped():
     content = _DESIGN_MD.read_text(encoding="utf-8")
     missing = [t for t in _REQUIRED_TOKENS if t not in content]
     assert not missing, f"DESIGN.md missing colorama mappings: {missing}"
+
+
+# ── T-002: Unicode hardening (1 test) ───────────────────────────────────────
+
+def test_print_functions_accept_unicode_strings(capsys):
+    """All print_* functions must accept strings with non-ASCII Unicode.
+
+    Guards against UnicodeEncodeError on Windows CMD (CP437) terminals.
+    The terminal-level fix (sys.stdout.reconfigure in main.py) handles
+    encoding; this test verifies the functions themselves don't pre-encode.
+    """
+    sample = "Right quote \u2019, em dash \u2014, bullet \u2022"
+    formatting.print_success(sample)
+    formatting.print_warning(sample)
+    formatting.print_error(sample)
+    formatting.print_info(sample)
+    formatting.print_dim(sample)
+    formatting.print_accent(sample)
+    out = capsys.readouterr().out
+    assert sample in out or sample.encode("ascii", errors="replace").decode() in out

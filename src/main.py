@@ -38,6 +38,10 @@ def _parse_args() -> argparse.Namespace:
 
 def main():
     multiprocessing.freeze_support()
+    # Harden stdout against UnicodeEncodeError on CP437 terminals (Windows CMD).
+    import io
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(errors="replace")
     action_logger._echo_fn = print_dim
     args = _parse_args()
 
