@@ -1,4 +1,9 @@
 """5-phase optimization pipeline orchestrator."""
+from __future__ import annotations
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from llama_cpp import Llama  # type: ignore
 
 from src.pipeline.base import PipelineContext, PipelineAborted, Phase
 from src.pipeline.phase_bootstrap import BootstrapPhase
@@ -19,7 +24,7 @@ _PHASES: list[Phase] = [
 ]
 
 
-def run_optimization_pipeline(lhm: LHMSidecar, llm: object = None) -> None:
+def run_optimization_pipeline(lhm: LHMSidecar, llm: Optional[Llama] = None) -> None:
     """Top-level pipeline entry. LHM lifecycle is owned by the caller (main.py)."""
     thermal = ThermalMonitor()
     ctx = PipelineContext(lhm=lhm, thermal=thermal, llm=llm)

@@ -2,13 +2,13 @@
 
 **Branch**: `refactor/priority-1-improvements`
 **Plan source**: `docs/REFACTORING_PLAN.md`
-**Last updated**: 2026-04-08
+**Last updated**: 2026-04-09
 
 ---
 
 ## Completed (Priority 1 + Priority 2-A)
 
-Priority 1 scope (9 files) and Priority 2-A scope (7 files + 2 new test files) are done. 387 tests pass, 0 regressions.
+Priority 1 scope (9 files), Priority 2-A scope (7 files + 2 new test files), and Issue 1.3 are done. 388 tests pass, 0 regressions.
 
 ### Issue 1.1 — Phase 5 crashes when Phase 3 was skipped
 **Fix**: Null guard at the top of `FinalBenchPhase.run()` before thermal checks.
@@ -63,13 +63,22 @@ Priority 1 scope (9 files) and Priority 2-A scope (7 files + 2 new test files) a
 
 ---
 
+## Completed (Issue 1.3)
+
+### Issue 1.3 — LLM typed as `object` / `Any` across pipeline pass-through sites
+**Fix**: Added `TYPE_CHECKING` guard + `Optional[Llama]` annotations at all LLM pass-through sites; removed stray `dict[str, Any]` inline annotations.
+- `src/pipeline/_state.py` — `_llm: Optional[Llama]`, `get_llm() -> Optional[Llama]`, `set_llm(instance: Optional[Llama]) -> None`
+- `src/pipeline/phases.py` — `run_optimization_pipeline(llm: Optional[Llama] = None)`; `TYPE_CHECKING` guard added
+- `src/llm/action_proposer.py` — `_call_llm(llm: Llama)`, `propose_actions(llm: Optional[Llama])`; `dict[str, Any]` → `dict` in `build_llm_input`
+
+---
+
 ## Outstanding
 
 ### Priority 2 (Should Do)
 
 | ID | Issue | Files | Effort |
 |----|-------|-------|--------|
-| 1.3 | LLM stored as `object` in global `_state.py` — untestable, weakly typed | `_state.py`, `menu.py`, `phase_config.py` | S |
 | 2.4 | No CollectorResult type, no unified subprocess wrapper, no specs schema | Multiple | M |
 | 3.1 | Fallback logic scattered — LLM, Cinebench, model, thermal each have separate ad-hoc fallback paths | Multiple | M |
 

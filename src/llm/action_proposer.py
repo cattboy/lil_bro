@@ -10,7 +10,10 @@ are used so the tool always produces a usable output.
 """
 from __future__ import annotations
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from llama_cpp import Llama  # type: ignore
 
 from src.utils.debug_logger import get_debug_logger
 
@@ -34,14 +37,14 @@ def build_llm_input(hardware: dict, findings: list[dict]) -> dict:
     Maps raw findings into the contracted LLM input format.
     Only FAIL findings are included — PASS/OK findings are not sent.
     """
-    llm_findings: list[dict[str, Any]] = []
+    llm_findings: list[dict] = []
 
     for f in findings:
         if not _is_fail(f):
             continue
 
         check = f.get("check", "")
-        entry: dict[str, Any] = {"check": check, "status": "FAIL"}
+        entry: dict = {"check": check, "status": "FAIL"}
 
         if check == "display":
             entry.update({
@@ -96,7 +99,7 @@ def _parse_proposals(raw: str) -> list[dict] | None:
         return None
 
 
-def _call_llm(llm: Any, llm_input: dict) -> list[dict] | None:
+def _call_llm(llm: Llama, llm_input: dict) -> list[dict] | None:
     """
     Sends findings to the model. Retries once on bad output.
     Returns a proposal list, or None if both attempts fail.
@@ -233,7 +236,7 @@ def _build_fallback(findings: list[dict]) -> list[dict]:
     return proposals
 
 
-def propose_actions(hardware: dict, findings: list[dict], llm: Any) -> list[dict]:
+def propose_actions(hardware: dict, findings: list[dict], llm: Optional[Llama]) -> list[dict]:
     """
     Main entry point. Returns a sorted list of action proposals.
 
