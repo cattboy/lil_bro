@@ -1,0 +1,11 @@
+{
+  "eval_id": 2,
+  "eval_name": "complex-multifile",
+  "prompt": "commit my changes",
+  "assertions": [
+    {"name": "questions_asked", "check": "output contains at least one question ending with '?'"},
+    {"name": "questions_are_relevant", "check": "question mentions display, pipeline, thermal, or asks about purpose/scope"},
+    {"name": "type_is_refactor", "check": "final commit message starts with 'refactor('"},
+    {"name": "no_fabricated_issue_link", "check": "commit message does not contain 'closes #' or 'refs #' without user confirmation"}
+  ]
+}

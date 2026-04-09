@@ -1,0 +1,11 @@
+{
+  "eval_id": 3,
+  "eval_name": "mixed-pr-context",
+  "prompt": "commit this",
+  "assertions": [
+    {"name": "no_questions_asked", "check": "output does not contain user-directed questions (sufficient context from issue + PR)"},
+    {"name": "closes_issue_235", "check": "commit message contains 'closes #235' or 'refs #235'"},
+    {"name": "scope_is_display", "check": "commit message scope contains 'display'"},
+    {"name": "type_is_feat_or_fix", "check": "commit message starts with 'feat(' or 'fix('"}
+  ]
+}

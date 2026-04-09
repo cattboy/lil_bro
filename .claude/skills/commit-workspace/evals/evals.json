@@ -1,0 +1,65 @@
+{
+  "skill_name": "commit",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "commit my changes",
+      "expected_output": "Commit message with closes #456, type=fix, scope references thermal, no questions asked",
+      "context": {
+        "branch": "fix/456-thermal-crash",
+        "diff_stat": "src/pipeline/thermal_gate.py | 8 ++++----\n 1 file changed, 4 insertions(+), 4 deletions(-)",
+        "diff": "diff --git a/src/pipeline/thermal_gate.py b/src/pipeline/thermal_gate.py\nindex a3c1f2d..9b4f1a2 100644\n--- a/src/pipeline/thermal_gate.py\n+++ b/src/pipeline/thermal_gate.py\n@@ -42,7 +42,7 @@ class ThermalGate:\n     def check(self, sensor_data):\n-        if sensor_data:\n+        if sensor_data and len(sensor_data) > 0:\n             temps = [s['value'] for s in sensor_data if s['type'] == 'Temperature']\n-            if temps:\n+            if temps and any(t > 0 for t in temps):\n                 return max(temps)\n-        raise TypeError('no sensor data')\n+        return None",
+        "gh_issue_456": "{\"title\": \"Thermal gate crashes when LHM returns empty sensor list\", \"body\": \"When LibreHardwareMonitor returns an empty sensor list, thermal_gate.py raises TypeError on line 45. Crash happens on systems where LHM is present but sensors failed to initialize.\", \"labels\": [{\"name\": \"bug\"}]}",
+        "gh_pr_view": "error: no pull requests found for branch fix/456-thermal-crash",
+        "gh_issue_list": "[{\"number\": 456, \"title\": \"Thermal gate crashes when LHM returns empty sensor list\", \"labels\": [{\"name\": \"bug\"}]}, {\"number\": 453, \"title\": \"Add DLSS detection for RTX 4000 series\", \"labels\": [{\"name\": \"feat\"}]}, {\"number\": 451, \"title\": \"Document display detection fallback logic\", \"labels\": [{\"name\": \"docs\"}]}]",
+        "git_log": "a9a2e9d serena MCP setup with new safety-agent addition to CC\n2b17a2b refactoring plan, tier 1 implementation sprint\na3c73a4 added more SHA256 verifications\n0ba3420 standardized wording and code review consolidation\n0bb74a2 thermal-safety checks"
+      },
+      "assertions": [
+        {"name": "closes_issue_456", "check": "commit message contains 'closes #456' or 'refs #456'"},
+        {"name": "type_is_fix", "check": "commit message starts with 'fix('"},
+        {"name": "scope_references_thermal", "check": "commit message scope contains 'thermal'"},
+        {"name": "no_questions_asked", "check": "output does not contain user-directed questions (no '?' at end of sentences)"}
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "commit my changes",
+      "expected_output": "1-2 clarifying questions asked, then a refactor message with no issue link",
+      "context": {
+        "branch": "refactor/priority-1-improvements",
+        "diff_stat": "CLAUDE.md | 12 +++++\n TODOS.md | 8 ++-\n src/agent_tools/display_setter.py | 67 +++++++++++++------\n src/collectors/sub/monitor_dumper.py | 31 ++++-----\n src/pipeline/base.py | 15 ++-\n src/pipeline/phase_baseline.py | 22 +++--\n src/pipeline/phase_final.py | 18 ++-\n src/pipeline/thermal_gate.py | 41 +++++++++---\n tests/test_phase_final.py | 34 +++++---\n tests/test_thermal_gate.py | 28 +++--\n 10 files changed, 175 insertions(+), 101 deletions(-)",
+        "diff": "(large diff spanning display detection refactor in display_setter.py, monitor data normalization in monitor_dumper.py, pipeline phase cleanup in phase_baseline/phase_final, thermal gate stability improvements, and corresponding test updates)",
+        "gh_issue_view": "error: no issue number found in branch name 'refactor/priority-1-improvements'",
+        "gh_pr_view": "error: no pull requests found for branch refactor/priority-1-improvements",
+        "gh_issue_list": "[{\"number\": 456, \"title\": \"Thermal gate crashes when LHM returns empty sensor list\", \"labels\": [{\"name\": \"bug\"}]}, {\"number\": 453, \"title\": \"Add DLSS detection for RTX 4000 series\", \"labels\": [{\"name\": \"feat\"}]}, {\"number\": 448, \"title\": \"Display detection fails for mixed DPI setups\", \"labels\": [{\"name\": \"bug\"}]}, {\"number\": 440, \"title\": \"Refactor pipeline phases for consistency\", \"labels\": [{\"name\": \"refactor\"}]}]",
+        "git_log": "a9a2e9d serena MCP setup with new safety-agent addition to CC\n2b17a2b refactoring plan, tier 1 implementation sprint\na3c73a4 added more SHA256 verifications\n0ba3420 standardized wording and code review consolidation\n0bb74a2 thermal-safety checks"
+      },
+      "assertions": [
+        {"name": "questions_asked", "check": "output contains at least one question directed at the user (ends with '?')"},
+        {"name": "questions_are_relevant", "check": "question mentions display, pipeline, thermal, or asks about purpose/scope of changes"},
+        {"name": "type_is_refactor", "check": "final commit message starts with 'refactor('"},
+        {"name": "no_fabricated_issue_link", "check": "commit message does not contain 'closes #' or 'refs #' without user confirmation"}
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "commit this",
+      "expected_output": "No questions asked, commit message uses feat/fix, closes #235, scope is display",
+      "context": {
+        "branch": "feat/235-display-detection",
+        "diff_stat": "src/agent_tools/display_setter.py | 45 ++++++++++++++++++--\n 1 file changed, 41 insertions(+), 4 deletions(-)",
+        "diff": "diff --git a/src/agent_tools/display_setter.py b/src/agent_tools/display_setter.py\n@@ -18,6 +18,47 @@ class DisplaySetter:\n+    def detect_mixed_dpi(self):\n+        \"\"\"Detect monitors with mismatched DPI settings.\"\"\"\n+        monitors = self._get_monitors()\n+        dpi_values = [m.get('dpi', 96) for m in monitors]\n+        if len(set(dpi_values)) > 1:\n+            return {'mixed': True, 'values': dpi_values}\n+        return {'mixed': False, 'values': dpi_values}",
+        "gh_issue_235": "{\"title\": \"Multi-monitor display detection fails for 4K + 1080p combo\", \"body\": \"When using a 4K primary with a 1080p secondary, display_setter incorrectly reports both as 1080p due to DPI normalization bug. Need proper mixed-DPI detection.\", \"labels\": [{\"name\": \"bug\"}, {\"name\": \"display\"}]}",
+        "gh_pr_view": "{\"number\": 42, \"title\": \"fix display detection for mixed resolution setups\", \"body\": \"Implements detect_mixed_dpi() to correctly identify monitors with different DPI values. Addresses #235.\"}",
+        "gh_issue_list": "[{\"number\": 456, \"title\": \"Thermal gate crashes when LHM returns empty sensor list\"}, {\"number\": 235, \"title\": \"Multi-monitor display detection fails for 4K + 1080p combo\"}]",
+        "git_log": "a9a2e9d serena MCP setup with new safety-agent addition to CC\n2b17a2b refactoring plan, tier 1 implementation sprint\na3c73a4 added more SHA256 verifications\n0ba3420 standardized wording and code review consolidation\n0bb74a2 thermal-safety checks"
+      },
+      "assertions": [
+        {"name": "no_questions_asked", "check": "output does not contain user-directed questions (sufficient context from issue + PR)"},
+        {"name": "closes_issue_235", "check": "commit message contains 'closes #235' or 'refs #235'"},
+        {"name": "scope_is_display", "check": "commit message scope contains 'display'"},
+        {"name": "type_is_feat_or_fix", "check": "commit message starts with 'feat(' or 'fix('"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "eval_id": 2,
+  "configuration": "with_skill",
+  "expectations": [
+    {
+      "text": "questions_asked: output contains at least one question ending with '?'",
+      "passed": true,
+      "evidence": "Two questions asked: 'What's the main goal across these changes?' and 'Is this related to a specific GitHub issue?'"
+    },
+    {
+      "text": "questions_are_relevant: question mentions display/pipeline/thermal or asks about purpose/scope",
+      "passed": true,
+      "evidence": "Question 1 directly asks about purpose of changes; question 2 asks about GitHub issue linkage — both are high-signal questions per the skill's intent"
+    },
+    {
+      "text": "type_is_refactor: final commit message starts with 'refactor('",
+      "passed": true,
+      "evidence": "Message starts with 'refactor(pipeline):'"
+    },
+    {
+      "text": "no_fabricated_issue_link: commit message does not contain 'closes #' or 'refs #' without user confirmation",
+      "passed": true,
+      "evidence": "No closes/refs footer in the message — user confirmed no specific issue"
+    }
+  ],
+  "pass_count": 4,
+  "total_count": 4,
+  "pass_rate": 1.0
+}

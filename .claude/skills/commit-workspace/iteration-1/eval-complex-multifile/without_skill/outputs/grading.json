@@ -1,0 +1,29 @@
+{
+  "eval_id": 2,
+  "configuration": "without_skill",
+  "expectations": [
+    {
+      "text": "questions_asked: output contains at least one question ending with '?'",
+      "passed": false,
+      "evidence": "'Questions Asked' section says 'None' — baseline never asks questions"
+    },
+    {
+      "text": "questions_are_relevant: question mentions display/pipeline/thermal or asks about purpose/scope",
+      "passed": false,
+      "evidence": "No questions were asked, so this cannot pass"
+    },
+    {
+      "text": "type_is_refactor: final commit message starts with 'refactor('",
+      "passed": false,
+      "evidence": "Message is 'refactor: display detection, monitor normalization...' — no scope parentheses, fails strict check for 'refactor('"
+    },
+    {
+      "text": "no_fabricated_issue_link: commit message does not contain 'closes #' or 'refs #' without user confirmation",
+      "passed": true,
+      "evidence": "No issue links in baseline message — baseline doesn't use gh CLI"
+    }
+  ],
+  "pass_count": 1,
+  "total_count": 4,
+  "pass_rate": 0.25
+}

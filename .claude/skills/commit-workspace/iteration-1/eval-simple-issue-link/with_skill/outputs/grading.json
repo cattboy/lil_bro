@@ -1,0 +1,29 @@
+{
+  "eval_id": 1,
+  "configuration": "with_skill",
+  "expectations": [
+    {
+      "text": "closes_issue_456: commit message contains 'closes #456' or 'refs #456'",
+      "passed": true,
+      "evidence": "Message contains 'closes #456' on the last line"
+    },
+    {
+      "text": "type_is_fix: commit message starts with 'fix('",
+      "passed": true,
+      "evidence": "Message starts with 'fix(thermal):'"
+    },
+    {
+      "text": "scope_references_thermal: commit message scope contains 'thermal'",
+      "passed": true,
+      "evidence": "Scope is 'thermal' in fix(thermal)"
+    },
+    {
+      "text": "no_questions_asked: output does not contain user-directed questions",
+      "passed": true,
+      "evidence": "'Questions Asked' section says 'None'"
+    }
+  ],
+  "pass_count": 4,
+  "total_count": 4,
+  "pass_rate": 1.0
+}

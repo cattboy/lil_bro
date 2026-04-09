@@ -1,0 +1,177 @@
+{
+  "metadata": {
+    "skill_name": "commit",
+    "skill_path": "C:/1_Coding/2026/lil_bro/.claude/skills/commit",
+    "executor_model": "claude-sonnet-4-6",
+    "timestamp": "2026-04-08T09:57:38Z",
+    "evals_run": ["simple-issue-link", "complex-multifile", "mixed-pr-context"],
+    "runs_per_configuration": 1
+  },
+
+  "runs": [
+    {
+      "eval_id": 1,
+      "eval_name": "simple-issue-link",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 28.6,
+        "tokens": 16001,
+        "tool_calls": 4,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "closes_issue_456: commit message contains 'closes #456' or 'refs #456'", "passed": true, "evidence": "Message ends with 'closes #456'"},
+        {"text": "type_is_fix: commit message starts with 'fix('", "passed": true, "evidence": "fix(thermal): ..."},
+        {"text": "scope_references_thermal: scope contains 'thermal'", "passed": true, "evidence": "Scope is 'thermal'"},
+        {"text": "no_questions_asked: output has no user-directed questions", "passed": true, "evidence": "Questions Asked: None"}
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 1,
+      "eval_name": "simple-issue-link",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.75,
+        "passed": 3,
+        "failed": 1,
+        "total": 4,
+        "time_seconds": 17.5,
+        "tokens": 13510,
+        "tool_calls": 2,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "closes_issue_456: commit message contains 'closes #456' or 'refs #456'", "passed": false, "evidence": "No issue reference — baseline has no gh CLI access"},
+        {"text": "type_is_fix: commit message starts with 'fix('", "passed": true, "evidence": "fix(thermal-gate): ..."},
+        {"text": "scope_references_thermal: scope contains 'thermal'", "passed": true, "evidence": "Scope is 'thermal-gate'"},
+        {"text": "no_questions_asked: output has no user-directed questions", "passed": true, "evidence": "Questions Asked: None"}
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "complex-multifile",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 40.4,
+        "tokens": 16782,
+        "tool_calls": 4,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "questions_asked: output contains at least one question ending with '?'", "passed": true, "evidence": "Two questions asked: purpose + GitHub issue"},
+        {"text": "questions_are_relevant: question mentions display/pipeline/thermal or asks about purpose", "passed": true, "evidence": "Q1 asks about main goal; Q2 asks about GitHub issue linkage"},
+        {"text": "type_is_refactor: final commit message starts with 'refactor('", "passed": true, "evidence": "refactor(pipeline): ..."},
+        {"text": "no_fabricated_issue_link: no 'closes #' or 'refs #' without user confirmation", "passed": true, "evidence": "No issue footer — user confirmed not tied to an issue"}
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 2,
+      "eval_name": "complex-multifile",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.25,
+        "passed": 1,
+        "failed": 3,
+        "total": 4,
+        "time_seconds": 19.5,
+        "tokens": 13561,
+        "tool_calls": 3,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "questions_asked: output contains at least one question ending with '?'", "passed": false, "evidence": "Baseline never asks questions — generates message immediately"},
+        {"text": "questions_are_relevant: question mentions display/pipeline/thermal or asks about purpose", "passed": false, "evidence": "No questions asked"},
+        {"text": "type_is_refactor: final commit message starts with 'refactor('", "passed": false, "evidence": "Message is 'refactor: ...' (no scope, strict check fails)"},
+        {"text": "no_fabricated_issue_link: no 'closes #' or 'refs #' without user confirmation", "passed": true, "evidence": "No issue links in baseline message"}
+      ],
+      "notes": ["Baseline produced a reasonable summary but without scope and without interactive refinement"]
+    },
+    {
+      "eval_id": 3,
+      "eval_name": "mixed-pr-context",
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "total": 4,
+        "time_seconds": 29.2,
+        "tokens": 16019,
+        "tool_calls": 3,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "no_questions_asked: no questions with clear issue + PR context", "passed": true, "evidence": "Questions Asked: None — issue #235 + open PR provided sufficient context"},
+        {"text": "closes_issue_235: commit message contains 'closes #235' or 'refs #235'", "passed": true, "evidence": "Message ends with 'closes #235'"},
+        {"text": "scope_is_display: commit message scope contains 'display'", "passed": true, "evidence": "Scope is 'display' in fix(display)"},
+        {"text": "type_is_feat_or_fix: starts with 'feat(' or 'fix('", "passed": true, "evidence": "fix(display): — chose fix because issue is labeled 'bug'"}
+      ],
+      "notes": []
+    },
+    {
+      "eval_id": 3,
+      "eval_name": "mixed-pr-context",
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.75,
+        "passed": 3,
+        "failed": 1,
+        "total": 4,
+        "time_seconds": 14.0,
+        "tokens": 13212,
+        "tool_calls": 2,
+        "errors": 0
+      },
+      "expectations": [
+        {"text": "no_questions_asked: no questions with clear issue + PR context", "passed": true, "evidence": "Questions Asked: None (baseline never asks)"},
+        {"text": "closes_issue_235: commit message contains 'closes #235' or 'refs #235'", "passed": false, "evidence": "Message is 'feat(display): add mixed DPI...' — no issue link without gh CLI"},
+        {"text": "scope_is_display: commit message scope contains 'display'", "passed": true, "evidence": "Scope is 'display' in feat(display)"},
+        {"text": "type_is_feat_or_fix: starts with 'feat(' or 'fix('", "passed": true, "evidence": "feat(display): — chose feat since new methods without bug context"}
+      ],
+      "notes": ["Without issue label context, baseline correctly identifies new methods as a feature rather than a bug fix"]
+    }
+  ],
+
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {"mean": 1.0, "stddev": 0.0, "min": 1.0, "max": 1.0},
+      "time_seconds": {"mean": 32.7, "stddev": 6.1, "min": 28.6, "max": 40.4},
+      "tokens": {"mean": 16267, "stddev": 414, "min": 16001, "max": 16782}
+    },
+    "without_skill": {
+      "pass_rate": {"mean": 0.583, "stddev": 0.289, "min": 0.25, "max": 0.75},
+      "time_seconds": {"mean": 17.0, "stddev": 2.8, "min": 14.0, "max": 19.5},
+      "tokens": {"mean": 13428, "stddev": 187, "min": 13212, "max": 13561}
+    },
+    "delta": {
+      "pass_rate": "+0.42",
+      "time_seconds": "+15.7",
+      "tokens": "+2839"
+    }
+  },
+
+  "notes": [
+    "Issue linking is the single biggest differentiator: with_skill links to GitHub issues in 2/3 evals; baseline never does",
+    "Eval 2 (complex-multifile) shows the largest gap (100% vs 25%) — skill's smart question-asking and scoped message are the key wins",
+    "no_fabricated_issue_link passes 100% for both configs — neither hallucinates issue refs, so this assertion is non-discriminating",
+    "Baseline is 15.7s faster and uses ~2839 fewer tokens — the gh CLI context gathering has a real overhead cost",
+    "type selection differs on eval 3: baseline chose 'feat' for new methods; skill chose 'fix' by reading issue labels — a meaningful quality difference"
+  ]
+}

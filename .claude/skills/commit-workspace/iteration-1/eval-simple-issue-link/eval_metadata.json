@@ -1,0 +1,11 @@
+{
+  "eval_id": 1,
+  "eval_name": "simple-issue-link",
+  "prompt": "commit my changes",
+  "assertions": [
+    {"name": "closes_issue_456", "check": "commit message contains 'closes #456' or 'refs #456'"},
+    {"name": "type_is_fix", "check": "commit message starts with 'fix('"},
+    {"name": "scope_references_thermal", "check": "commit message scope contains 'thermal'"},
+    {"name": "no_questions_asked", "check": "output does not contain user-directed questions"}
+  ]
+}
