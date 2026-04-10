@@ -193,9 +193,9 @@ class ThermalMonitor:
 
 # ── Thermal watchdog ─────────────────────────────────────────────────────────
 
-_WATCHDOG_THRESHOLD = _cfg.thermal.watchdog_threshold  # °C — abort limit for CPU and GPU
-_WATCHDOG_SUSTAINED_SECS = 5                           # consecutive seconds over limit before abort
-_WATCHDOG_POLL_INTERVAL = _cfg.thermal.poll_interval   # seconds between polls
+_WATCHDOG_THRESHOLD = _cfg.thermal.watchdog_threshold          # °C — abort limit for CPU and GPU
+_WATCHDOG_SUSTAINED_SECS = _cfg.thermal.watchdog_sustained_secs  # consecutive seconds over limit before abort
+_WATCHDOG_POLL_INTERVAL = _cfg.thermal.poll_interval           # seconds between polls
 
 
 class ThermalWatchdog:

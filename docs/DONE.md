@@ -2,7 +2,7 @@
 
 **Branch**: `refactor/priority-1-improvements`
 **Plan source**: `docs/REFACTORING_PLAN.md`
-**Last updated**: 2026-04-10 (Priority 2-B bundle)
+**Last updated**: 2026-04-10 (config auto-generation)
 
 ---
 
@@ -111,6 +111,19 @@ Priority 1 scope (9 files), Priority 2-A scope (7 files + 2 new test files), and
 - Full specs schema / TypedDict — over-engineered for a 4 K-line solo tool
 
 391 → 397 tests passing.
+
+---
+
+## Completed (Config auto-generation)
+
+### Issue 3.2 (follow-up) — Auto-generate lil_bro_config.json on first run
+**Fix**: On first run (no config file in CWD), the app uses hardcoded defaults. At exit, `save_default_config()` writes a JSONC template with `//` comment descriptions for every setting. Subsequent runs read from the file. Existing files are never overwritten.
+- `src/config.py` — replaced `_get_exe_dir()` with CWD-based `get_config_path()`; added `_strip_jsonc()` for JSONC comment stripping; added `_DEFAULT_CONFIG_TEMPLATE` + `save_default_config()`
+- `src/main.py` — `save_default_config()` call added to `finally` block (before cleanup)
+- `.gitignore` — `lil_bro_config.json` added
+- `tests/test_config.py` — 5 existing tests updated (`_get_exe_dir` mock → `monkeypatch.chdir`); 10 new tests (JSONC stripping, save/no-overwrite, round-trip, error resilience, completeness)
+
+397 → 407 tests passing.
 
 ---
 
