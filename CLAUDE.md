@@ -44,6 +44,30 @@
 
 ---
 
+## Serena MCP Tools
+
+Serena is started manually by the user before each session. **When Serena is available, always prefer its tools over built-in Claude Code tools for all code work.** Do not reach for Grep, Glob, or Read to navigate code when a Serena tool covers the same task.
+
+| Task | Use Serena | NOT built-in |
+|------|-----------|-------------|
+| Find a function / class / symbol | `mcp__serena__find_symbol` | Grep |
+| Search code by pattern | `mcp__serena__search_for_pattern` | Grep |
+| Get file/module overview | `mcp__serena__get_symbols_overview` | Read |
+| Browse project structure | `mcp__serena__list_dir` | Glob |
+| Locate a file | `mcp__serena__find_file` | Glob |
+| Edit a symbol body | `mcp__serena__replace_symbol_body` | Edit |
+| Cross-file refactoring | Serena symbol tools | Grep + Edit |
+| Find all callers of a symbol | `mcp__serena__find_referencing_symbols` | Grep |
+| Rename a symbol project-wide | `mcp__serena__rename_symbol` | sed / Edit |
+| Persist project knowledge | `mcp__serena__write_memory` / `read_memory` | Memory files |
+
+**Only use built-in tools when:**
+- Reading non-code files (markdown, config, logs, XML)
+- Serena is not running (fall back to Grep/Glob/Read, note the limitation)
+- The target file is outside the project root
+
+---
+
 ## Architecture
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full file tree, 5-phase pipeline, and tech stack.
