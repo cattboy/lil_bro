@@ -2,7 +2,7 @@
 
 **Branch**: `refactor/priority-1-improvements`
 **Plan source**: `docs/REFACTORING_PLAN.md`
-**Last updated**: 2026-04-09 (Priority 3-A bundle)
+**Last updated**: 2026-04-10 (Priority 2-B bundle)
 
 ---
 
@@ -95,14 +95,32 @@ Priority 1 scope (9 files), Priority 2-A scope (7 files + 2 new test files), and
 
 ---
 
+## Completed (Priority 2-B)
+
+### Issue 2.4 (scoped) — Unified subprocess wrapper
+**Fix**: Created `src/utils/subprocess_utils.py` with `run_subprocess()` — thin `subprocess.run()` wrapper with consistent 10s default timeout and debug logging. Migrated 6 call sites in 3 files; complex Popen/polling patterns (cinebench, lhm_sidecar, dxdiag) deliberately left unchanged.
+- `src/utils/subprocess_utils.py` — new file: `run_subprocess()` with timeout, debug logging, re-raises on error
+- `src/agent_tools/power_plan.py` — 4 calls migrated; `run_subprocess` imported
+- `src/collectors/sub/nvidia_smi_dumper.py` — 1 call migrated; gains default 10s timeout
+- `src/collectors/sub/amd_smi_dumper.py` — 1 call migrated; gains 10s timeout (was unbounded)
+- `tests/test_subprocess_utils.py` — new file: 6 tests (happy path, non-zero rc, timeout, FileNotFoundError, CalledProcessError, custom timeout)
+- `tests/test_power_plan.py` — 5 mock patches updated from `subprocess.run` → `run_subprocess`
+
+**Skipped sub-issues** (per eng-review scope):
+- `CollectorResult` generic type — explicitly deferred, codebase not grown enough to justify
+- Full specs schema / TypedDict — over-engineered for a 4 K-line solo tool
+
+391 → 397 tests passing.
+
+---
+
 ## Outstanding
 
 ### Priority 2 (Should Do)
 
 | ID | Issue | Files | Effort |
 |----|-------|-------|--------|
-| 2.4 | No CollectorResult type, no unified subprocess wrapper, no specs schema | Multiple | M |
-| 3.1 | Fallback logic scattered — LLM, Cinebench, model, thermal each have separate ad-hoc fallback paths | Multiple | M |
+| ~~3.1~~ | ~~Fallback logic scattered~~ | ✅ Closed — see "Explicitly Out of Scope" below | — |
 
 ### Priority 3 (Nice to Have)
 
@@ -120,9 +138,9 @@ Priority 1 scope (9 files), Priority 2-A scope (7 files + 2 new test files), and
 
 ---
 
-## Explicitly Out of Scope (decisions from eng-review)
+## Explicitly Out of Scope (decisions from eng-review + Priority 2-B analysis)
 
 - **Setter interface Protocol** — `display_setter.py`'s `(bool, str)` return is intentional (dry_run/apply two-phase pattern). Not changing.
 - **Phase Dependency Framework** (PhaseContract/PhaseResult classes) — over-engineered for a 4,000-line solo tool. Null guard in phase_final.py is sufficient.
-- **Unified CollectorResult generic type** — deferred to Priority 2 if/when the codebase grows.
-- **FallbackStrategy Protocol** — deferred; individual fallback paths work and are tested.
+- **Unified CollectorResult generic type** — deferred; codebase not grown enough to justify.
+- **FallbackStrategy Protocol** (Issue 3.1) — the four fallback paths (LLM static templates, Cinebench CPU stress, model_loader None, thermal empty dict) have different triggers, return types, and caller patterns. A unified abstraction would add indirection without reducing complexity. Individual paths are tested and documented. Closed.

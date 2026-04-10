@@ -1,4 +1,6 @@
 import subprocess
+from ...utils.subprocess_utils import run_subprocess
+
 # Currently not working, need AMD GPU to test and develop against. Placeholder for future AMD support via amdsmi library or CLI parsing.
 def get_amd_smi() -> list | str:
     """Attempts to use the amdsmi Python library (Linux/WSL) or amd-smi CLI."""
@@ -46,9 +48,9 @@ def get_amd_smi() -> list | str:
     except ImportError:
         # Fallback to CLI if possible
         try:
-           result = subprocess.run(["amd-smi", "static"], capture_output=True, text=True)
+           result = run_subprocess(["amd-smi", "static"])
            if result.returncode == 0:
                return "amd-smi CLI found but requires parsing implementation"
            return "amdsmi Python module not installed and CLI failed"
-        except FileNotFoundError:
+        except (FileNotFoundError, subprocess.TimeoutExpired):
            return "amdsmi Python module not installed and CLI not found"

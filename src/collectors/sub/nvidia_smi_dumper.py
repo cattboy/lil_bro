@@ -2,21 +2,19 @@ import subprocess
 import xml.etree.ElementTree as ET
 from typing import Any
 
+from ...utils.subprocess_utils import run_subprocess
+
+
 def get_nvidia_smi() -> list[dict[str, Any]]:
     """
     Executes nvidia-smi and parses the XML output from memory.
-    
+
     Raises:
         FileNotFoundError: If nvidia-smi is not installed/in PATH.
         RuntimeError: If the subprocess fails or XML parsing fails.
     """
     try:
-        result = subprocess.run(
-            ["nvidia-smi", "-x", "-q"], 
-            capture_output=True, 
-            text=True, 
-            check=True
-        )
+        result = run_subprocess(["nvidia-smi", "-x", "-q"], check=True)
     except FileNotFoundError as e:
         raise FileNotFoundError("nvidia-smi executable not found in PATH.") from e
     except subprocess.CalledProcessError as e:
