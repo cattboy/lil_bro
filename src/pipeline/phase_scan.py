@@ -2,17 +2,17 @@
 
 import json
 
-from src.pipeline.base import PipelineContext
+from src.pipeline.base import PipelineContext, PhaseResult
 from src.collectors.spec_dumper import dump_system_specs
 from src.utils.dump_parser import extract_hardware_summary
 from src.utils.formatting import (
-    print_header, print_success, print_info, print_warning, print_key_value,
+    print_header, print_success, print_info, print_key_value,
 )
 from src.utils.debug_logger import get_debug_logger
 
 
 class ScanPhase:
-    def run(self, ctx: PipelineContext) -> None:
+    def run(self, ctx: PipelineContext) -> PhaseResult:
         log = get_debug_logger()
         log.info("Phase 2: Deep System Scan")
         print_header("Phase 2: Deep System Scan")
@@ -39,3 +39,4 @@ class ScanPhase:
                 print_key_value("OS", hw.get("os", "Unknown"))
             except Exception as exc:
                 log.warning("Could not parse specs preview for display: %s", exc)
+        return PhaseResult("completed", "System scan complete")

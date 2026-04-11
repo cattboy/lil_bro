@@ -1,6 +1,6 @@
 """Phase 3 — Baseline Benchmark: Cinebench run + thermal monitoring."""
 
-from src.pipeline.base import PipelineContext
+from src.pipeline.base import PipelineContext, PhaseResult
 from src.benchmarks.cinebench import BenchmarkRunner
 from src.pipeline.thermal_gate import require_thermal_protection, thermal_safety_gate
 from src.utils.formatting import (
@@ -15,7 +15,7 @@ _SKIP_RESULT_HOT = {"status": "skipped", "message": "Benchmark skipped — idle 
 
 
 class BaselineBenchPhase:
-    def run(self, ctx: PipelineContext) -> None:
+    def run(self, ctx: PipelineContext) -> PhaseResult:
         log = get_debug_logger()
         log.info("Phase 3: Baseline Benchmark")
         print_header("Phase 3: Baseline Benchmark")
@@ -23,7 +23,7 @@ class BaselineBenchPhase:
         if require_thermal_protection("BaselineBench", ctx):
             ctx.baseline_result = dict(_SKIP_RESULT)
             ctx.peak_temps = {}
-            return
+            return PhaseResult("skipped", "No thermal protection available")
 
         ctx.runner = BenchmarkRunner()
         benchmark_skipped = thermal_safety_gate(ctx.lhm_available)
@@ -37,7 +37,7 @@ class BaselineBenchPhase:
                 details="Idle temperatures exceeded safe threshold or user declined.",
                 outcome="SKIPPED",
             )
-            return
+            return PhaseResult("skipped", "Idle temperatures too high")
 
         ctx.thermal.start()
         print_info("Thermal monitoring active -- sampling temperatures during benchmark.")
@@ -68,3 +68,4 @@ class BaselineBenchPhase:
                 )
         else:
             print_warning("Thermal monitor ran but captured no temperature data.")
+        return PhaseResult("completed", "Baseline benchmark complete")

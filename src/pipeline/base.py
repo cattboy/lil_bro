@@ -8,7 +8,7 @@ Phase is a structural Protocol — any class with a run(ctx) method qualifies.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Optional, Protocol
+from typing import TYPE_CHECKING, Literal, Optional, Protocol
 
 if TYPE_CHECKING:
     from src.collectors.sub.lhm_sidecar import LHMSidecar
@@ -19,6 +19,15 @@ if TYPE_CHECKING:
 
 class PipelineAborted(Exception):
     """Raised by a Phase to cleanly stop the pipeline (e.g. user declined restore point)."""
+
+
+@dataclass
+class PhaseResult:
+    """Return value from Phase.run() — gives the orchestrator visibility into phase outcomes."""
+
+    status: Literal["completed", "skipped", "failed"]
+    message: str = ""
+    error: Optional[str] = None
 
 
 @dataclass
@@ -45,4 +54,4 @@ class PipelineContext:
 class Phase(Protocol):
     """Structural protocol for pipeline phases."""
 
-    def run(self, ctx: PipelineContext) -> None: ...
+    def run(self, ctx: PipelineContext) -> PhaseResult: ...

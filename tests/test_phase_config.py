@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.pipeline.base import PipelineAborted, PipelineContext
+from src.pipeline.base import PipelineAborted, PipelineContext, PhaseResult
 from src.pipeline.phase_config import ConfigPhase
 
 _MINIMAL_SPECS: dict = {
@@ -36,7 +36,10 @@ class TestConfigPhaseErrorHandling:
         """An unexpected exception in analysis must be caught — pipeline continues."""
         ctx = _make_ctx()
         phase = ConfigPhase()
-        phase.run(ctx)  # must not raise
+        result = phase.run(ctx)  # must not raise
+        assert isinstance(result, PhaseResult)
+        assert result.status == "failed"
+        assert result.error is not None
 
     @patch("src.pipeline.phase_config.run_approval_flow", side_effect=PipelineAborted)
     @patch("src.pipeline.phase_config.propose_actions", return_value=[])

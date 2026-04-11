@@ -1,6 +1,6 @@
 """Phase 4 — Optimization Configuration Check: analyze, propose, approve."""
 
-from src.pipeline.base import PipelineAborted, PipelineContext
+from src.pipeline.base import PipelineAborted, PipelineContext, PhaseResult
 from src.agent_tools.display import analyze_display
 from src.agent_tools.game_mode import analyze_game_mode
 from src.agent_tools.power_plan import analyze_power_plan
@@ -21,14 +21,14 @@ from src.pipeline.approval import run_approval_flow
 
 
 class ConfigPhase:
-    def run(self, ctx: PipelineContext) -> None:
+    def run(self, ctx: PipelineContext) -> PhaseResult:
         log = get_debug_logger()
         log.info("Phase 4: Apply Optimization Configurations")
         print_header("Phase 4: Apply Optimization Configurations")
 
         if not ctx.specs:
             print_warning("No system data available -- skipping configuration checks.")
-            return
+            return PhaseResult("skipped", "No system data available")
 
         try:
             findings = [
@@ -88,3 +88,5 @@ class ConfigPhase:
         except Exception as exc:
             log.error("ConfigPhase failed unexpectedly: %s", exc, exc_info=True)
             print_warning("Configuration phase encountered an error — skipping to final benchmark.")
+            return PhaseResult("failed", "Configuration phase error", error=str(exc))
+        return PhaseResult("completed", "Configuration complete")

@@ -1,7 +1,7 @@
 """Tests for src.pipeline.phase_final.FinalBenchPhase."""
 from unittest.mock import MagicMock, patch
 
-from src.pipeline.base import PipelineContext
+from src.pipeline.base import PipelineContext, PhaseResult
 from src.pipeline.phase_final import FinalBenchPhase
 
 
@@ -23,10 +23,11 @@ class TestFinalBenchPhaseRunnerGuard:
         """Phase 5 must not crash when Phase 3 was skipped (ctx.runner=None)."""
         ctx = _make_ctx(runner=None)
         phase = FinalBenchPhase()
-        # Should return without raising AttributeError
-        phase.run(ctx)
+        result = phase.run(ctx)
         captured = capsys.readouterr()
         assert "skipped" in captured.out.lower()
+        assert isinstance(result, PhaseResult)
+        assert result.status == "skipped"
 
     @patch("src.pipeline.phase_final.run_thermal_guard", return_value=True)
     def test_skips_on_thermal_protection_when_runner_set(self, mock_guard):
@@ -34,8 +35,10 @@ class TestFinalBenchPhaseRunnerGuard:
         mock_runner = MagicMock()
         ctx = _make_ctx(runner=mock_runner, lhm_available=False)
         phase = FinalBenchPhase()
-        phase.run(ctx)
+        result = phase.run(ctx)
         mock_runner.run_benchmark.assert_not_called()
+        assert isinstance(result, PhaseResult)
+        assert result.status == "skipped"
 
     @patch("src.pipeline.phase_final.run_thermal_guard", return_value=False)
     def test_runs_benchmark_when_runner_set_and_thermals_ok(self, mock_guard):
@@ -45,5 +48,7 @@ class TestFinalBenchPhaseRunnerGuard:
         ctx = _make_ctx(runner=mock_runner, lhm_available=True)
         ctx.thermal = MagicMock()
         phase = FinalBenchPhase()
-        phase.run(ctx)
+        result = phase.run(ctx)
         mock_runner.run_benchmark.assert_called_once()
+        assert isinstance(result, PhaseResult)
+        assert result.status == "completed"

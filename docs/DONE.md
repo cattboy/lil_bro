@@ -2,7 +2,7 @@
 
 **Branch**: `refactor/priority-1-improvements`
 **Plan source**: `docs/REFACTORING_PLAN.md`
-**Last updated**: 2026-04-10 (config auto-generation)
+**Last updated**: 2026-04-11 (Issue 1.5 + T-005 — PhaseResult)
 
 ---
 
@@ -127,27 +127,34 @@ Priority 1 scope (9 files), Priority 2-A scope (7 files + 2 new test files), and
 
 ---
 
+## Completed (Issue 1.5 + T-005)
+
+### Issue 1.5 + T-005 — PhaseResult return type
+**Fix**: Added `PhaseResult` dataclass to `base.py`; updated all 5 phase `run()` methods to return it; orchestrator in `phases.py` now captures and logs non-completed results.
+- `src/pipeline/base.py` — `PhaseResult` dataclass added (`status`, `message`, `error`); `Phase` protocol updated to `-> PhaseResult`; `Literal` import added
+- `src/pipeline/phases.py` — orchestrator loop captures `PhaseResult`; logs skipped/failed phases via debug logger
+- `src/pipeline/phase_bootstrap.py` — returns `PhaseResult("completed", ...)` or `PhaseResult("completed", ..., error=...)` after restore-point failure + user override
+- `src/pipeline/phase_scan.py` — returns `PhaseResult("completed", ...)`; unused `print_warning` import removed
+- `src/pipeline/phase_baseline.py` — returns `PhaseResult("skipped", ...)` on thermal/temp gates; `PhaseResult("completed", ...)` on success
+- `src/pipeline/phase_config.py` — returns `PhaseResult("skipped", ...)` on no specs; `PhaseResult("failed", ..., error=...)` on unexpected exception; `PhaseResult("completed", ...)` on success
+- `src/pipeline/phase_final.py` — returns `PhaseResult("skipped", ...)` on null runner or thermal gate; `PhaseResult("completed", ...)` on success
+- `tests/test_phase_final.py` — 3 existing tests updated to assert on `PhaseResult.status`
+- `tests/test_phase_config.py` — exception test updated to assert `status == "failed"` and `error is not None`
+
+407 → 407 tests passing (no new tests needed — existing tests now assert on PhaseResult).
+
+---
+
 ## Outstanding
-
-### Priority 2 (Should Do)
-
-| ID | Issue | Files | Effort |
-|----|-------|-------|--------|
-| ~~3.1~~ | ~~Fallback logic scattered~~ | ✅ Closed — see "Explicitly Out of Scope" below | — |
 
 ### Priority 3 (Nice to Have)
 
 | ID | Issue | Files | Effort |
 |----|-------|-------|--------|
-| 1.5 | Phase execution status not visible to orchestrator — no ran/skipped/failed signal | `phases.py` | S |
-| 1.6 | ~~Error handling inconsistent across phases~~ | ✅ Done (phase_config.py — Priority 3-A) | — |
-| 2.5 | Setter interface contract missing — each setter has a different signature | All setter files, `fix_dispatch.py` | M |
+| 2.5 | Setter interface contract missing — each setter has a different signature (out of scope per eng-review) | All setter files, `fix_dispatch.py` | M |
 | 3.3 | Observability/metrics missing — no timing, no success ratio, no aggregation | N/A | L |
 | 3.4 | Lifecycle management split — LHM and ThermalMonitor ownership unclear | `main.py`, `lhm_sidecar.py`, `phase_*.py` | M |
-| 3.5 | ~~Circular import guard in integrity.py~~ | ✅ Done (Priority 3-A) | — |
-| T-001 | Future-proof formatting.py for GUI backend (see TODOS.md) | `formatting.py` | M |
-| T-002 | ~~UnicodeEncodeError on Windows CMD~~ | ✅ Done (main.py — Priority 3-A) | — |
-| T-005 | Phase.run() return PhaseResult instead of None (see TODOS.md) | `phases.py`, all `phase_*.py` | S |
+| T-001 | Future-proof formatting.py for GUI backend | `formatting.py` | M |
 
 ---
 
