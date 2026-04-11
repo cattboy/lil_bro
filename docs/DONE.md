@@ -2,7 +2,7 @@
 
 **Branch**: `refactor/priority-1-improvements`
 **Plan source**: `docs/REFACTORING_PLAN.md`
-**Last updated**: 2026-04-11 (Issue 1.5 + T-005 — PhaseResult)
+**Last updated**: 2026-04-11 (Issue 3.4 — Lifecycle Management)
 
 ---
 
@@ -145,16 +145,26 @@ Priority 1 scope (9 files), Priority 2-A scope (7 files + 2 new test files), and
 
 ---
 
+## Completed (Issue 3.4)
+
+### Issue 3.4 — Lifecycle Management Split
+**Fix**: Added `__enter__`/`__exit__` context manager to `ThermalMonitor`; wrapped pipeline loop in `with ThermalMonitor() as thermal:` block in `phases.py`. Per-phase `start()`/`stop()` pattern unchanged — context manager is a safety net ensuring cleanup on unexpected exceptions.
+- `src/benchmarks/thermal_monitor.py` — `__enter__`/`__exit__` methods added
+- `src/pipeline/phases.py` — `run_optimization_pipeline` body wrapped in `with` block
+- `tests/test_thermal_monitor.py` — 2 new tests (`test_monitor_context_manager_calls_stop`, `test_monitor_context_manager_noop_when_not_started`)
+
+407 → 409 tests passing.
+
+---
+
 ## Outstanding
 
-### Priority 3 (Nice to Have)
+### Deferred to `todo.md` (project root)
 
-| ID | Issue | Files | Effort |
-|----|-------|-------|--------|
-| 2.5 | Setter interface contract missing — each setter has a different signature (out of scope per eng-review) | All setter files, `fix_dispatch.py` | M |
-| 3.3 | Observability/metrics missing — no timing, no success ratio, no aggregation | N/A | L |
-| 3.4 | Lifecycle management split — LHM and ThermalMonitor ownership unclear | `main.py`, `lhm_sidecar.py`, `phase_*.py` | M |
-| T-001 | Future-proof formatting.py for GUI backend | `formatting.py` | M |
+| ID | Issue | Reason |
+|----|-------|--------|
+| 3.3 | Observability/metrics missing | Solo CLI tool — value only when codebase grows |
+| T-001 | Future-proof formatting.py for GUI | On hold until GUI is requested |
 
 ---
 

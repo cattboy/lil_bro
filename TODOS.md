@@ -59,6 +59,16 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
+### T-006 — Observability & Instrumentation
+**Priority:** P3
+**Effort:** L human / L with CC
+**Why:** No phase timing snapshots, no per-check success/failure ratios, no metrics aggregation. Logs exist but no structured performance data. Value only materializes when the codebase grows significantly or multiple contributors are involved.
+**Fix:** Optional metric collection via `@instrument` decorator or a metrics registry.
+**Blocked by:** Nothing. Defer until codebase or team grows.
+**Added:** 2026-04-11 (merged from todo.md Issue 3.3)
+
+---
+
 ## Completed
 
 ### T-003 — Deduplicate DEVMODE struct + mode enumeration

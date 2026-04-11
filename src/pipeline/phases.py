@@ -27,14 +27,14 @@ _PHASES: list[Phase] = [
 
 def run_optimization_pipeline(lhm: LHMSidecar, llm: Optional[Llama] = None) -> None:
     """Top-level pipeline entry. LHM lifecycle is owned by the caller (main.py)."""
-    thermal = ThermalMonitor()
-    ctx = PipelineContext(lhm=lhm, thermal=thermal, llm=llm)
-    log = get_debug_logger()
-    try:
-        for phase in _PHASES:
-            result: PhaseResult = phase.run(ctx)
-            if result.status != "completed":
-                log.info("Phase %s: %s — %s", type(phase).__name__, result.status, result.message)
-    except PipelineAborted:
-        pass
+    with ThermalMonitor() as thermal:
+        ctx = PipelineContext(lhm=lhm, thermal=thermal, llm=llm)
+        log = get_debug_logger()
+        try:
+            for phase in _PHASES:
+                result: PhaseResult = phase.run(ctx)
+                if result.status != "completed":
+                    log.info("Phase %s: %s — %s", type(phase).__name__, result.status, result.message)
+        except PipelineAborted:
+            pass
     print_header("Optimization Pipeline Complete")

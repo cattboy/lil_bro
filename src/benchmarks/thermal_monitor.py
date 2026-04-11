@@ -146,6 +146,12 @@ class ThermalMonitor:
             self._thread.join(timeout=5)
             self._thread = None
 
+    def __enter__(self) -> "ThermalMonitor":
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.stop()
+
     def _poll_loop(self) -> None:
         """Polling loop — runs on daemon thread."""
         while not self._stop_event.is_set():
