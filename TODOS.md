@@ -17,18 +17,6 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
-### T-002 — Harden LLM output printing against UnicodeEncodeError
-**Priority:** P2
-**Effort:** S human / S with CC
-**Why:** `print_proposal` and other functions pass LLM-generated text directly to `print()`. On Windows CMD (CP437 encoding), any character outside the CP437 charset raises `UnicodeEncodeError` — a silent crash with no user-friendly message. Qwen2.5 can produce non-Latin characters even in English responses.
-**Fix options:**
-1. Set `PYTHONIOENCODING=utf-8` in the launcher script / `.spec` file
-2. Wrap `sys.stdout` at startup: `sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')`
-**Recommended:** Option 2 (runtime fix, no launcher dependency).
-**Added:** 2026-03-24 (from /plan-ceo-review, Week 6 terminal UI redesign)
-
----
-
 ### T-003 — Deduplicate DEVMODE struct + mode enumeration
 **Priority:** P2
 **Effort:** S human / S with CC
@@ -46,16 +34,6 @@ Format: Priority | Effort (human / CC) | Context
 **Fix:** Define a `LLMProtocol` with `__call__` signature, or import `Optional[Llama]` under a `TYPE_CHECKING` guard in `base.py`.
 **Blocked by:** Nothing.
 **Added:** 2026-04-07 (from /plan-eng-review, Priority 2 deferred item)
-
----
-
-### T-005 — Phase execution status visible to orchestrator
-**Priority:** P3
-**Effort:** S human / S with CC
-**Why:** The orchestrator's `for phase in _PHASES` loop has no visibility into whether each phase actually ran, was skipped, or failed. If lil_bro ever adds conditional phases or user-selectable phase skipping, phase 5 can silently operate on stale/missing context.
-**Fix:** Have `Phase.run()` return a `PhaseResult(status: "completed"|"skipped"|"failed")` instead of `None`. Orchestrator collects results and can gate downstream phases.
-**Blocked by:** Nothing. Can be done incrementally — return None and PhaseResult are both valid under duck typing initially.
-**Added:** 2026-04-07 (from /plan-eng-review, Priority 3 deferred item)
 
 ---
 
@@ -80,3 +58,15 @@ Format: Priority | Effort (human / CC) | Context
 ### T-004 — Type PipelineContext.llm properly
 **Completed**: 2026-04-08
 `llm: object = None` changed to `llm: Optional[Llama] = None` in `src/pipeline/base.py`. `Llama` added to `TYPE_CHECKING` import block alongside the other forward-reference types.
+
+---
+
+### T-002 — Harden LLM output printing against UnicodeEncodeError
+**Completed**: 2026-04-11
+`sys.stdout.reconfigure(errors="replace")` added early in `src/main.py` via `isinstance` check. Non-encodable characters now print as `?` instead of crashing. 1 new test in `tests/test_formatting.py`.
+
+---
+
+### T-005 — Phase execution status visible to orchestrator
+**Completed**: 2026-04-11
+`PhaseResult` dataclass added to `src/pipeline/base.py`; all 5 phase `run()` methods return it; orchestrator in `phases.py` captures and logs non-completed results via debug logger.
