@@ -1,0 +1,13 @@
+# lil_bro — Development Roadmap
+
+- **Week 1** ✅ — PoC complete: all optimization checks, temp audit, Cinebench, collectors
+- **Week 2** ✅ — LLM integration: model loader, action proposer, batch approval UX, static fallback
+- **Week 3** ✅ — LHM sidecar, thermal monitor, thermal guidance, benchmark runner rework, pre-benchmark safety gate
+- **Week 4** ✅ — PyInstaller portable .exe, %APPDATA% path relocation, SHA-256 integrity verification
+- **Week 5** ✅ — Game Mode auto-fix, thermals fallback template, brand voice idle warning, animated progress bar, NVIDIA driver display, expanded test coverage (188 tests), collector resilience via `_safe_collect`
+- **Week 6** ✅ — Terminal UI redesign: DESIGN.md color system compliance, Unicode/ASCII fallback system, centralized formatting helpers (print_key_value, print_section_divider, print_prompt), dynamic progress bar width, inline colorama removal, 27 new tests (215 total)
+- **Week 7** ✅ — main.py module split: extracted `src/pipeline/` package (banner, menu, approval, fix_dispatch, thermal_gate, phases, _state), dispatch dict pattern, deduped thermal gate, 27 new tests (242 total)
+- **Week 8** ✅ — Bundle thermal sensor server: custom C# lhm-server.exe (LibreHardwareMonitorLib, PawnIO-era v0.9.*), HTTP /data.json sidecar; lhm_sidecar.py tuple return + custom vs full-LHM launch logic; fix CPU sensor derivation (_derive_cpu_temp priority: CPU Package → Tctl/Tdie → safe CPU; AMD Ryzen support; excludes hotspot/VRM/Core Max); 22 new tests (264 total)
+- **Sprint: pawnio-cleanup** ✅ — Build pipeline hardened: `update_pawnio.ps1` integrated as build step [2/5]; fetches latest signed PawnIO.sys from namazso/PawnIO.Setup GitHub releases; WDK source compilation retained as fallback. Debug logging: `debug_logger.py` singleton + `--debug` CLI flag (disabled by default, no overhead); `get_specs_path()` fixed to `./lil_bro/full_specs.json`; `post_run_cleanup.py` cleans `./lil_bro/` on exit while preserving CWD-root logs; 312 tests passing
+- **Sprint: action-logger-tuning** ✅ — Action logger v2: `outcome` param on `log_action()` for programmatic parsing; `log_fix_dispatch/log_fix_result/log_approval_decision` helpers; fix dispatch and approval flow fully instrumented; session start/end moved to `main.py` to capture full app lifecycle (including startup LHM sidecar); 325 tests passing
+- **Sprint: nvidia-profile-inspector** ✅ — Pipeline decomposed into Phase classes (base.py + 5 phase files) with PipelineContext state bag; bundled NVIDIA Profile Inspector C# tool (1400+ lines); nvidia_profile_dumper.py for NPI profile extraction; nvidia_profile.py/setter.py agent_tools for detection & fixes; NPI_CustomSettingNames.xml canonical reference; 557 new tests (882 total)

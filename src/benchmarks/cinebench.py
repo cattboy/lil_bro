@@ -19,6 +19,7 @@ from typing import Optional
 
 from .thermal_monitor import ThermalWatchdog
 
+from ..config import config as _cfg
 from ..utils.action_logger import action_logger
 from ..utils.formatting import (
     print_step,
@@ -56,7 +57,7 @@ _CINEBENCH_SEARCH_PATHS = [
     os.path.expandvars(r"%LOCALAPPDATA%\Programs\Cinebench\Cinebench.exe"),
 ]
 
-_CINEBENCH_TIMEOUT = 600  # 10 minutes max for a single run
+_CINEBENCH_TIMEOUT = _cfg.benchmark.cinebench_timeout  # max seconds for a single run
 
 
 def _keyboard_abort_watcher(abort_event: threading.Event) -> None:
@@ -85,7 +86,7 @@ def find_cinebench() -> Optional[str]:
 
 # ── CPU fallback benchmark ───────────────────────────────────────────────────
 
-_FALLBACK_DURATION = 30  # seconds — enough to observe thermal trends
+_FALLBACK_DURATION = _cfg.benchmark.stress_test_duration  # seconds — enough to observe thermal trends
 
 
 def _stress_core(duration_secs: float) -> int:

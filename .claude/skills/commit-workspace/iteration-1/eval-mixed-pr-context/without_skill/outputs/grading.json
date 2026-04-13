@@ -1,0 +1,29 @@
+{
+  "eval_id": 3,
+  "configuration": "without_skill",
+  "expectations": [
+    {
+      "text": "no_questions_asked: output does not contain user-directed questions",
+      "passed": true,
+      "evidence": "'Questions Asked' section says 'None'"
+    },
+    {
+      "text": "closes_issue_235: commit message contains 'closes #235' or 'refs #235'",
+      "passed": false,
+      "evidence": "Message is 'feat(display): add mixed DPI detection and EDID registry fallback' — no issue reference; baseline has no gh CLI access"
+    },
+    {
+      "text": "scope_is_display: commit message scope contains 'display'",
+      "passed": true,
+      "evidence": "Scope is 'display' in feat(display)"
+    },
+    {
+      "text": "type_is_feat_or_fix: commit message starts with 'feat(' or 'fix('",
+      "passed": true,
+      "evidence": "Message starts with 'feat(display):'"
+    }
+  ],
+  "pass_count": 3,
+  "total_count": 4,
+  "pass_rate": 0.75
+}

@@ -11,6 +11,8 @@ import json
 import sys
 from pathlib import Path
 
+from src.utils.formatting import print_error, print_info, print_warning
+
 
 def _get_exe_dir() -> Path:
     """Return the directory containing the .exe (frozen) or project root (dev)."""
@@ -33,13 +35,6 @@ def verify_integrity(silent_pass: bool = True) -> bool:
     manifest_path = exe_dir / "integrity.json"
 
     if not manifest_path.exists():
-        try:
-            from .formatting import print_error, print_warning, print_info
-        except ImportError:
-            print_error   = lambda m: print(f"FAIL {m}")
-            print_warning = lambda m: print(f"WARN {m}")
-            print_info    = lambda m: print(f"INFO {m}")
-
         print_error("integrity.json not found — cannot verify lil_bro.exe is safe.")
         print()
         print_info(
@@ -76,11 +71,6 @@ def verify_integrity(silent_pass: bool = True) -> bool:
         return True  # Can't read own exe — skip
 
     if actual != expected_hash:
-        try:
-            from .formatting import print_warning
-        except ImportError:
-            print_warning = lambda m: print(f"WARNING: {m}")
-
         print_warning(
             "Integrity check failed — lil_bro.exe may have been modified or corrupted.\n"
             "DO NOT USE THIS LIL_BRO.exe\n"

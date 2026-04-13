@@ -75,3 +75,21 @@ def thermal_safety_gate(
         return True  # User chose to skip
 
     return False  # User approved despite high temps
+
+
+def run_thermal_guard(
+    phase_name: str,
+    ctx: PipelineContext,
+    skip_message: str = "Benchmark skipped — idle temps too high.",
+    approval_prompt: str = "Temperatures are elevated. Run the benchmark anyway?",
+) -> bool:
+    """Combined pre-benchmark thermal check: no-protection guard then idle-temp safety gate.
+
+    Returns True if the benchmark should be skipped.
+    Used by FinalBenchPhase; BaselineBenchPhase uses the two steps individually because
+    ctx.runner assignment must interleave between them.
+    """
+    if require_thermal_protection(phase_name, ctx):
+        return True
+    return thermal_safety_gate(ctx.lhm_available, skip_message=skip_message,
+                               approval_prompt=approval_prompt)

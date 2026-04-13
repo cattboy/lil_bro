@@ -1,0 +1,29 @@
+{
+  "eval_id": 1,
+  "configuration": "without_skill",
+  "expectations": [
+    {
+      "text": "closes_issue_456: commit message contains 'closes #456' or 'refs #456'",
+      "passed": false,
+      "evidence": "Message is 'fix(thermal-gate): return None instead of raising on missing sensor data' — no issue reference; baseline has no gh CLI access"
+    },
+    {
+      "text": "type_is_fix: commit message starts with 'fix('",
+      "passed": true,
+      "evidence": "Message starts with 'fix(thermal-gate):'"
+    },
+    {
+      "text": "scope_references_thermal: commit message scope contains 'thermal'",
+      "passed": true,
+      "evidence": "Scope is 'thermal-gate' which contains 'thermal'"
+    },
+    {
+      "text": "no_questions_asked: output does not contain user-directed questions",
+      "passed": true,
+      "evidence": "'Questions Asked' section says 'None'"
+    }
+  ],
+  "pass_count": 3,
+  "total_count": 4,
+  "pass_rate": 0.75
+}

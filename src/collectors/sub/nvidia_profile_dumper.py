@@ -49,6 +49,18 @@ SETTING_IDS: dict[str, int] = {
     "power_mgmt":               0x1057EB71,  # Power Management - Mode
 }
 
+def calculate_fps_cap(refresh_hz: int) -> int:
+    """Blur Busters formula: cap = round(refresh_hz - refresh_hz^2 / 4096).
+
+    Produces 226 for 240Hz, 328 for 360Hz, 424 for 480Hz.
+
+    Note: the formula goes negative for Hz > ~4096, which as a DWORD would wrap
+    to ~4 billion (effectively disabling the cap). No commercial monitor exceeds
+    ~600Hz today so no upper-bound guard is needed.
+    """
+    return round(refresh_hz - (refresh_hz * refresh_hz / 4096))
+
+
 # Target values for optimal gaming configuration.
 TARGET_VALUES: dict[str, int] = {
     "gsync_global_feature":     1,           # On

@@ -15,8 +15,9 @@ from typing import Optional
 
 from src.collectors.sub.lhm_sidecar import LHM_URL
 from src.agent_tools.thermal_guidance import derive_cpu_temp
+from src.config import config as _cfg
 
-_DEFAULT_POLL_INTERVAL = 1.0  # seconds between temp samples
+_DEFAULT_POLL_INTERVAL = _cfg.thermal.poll_interval  # seconds between temp samples
 
 
 def _extract_sensor_temp(child: dict) -> Optional[float]:
@@ -145,6 +146,12 @@ class ThermalMonitor:
             self._thread.join(timeout=5)
             self._thread = None
 
+    def __enter__(self) -> "ThermalMonitor":
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.stop()
+
     def _poll_loop(self) -> None:
         """Polling loop — runs on daemon thread."""
         while not self._stop_event.is_set():
@@ -192,9 +199,9 @@ class ThermalMonitor:
 
 # ── Thermal watchdog ─────────────────────────────────────────────────────────
 
-_WATCHDOG_THRESHOLD = 95.0      # °C — abort limit for CPU and GPU
-_WATCHDOG_SUSTAINED_SECS = 5    # consecutive seconds over limit before abort
-_WATCHDOG_POLL_INTERVAL = 1.0   # seconds between polls
+_WATCHDOG_THRESHOLD = _cfg.thermal.watchdog_threshold          # °C — abort limit for CPU and GPU
+_WATCHDOG_SUSTAINED_SECS = _cfg.thermal.watchdog_sustained_secs  # consecutive seconds over limit before abort
+_WATCHDOG_POLL_INTERVAL = _cfg.thermal.poll_interval           # seconds between polls
 
 
 class ThermalWatchdog:

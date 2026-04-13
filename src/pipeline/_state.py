@@ -9,16 +9,21 @@ IMPORTANT: Never write `from src.pipeline._state import _llm` — that
 creates a local binding that never sees updates. Always use the
 getter/setter functions.
 """
+from __future__ import annotations
+from typing import TYPE_CHECKING, Optional
 
-_llm = None
+if TYPE_CHECKING:
+    from llama_cpp import Llama  # type: ignore
+
+_llm: Optional[Llama] = None
 
 
-def get_llm():
+def get_llm() -> Optional[Llama]:
     """Returns the current LLM instance (may be None)."""
     return _llm
 
 
-def set_llm(instance):
+def set_llm(instance: Optional[Llama]) -> None:
     """Sets the LLM instance after loading."""
     global _llm
     _llm = instance

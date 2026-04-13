@@ -9,15 +9,7 @@ finding dict — all settings are fixed atomically via one .nip import.
 import re
 from typing import Any
 
-from ..collectors.sub.nvidia_profile_dumper import SETTING_IDS, TARGET_VALUES, DLSS_LETTER_MAP
-
-
-def calculate_fps_cap(refresh_hz: int) -> int:
-    """Blur Busters formula: cap = round(refresh_hz - refresh_hz^2 / 4096).
-
-    Produces 226 for 240Hz, 328 for 360Hz, 424 for 480Hz.
-    """
-    return round(refresh_hz - (refresh_hz * refresh_hz / 4096))
+from ..collectors.sub.nvidia_profile_dumper import SETTING_IDS, TARGET_VALUES, DLSS_LETTER_MAP, calculate_fps_cap
 
 
 # GPU generation → recommended DLSS preset letter + hex value

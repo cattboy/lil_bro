@@ -19,6 +19,7 @@ from src.bootstrapper import check_admin
 from src.pipeline.banner import print_banner
 from src.pipeline.menu import menu_loop
 from src.pipeline.startup_thermals import run_startup_thermal_scan
+from src.config import save_default_config
 from src.pipeline.post_run_cleanup import post_run_cleanup
 
 
@@ -38,6 +39,10 @@ def _parse_args() -> argparse.Namespace:
 
 def main():
     multiprocessing.freeze_support()
+    # Harden stdout against UnicodeEncodeError on CP437 terminals (Windows CMD).
+    import io
+    if isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout.reconfigure(errors="replace")
     action_logger._echo_fn = print_dim
     args = _parse_args()
 
@@ -72,6 +77,7 @@ def main():
         print_error(f"Fatal unhandled exception: {e}")
         sys.exit(1)
     finally:
+        save_default_config()
         post_run_cleanup(startup_lhm)
         action_logger.log_session_end()
 

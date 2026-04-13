@@ -1,54 +1,10 @@
 import ctypes
 from ctypes import wintypes
 
-# EnumDisplaySettings Win32 API via ctypes ✅ Best approach
-# This calls the Windows ChangeDisplaySettingsEx / 
-# EnumDisplaySettings API which queries the driver's enumerated mode list — these come from the monitor's EDID a
-# nd the GPU driver's supported mode table. It gives you every resolution + refresh rate combination the system 
-# considers valid for that display. No extra tools needed, pure Python.
-# 6. WMI Win32_DesktopMonitor + EDID from registry ✅ Good supplement
-# The raw EDID blob lives at HKLM\SYSTEM\CurrentControlSet\Enum\DISPLAY\...\Device Parameters\EDID.
-#  Parsing it gives you the monitor manufacturer's declared max, independent of driver enumeration.
+from src.utils.display_utils import DEVMODE, ENUM_CURRENT_SETTINGS, enum_raw_modes
 
 
 # ── EnumDisplaySettings approach ──────────────────────────────────────────────
-
-ENUM_CURRENT_SETTINGS  = -1
-ENUM_REGISTRY_SETTINGS = -2
-
-class DEVMODE(ctypes.Structure):
-    _fields_ = [
-        ("dmDeviceName",       ctypes.c_wchar * 32),
-        ("dmSpecVersion",      wintypes.WORD),
-        ("dmDriverVersion",    wintypes.WORD),
-        ("dmSize",             wintypes.WORD),
-        ("dmDriverExtra",      wintypes.WORD),
-        ("dmFields",           wintypes.DWORD),
-        ("dmPositionX",        ctypes.c_long),   # part of POINTL union
-        ("dmPositionY",        ctypes.c_long),
-        ("dmDisplayOrientation", wintypes.DWORD),
-        ("dmDisplayFixedOutput", wintypes.DWORD),
-        ("dmColor",            ctypes.c_short),
-        ("dmDuplex",           ctypes.c_short),
-        ("dmYResolution",      ctypes.c_short),
-        ("dmTTOption",         ctypes.c_short),
-        ("dmCollate",          ctypes.c_short),
-        ("dmFormName",         ctypes.c_wchar * 32),
-        ("dmLogPixels",        wintypes.WORD),
-        ("dmBitsPerPel",       wintypes.DWORD),
-        ("dmPelsWidth",        wintypes.DWORD),
-        ("dmPelsHeight",       wintypes.DWORD),
-        ("dmDisplayFlags",     wintypes.DWORD),
-        ("dmDisplayFrequency", wintypes.DWORD),  # ← refresh rate in Hz
-        ("dmICMMethod",        wintypes.DWORD),
-        ("dmICMIntent",        wintypes.DWORD),
-        ("dmMediaType",        wintypes.DWORD),
-        ("dmDitherType",       wintypes.DWORD),
-        ("dmReserved1",        wintypes.DWORD),
-        ("dmReserved2",        wintypes.DWORD),
-        ("dmPanningWidth",     wintypes.DWORD),
-        ("dmPanningHeight",    wintypes.DWORD),
-    ]
 
 def enum_display_modes(device_name: str | None = None) -> list[dict]:
     """
@@ -56,23 +12,15 @@ def enum_display_modes(device_name: str | None = None) -> list[dict]:
     If device_name is None, uses the primary display.
     Crucially this iterates ALL modes the driver exposes, not just the current one.
     """
-    user32 = ctypes.windll.user32
-    modes = []
-    i = 0
-    while True:
-        dm = DEVMODE()
-        dm.dmSize = ctypes.sizeof(DEVMODE)
-        # iModeNum counts up until it returns 0 (no more modes)
-        if not user32.EnumDisplaySettingsW(device_name, i, ctypes.byref(dm)):
-            break
-        modes.append({
-            "width":        dm.dmPelsWidth,
-            "height":       dm.dmPelsHeight,
-            "refresh_hz":   dm.dmDisplayFrequency,
-            "bit_depth":    dm.dmBitsPerPel,
-        })
-        i += 1
-    return modes
+    return [
+        {
+            "width":      dm.dmPelsWidth,
+            "height":     dm.dmPelsHeight,
+            "refresh_hz": dm.dmDisplayFrequency,
+            "bit_depth":  dm.dmBitsPerPel,
+        }
+        for dm in enum_raw_modes(device_name)
+    ]
 
 def get_max_refresh_for_device(device_name: str | None = None) -> dict:
     """Returns the maximum refresh rate (and the resolution it's available at)."""

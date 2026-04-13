@@ -95,11 +95,12 @@ def test_fetch_temps_failure(mock_urlopen):
 @patch("src.benchmarks.thermal_monitor._fetch_temps")
 def test_monitor_captures_peak(mock_fetch):
     """Monitor should track the highest value seen across multiple samples."""
-    mock_fetch.side_effect = [
+    _effects = iter([
         {"CPU Package": 70.0, "GPU Core": 60.0},
         {"CPU Package": 85.0, "GPU Core": 65.0},
         {"CPU Package": 75.0, "GPU Core": 72.0},  # GPU peak here
-    ]
+    ])
+    mock_fetch.side_effect = lambda: next(_effects, {})
 
     monitor = ThermalMonitor(poll_interval=0.01)
     monitor.start()
@@ -316,3 +317,18 @@ def test_get_cpu_peak_no_cpu_sensors():
     monitor = ThermalMonitor()
     monitor._peak_temps = {"NVIDIA RTX 3080 > GPU Core": 70.0}
     assert monitor.get_cpu_peak() is None
+
+
+def test_monitor_context_manager_calls_stop():
+    """Exiting the with block calls stop() and cleans up the thread."""
+    with patch.object(ThermalMonitor, "stop") as mock_stop:
+        with ThermalMonitor() as monitor:
+            pass
+        mock_stop.assert_called_once()
+
+
+def test_monitor_context_manager_noop_when_not_started():
+    """Context manager is harmless if start() was never called."""
+    with ThermalMonitor() as monitor:
+        pass  # never started
+    assert monitor._thread is None

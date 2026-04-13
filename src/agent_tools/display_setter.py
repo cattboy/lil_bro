@@ -1,48 +1,6 @@
 import ctypes
-from ctypes import wintypes
 
-### exact match (find a mode that exactly matches target Hz) and best available (find the highest Hz the monitor supports):
-### Key design decisions to call out
-# Always validate before applying. The CDS_TEST dry-run pass catches cases where EnumDisplaySettings listed a mode but the driver rejects it at apply time (this happens with some cable/adapter combinations — the EDID lied about what the signal path can carry).
-# dmFields must be explicit. A very common bug — if you don't set dmFields to declare which struct members are intentional, Windows ignores them or uses garbage values from uninitialized memory.
-# persist=True vs False. Without CDS_UPDATEREGISTRY the change reverts on next login. For a "fix misconfigured monitors" tool you almost certainly want persist=True, but exposing both is useful for testing.
-# Resolution is preserved by default. require_same_resolution=True in find_best_mode ensures you only touch Hz, not the user's chosen resolution. Accidentally dropping from 2560x1440 to 1920x1080 to hit a higher Hz would be a bad surprise.
-# DISP_CHANGE_RESTART is still success. Return code 1 means the mode is valid but needs a reboot — treat it as success and log it, don't treat it as a failure.
-# ── DEVMODE (reuse from your existing code) ────────────────────────────────────
-
-class DEVMODE(ctypes.Structure):
-    _fields_ = [
-        ("dmDeviceName",        ctypes.c_wchar * 32),
-        ("dmSpecVersion",       wintypes.WORD),
-        ("dmDriverVersion",     wintypes.WORD),
-        ("dmSize",              wintypes.WORD),
-        ("dmDriverExtra",       wintypes.WORD),
-        ("dmFields",            wintypes.DWORD),
-        ("dmPositionX",         ctypes.c_long),
-        ("dmPositionY",         ctypes.c_long),
-        ("dmDisplayOrientation",wintypes.DWORD),
-        ("dmDisplayFixedOutput",wintypes.DWORD),
-        ("dmColor",             ctypes.c_short),
-        ("dmDuplex",            ctypes.c_short),
-        ("dmYResolution",       ctypes.c_short),
-        ("dmTTOption",          ctypes.c_short),
-        ("dmCollate",           ctypes.c_short),
-        ("dmFormName",          ctypes.c_wchar * 32),
-        ("dmLogPixels",         wintypes.WORD),
-        ("dmBitsPerPel",        wintypes.DWORD),
-        ("dmPelsWidth",         wintypes.DWORD),
-        ("dmPelsHeight",        wintypes.DWORD),
-        ("dmDisplayFlags",      wintypes.DWORD),
-        ("dmDisplayFrequency",  wintypes.DWORD),
-        ("dmICMMethod",         wintypes.DWORD),
-        ("dmICMIntent",         wintypes.DWORD),
-        ("dmMediaType",         wintypes.DWORD),
-        ("dmDitherType",        wintypes.DWORD),
-        ("dmReserved1",         wintypes.DWORD),
-        ("dmReserved2",         wintypes.DWORD),
-        ("dmPanningWidth",      wintypes.DWORD),
-        ("dmPanningHeight",     wintypes.DWORD),
-    ]
+from src.utils.display_utils import DEVMODE, ENUM_CURRENT_SETTINGS, enum_raw_modes
 
 # ── ChangeDisplaySettingsEx flags ──────────────────────────────────────────────
 
@@ -76,27 +34,13 @@ DM_DISPLAYFREQUENCY= 0x00400000
 DM_BITSPERPEL      = 0x00040000
 
 
-# ── Core: enumerate modes (same as before, kept here for self-containment) ─────
-
-ENUM_CURRENT_SETTINGS = -1
+# ── Core: mode helpers ────────────────────────────────────────────────────────
 
 def _get_current_mode(device_name: str) -> DEVMODE | None:
     dm = DEVMODE()
     dm.dmSize = ctypes.sizeof(DEVMODE)
     ok = ctypes.windll.user32.EnumDisplaySettingsW(device_name, ENUM_CURRENT_SETTINGS, ctypes.byref(dm))
     return dm if ok else None
-
-def _enum_all_modes(device_name: str) -> list[DEVMODE]:
-    modes = []
-    i = 0
-    while True:
-        dm = DEVMODE()
-        dm.dmSize = ctypes.sizeof(DEVMODE)
-        if not ctypes.windll.user32.EnumDisplaySettingsW(device_name, i, ctypes.byref(dm)):
-            break
-        modes.append(dm)
-        i += 1
-    return modes
 
 
 # ── Mode selection strategies ──────────────────────────────────────────────────
@@ -120,7 +64,7 @@ def find_best_mode(
     if current is None:
         return None
 
-    all_modes = _enum_all_modes(device_name)
+    all_modes = enum_raw_modes(device_name)
 
     # Filter to same resolution unless caller explicitly allows changes
     if require_same_resolution:

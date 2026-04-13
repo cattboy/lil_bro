@@ -13,3 +13,7 @@ class ScannerError(LilBroError):
 class RestorePointError(LilBroError):
     """Raised when creating a System Restore Point fails."""
     pass
+
+class SetterError(LilBroError):
+    """Raised when a fix/setter operation fails to apply a system change."""
+    pass

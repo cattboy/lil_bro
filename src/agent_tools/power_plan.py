@@ -2,6 +2,7 @@ import subprocess
 import re
 from ..utils.errors import ScannerError
 from ..utils.action_logger import action_logger
+from ..utils.subprocess_utils import run_subprocess
 
 # Common Windows Power Plan GUIDs
 KNOWN_PLANS = {
@@ -57,12 +58,7 @@ def get_active_power_plan() -> tuple[str, str]:
     """
     try:
         # Example output: "Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)"
-        result = subprocess.run(
-            ["powercfg", "/getactivescheme"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        result = run_subprocess(["powercfg", "/getactivescheme"], check=True)
         
         output = result.stdout.strip()
         
@@ -95,12 +91,7 @@ def list_available_plans() -> list[tuple[str, str]]:
     Returns a list of (guid, name) tuples.
     """
     try:
-        result = subprocess.run(
-            ["powercfg", "/list"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        result = run_subprocess(["powercfg", "/list"], check=True)
         
         plans = []
         for line in result.stdout.splitlines():
@@ -127,12 +118,7 @@ def list_available_plans() -> list[tuple[str, str]]:
 def set_active_plan(guid: str) -> None:
     """Activates the given power plan GUID."""
     try:
-        subprocess.run(
-            ["powercfg", "/setactive", guid],
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        run_subprocess(["powercfg", "/setactive", guid], check=True)
         action_logger.log_action("PowerCfg", f"Switched active power plan to {guid}", f"Execution: powercfg /setactive {guid}")
     except subprocess.CalledProcessError as e:
         raise ScannerError(f"Failed to activate power plan: {e.stderr}")
@@ -145,12 +131,7 @@ def create_high_performance_plan() -> tuple[str, str]:
     # built-in HP template
     template_guid = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c" 
     try:
-        result = subprocess.run(
-            ["powercfg", "/duplicatescheme", template_guid],
-            capture_output=True,
-            text=True,
-            check=True
-        )
+        result = run_subprocess(["powercfg", "/duplicatescheme", template_guid], check=True)
         # Output is like: Power Scheme GUID: 1234...  (High performance)
         match = re.search(r"GUID:\s*([a-f0-9\-]+)", result.stdout, re.IGNORECASE)
         if not match:
