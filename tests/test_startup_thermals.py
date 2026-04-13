@@ -197,7 +197,7 @@ class TestRunStartupThermalScan:
 
     # ── Sensor retry logic ────────────────────────────────────────────────────
 
-    @patch("src.pipeline.startup_thermals.time.sleep")
+    @patch("src.pipeline.startup_thermals.sleep")
     @patch("src.pipeline.startup_thermals.check_idle_thermals", return_value=_SAFE_RESULT)
     @patch("src.pipeline.startup_thermals.fetch_snapshot")
     @patch("src.pipeline.startup_thermals.LHMSidecar")
@@ -212,7 +212,7 @@ class TestRunStartupThermalScan:
         assert mock_fetch.call_count == 3
         assert mock_sleep.call_count == 2
 
-    @patch("src.pipeline.startup_thermals.time.sleep")
+    @patch("src.pipeline.startup_thermals.sleep")
     @patch("src.pipeline.startup_thermals.check_idle_thermals", return_value=_NO_DATA_RESULT)
     @patch("src.pipeline.startup_thermals.fetch_snapshot", return_value={})
     @patch("src.pipeline.startup_thermals.LHMSidecar")
@@ -226,7 +226,7 @@ class TestRunStartupThermalScan:
         assert mock_sleep.call_count == _SENSOR_RETRIES - 1
         assert available is True  # LHM is up even if sensors are empty
 
-    @patch("src.pipeline.startup_thermals.time.sleep")
+    @patch("src.pipeline.startup_thermals.sleep")
     @patch("src.pipeline.startup_thermals.check_idle_thermals", return_value=_SAFE_RESULT)
     @patch("src.pipeline.startup_thermals.fetch_snapshot")
     @patch("src.pipeline.startup_thermals.LHMSidecar")
@@ -240,7 +240,7 @@ class TestRunStartupThermalScan:
         # sleep called exactly _SENSOR_RETRIES - 1 times (no sleep after last attempt)
         assert mock_sleep.call_count == _SENSOR_RETRIES - 1
 
-    @patch("src.pipeline.startup_thermals.time.sleep")
+    @patch("src.pipeline.startup_thermals.sleep")
     @patch("src.pipeline.startup_thermals.check_idle_thermals", return_value=_SAFE_RESULT)
     @patch("src.pipeline.startup_thermals.fetch_snapshot")
     @patch("src.pipeline.startup_thermals.LHMSidecar")
@@ -256,7 +256,7 @@ class TestRunStartupThermalScan:
 
     # ── Progress message during retry ────────────────────────────────────────
 
-    @patch("src.pipeline.startup_thermals.time.sleep")
+    @patch("src.pipeline.startup_thermals.sleep")
     @patch("src.pipeline.startup_thermals.check_idle_thermals", return_value=_SAFE_RESULT)
     @patch("src.pipeline.startup_thermals.fetch_snapshot")
     @patch("src.pipeline.startup_thermals.LHMSidecar")
@@ -270,7 +270,7 @@ class TestRunStartupThermalScan:
 
         assert "Waiting for sensor data" in out
 
-    @patch("src.pipeline.startup_thermals.time.sleep")
+    @patch("src.pipeline.startup_thermals.sleep")
     @patch("src.pipeline.startup_thermals.check_idle_thermals", return_value=_SAFE_RESULT)
     @patch("src.pipeline.startup_thermals.fetch_snapshot")
     @patch("src.pipeline.startup_thermals.LHMSidecar")

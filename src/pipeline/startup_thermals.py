@@ -5,7 +5,7 @@ user sees live temps before choosing any option. Prints activity text before
 starting LHM so the app never appears frozen during the ~2-5s sidecar startup.
 """
 
-import time
+from time import sleep
 from colorama import Fore
 
 from src.collectors.sub.lhm_sidecar import LHMSidecar
@@ -63,7 +63,7 @@ def run_startup_thermal_scan() -> tuple[LHMSidecar, bool]:
         if attempt == 0:
             print_step("Waiting for sensor data")
         if attempt < _SENSOR_RETRIES - 1:
-            time.sleep(_SENSOR_RETRY_DELAY)
+            sleep(_SENSOR_RETRY_DELAY)
 
     if attempt > 0:
         print_step_done(bool(temps))

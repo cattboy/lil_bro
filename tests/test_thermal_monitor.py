@@ -95,11 +95,12 @@ def test_fetch_temps_failure(mock_urlopen):
 @patch("src.benchmarks.thermal_monitor._fetch_temps")
 def test_monitor_captures_peak(mock_fetch):
     """Monitor should track the highest value seen across multiple samples."""
-    mock_fetch.side_effect = [
+    _effects = iter([
         {"CPU Package": 70.0, "GPU Core": 60.0},
         {"CPU Package": 85.0, "GPU Core": 65.0},
         {"CPU Package": 75.0, "GPU Core": 72.0},  # GPU peak here
-    ]
+    ])
+    mock_fetch.side_effect = lambda: next(_effects, {})
 
     monitor = ThermalMonitor(poll_interval=0.01)
     monitor.start()
