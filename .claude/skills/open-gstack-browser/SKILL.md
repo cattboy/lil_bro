@@ -1,29 +1,19 @@
 ---
-name: design-html
-preamble-tier: 2
-version: 1.0.0
+name: open-gstack-browser
+version: 0.2.0
 description: |
-  Design finalization: generates production-quality Pretext-native HTML/CSS.
-  Works with approved mockups from /design-shotgun, CEO plans from /plan-ceo-review,
-  design review context from /plan-design-review, or from scratch with a user
-  description. Text actually reflows, heights are computed, layouts are dynamic.
-  30KB overhead, zero deps. Smart API routing: picks the right Pretext patterns
-  for each design type. Use when: "finalize this design", "turn this into HTML",
-  "build me a page", "implement this design", or after any planning skill.
-  Proactively suggest when user has approved a design or has a plan ready. (gstack)
+  Launch GStack Browser — AI-controlled Chromium with the sidebar extension baked in.
+  Opens a visible browser window where you can watch every action in real time.
+  The sidebar shows a live activity feed and chat. Anti-bot stealth built in.
+  Use when asked to "open gstack browser", "launch browser", "connect chrome",
+  "open chrome", "real browser", "launch chrome", "side panel", or "control my browser".
 voice-triggers:
-  - "build the design"
-  - "code the mockup"
-  - "make it real"
+  - "show me the browser"
 allowed-tools:
   - Bash
   - Read
-  - Write
-  - Edit
-  - Glob
-  - Grep
-  - Agent
   - AskUserQuestion
+
 ---
 <!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->
 <!-- Regenerate: bun run gen:skill-docs -->
@@ -58,7 +48,7 @@ echo "TELEMETRY: ${_TEL:-off}"
 echo "TEL_PROMPTED: $_TEL_PROMPTED"
 mkdir -p ~/.gstack/analytics
 if [ "$_TEL" != "off" ]; then
-echo '{"skill":"design-html","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
+echo '{"skill":"open-gstack-browser","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 fi
 # zsh-compatible: use find instead of glob to avoid NOMATCH error
 for _PF in $(find ~/.gstack/analytics -maxdepth 1 -name '.pending-*' 2>/dev/null); do
@@ -83,7 +73,7 @@ else
   echo "LEARNINGS: 0"
 fi
 # Session timeline: record skill start (local-only, never sent anywhere)
-~/.claude/skills/gstack/bin/gstack-timeline-log '{"skill":"design-html","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
+~/.claude/skills/gstack/bin/gstack-timeline-log '{"skill":"open-gstack-browser","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
 # Check if CLAUDE.md has routing rules
 _HAS_ROUTING="no"
 if [ -f CLAUDE.md ] && grep -q "## Skill routing" CLAUDE.md 2>/dev/null; then
@@ -385,6 +375,24 @@ AI makes completeness near-free. Always recommend the complete option over short
 
 Include `Completeness: X/10` for each option (10=all edge cases, 7=happy path, 3=shortcut).
 
+## Repo Ownership — See Something, Say Something
+
+`REPO_MODE` controls how to handle issues outside your branch:
+- **`solo`** — You own everything. Investigate and offer to fix proactively.
+- **`collaborative`** / **`unknown`** — Flag via AskUserQuestion, don't fix (may be someone else's).
+
+Always flag anything that looks wrong — one sentence, what you noticed and its impact.
+
+## Search Before Building
+
+Before building anything unfamiliar, **search first.** See `~/.claude/skills/gstack/ETHOS.md`.
+- **Layer 1** (tried and true) — don't reinvent. **Layer 2** (new and popular) — scrutinize. **Layer 3** (first principles) — prize above all.
+
+**Eureka:** When first-principles reasoning contradicts conventional wisdom, name it and log:
+```bash
+jq -n --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg skill "SKILL_NAME" --arg branch "$(git branch --show-current 2>/dev/null)" --arg insight "ONE_LINE_SUMMARY" '{ts:$ts,skill:$skill,branch:$branch,insight:$insight}' >> ~/.gstack/analytics/eureka.jsonl 2>/dev/null || true
+```
+
 ## Completion Status Protocol
 
 When completing a skill workflow, report status using one of:
@@ -542,55 +550,10 @@ Then write a `## GSTACK REVIEW REPORT` section to the end of the plan file:
 file you are allowed to edit in plan mode. The plan file review report is part of the
 plan's living status.
 
-# /design-html: Pretext-Native HTML Engine
+# /open-gstack-browser — Launch GStack Browser
 
-You generate production-quality HTML where text actually works correctly. Not CSS
-approximations. Computed layout via Pretext. Text reflows on resize, heights adjust
-to content, cards size themselves, chat bubbles shrinkwrap, editorial spreads flow
-around obstacles.
-
-## DESIGN SETUP (run this check BEFORE any design mockup command)
-
-```bash
-_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-D=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/gstack/design/dist/design" ] && D="$_ROOT/.claude/skills/gstack/design/dist/design"
-[ -z "$D" ] && D=~/.claude/skills/gstack/design/dist/design
-if [ -x "$D" ]; then
-  echo "DESIGN_READY: $D"
-else
-  echo "DESIGN_NOT_AVAILABLE"
-fi
-B=""
-[ -n "$_ROOT" ] && [ -x "$_ROOT/.claude/skills/gstack/browse/dist/browse" ] && B="$_ROOT/.claude/skills/gstack/browse/dist/browse"
-[ -z "$B" ] && B=~/.claude/skills/gstack/browse/dist/browse
-if [ -x "$B" ]; then
-  echo "BROWSE_READY: $B"
-else
-  echo "BROWSE_NOT_AVAILABLE (will use 'open' to view comparison boards)"
-fi
-```
-
-If `DESIGN_NOT_AVAILABLE`: skip visual mockup generation and fall back to the
-existing HTML wireframe approach (`DESIGN_SKETCH`). Design mockups are a
-progressive enhancement, not a hard requirement.
-
-If `BROWSE_NOT_AVAILABLE`: use `open file://...` instead of `$B goto` to open
-comparison boards. The user just needs to see the HTML file in any browser.
-
-If `DESIGN_READY`: the design binary is available for visual mockup generation.
-Commands:
-- `$D generate --brief "..." --output /path.png` — generate a single mockup
-- `$D variants --brief "..." --count 3 --output-dir /path/` — generate N style variants
-- `$D compare --images "a.png,b.png,c.png" --output /path/board.html --serve` — comparison board + HTTP server
-- `$D serve --html /path/board.html` — serve comparison board and collect feedback via HTTP
-- `$D check --image /path.png --brief "..."` — vision quality gate
-- `$D iterate --session /path/session.json --feedback "..." --output /path.png` — iterate
-
-**CRITICAL PATH RULE:** All design artifacts (mockups, comparison boards, approved.json)
-MUST be saved to `~/.gstack/projects/$SLUG/designs/`, NEVER to `.context/`,
-`docs/designs/`, `/tmp/`, or any project-local directory. Design artifacts are USER
-data, not project files. They persist across branches, conversations, and workspaces.
+Launch GStack Browser — AI-controlled Chromium with the sidebar extension,
+anti-bot stealth, and custom branding. You see every action in real time.
 
 ## SETUP (run this check BEFORE any browse command)
 
@@ -628,556 +591,181 @@ If `NEEDS_SETUP`:
    fi
    ```
 
----
+## Step 0: Pre-flight cleanup
 
-## Step 0: Input Detection
+Before connecting, kill any stale browse servers and clean up lock files that
+may have persisted from a crash. This prevents "already connected" false
+positives and Chromium profile lock conflicts.
 
 ```bash
-eval "$(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)"
+# Kill any existing browse server
+if [ -f "$(git rev-parse --show-toplevel 2>/dev/null)/.gstack/browse.json" ]; then
+  _OLD_PID=$(cat "$(git rev-parse --show-toplevel)/.gstack/browse.json" 2>/dev/null | grep -o '"pid":[0-9]*' | grep -o '[0-9]*')
+  [ -n "$_OLD_PID" ] && kill "$_OLD_PID" 2>/dev/null || true
+  sleep 1
+  [ -n "$_OLD_PID" ] && kill -9 "$_OLD_PID" 2>/dev/null || true
+  rm -f "$(git rev-parse --show-toplevel)/.gstack/browse.json"
+fi
+# Clean Chromium profile locks (can persist after crashes)
+_PROFILE_DIR="$HOME/.gstack/chromium-profile"
+for _LF in SingletonLock SingletonSocket SingletonCookie; do
+  rm -f "$_PROFILE_DIR/$_LF" 2>/dev/null || true
+done
+echo "Pre-flight cleanup done"
 ```
 
-Detect what design context exists for this project. Run all four checks:
+## Step 1: Connect
 
 ```bash
-setopt +o nomatch 2>/dev/null || true
-_CEO=$(ls -t ~/.gstack/projects/$SLUG/ceo-plans/*.md 2>/dev/null | head -1)
-[ -n "$_CEO" ] && echo "CEO_PLAN: $_CEO" || echo "NO_CEO_PLAN"
+$B connect
 ```
 
+This launches GStack Browser (rebranded Chromium) in headed mode with:
+- A visible window you can watch (not your regular Chrome — it stays untouched)
+- The gstack sidebar extension auto-loaded via `launchPersistentContext`
+- Anti-bot stealth patches (sites like Google and NYTimes work without captchas)
+- Custom user agent and GStack Browser branding in Dock/menu bar
+- A sidebar agent process for chat commands
+
+The `connect` command auto-discovers the extension from the gstack install
+directory. It always uses port **34567** so the extension can auto-connect.
+
+After connecting, print the full output to the user. Confirm you see
+`Mode: headed` in the output.
+
+If the output shows an error or the mode is not `headed`, run `$B status` and
+share the output with the user before proceeding.
+
+## Step 2: Verify
+
 ```bash
-setopt +o nomatch 2>/dev/null || true
-_APPROVED=$(ls -t ~/.gstack/projects/$SLUG/designs/*/approved.json 2>/dev/null | head -1)
-[ -n "$_APPROVED" ] && echo "APPROVED: $_APPROVED" || echo "NO_APPROVED"
+$B status
 ```
 
+Confirm the output shows `Mode: headed`. Read the port from the state file:
+
 ```bash
-setopt +o nomatch 2>/dev/null || true
-_VARIANTS=$(ls -t ~/.gstack/projects/$SLUG/designs/*/variant-*.png 2>/dev/null | head -1)
-[ -n "$_VARIANTS" ] && echo "VARIANTS: $_VARIANTS" || echo "NO_VARIANTS"
+cat "$(git rev-parse --show-toplevel 2>/dev/null)/.gstack/browse.json" 2>/dev/null | grep -o '"port":[0-9]*' | grep -o '[0-9]*'
 ```
 
-```bash
-setopt +o nomatch 2>/dev/null || true
-_FINALIZED=$(ls -t ~/.gstack/projects/$SLUG/designs/*/finalized.html 2>/dev/null | head -1)
-[ -n "$_FINALIZED" ] && echo "FINALIZED: $_FINALIZED" || echo "NO_FINALIZED"
-[ -f DESIGN.md ] && echo "DESIGN_MD: exists" || echo "NO_DESIGN_MD"
-```
+The port should be **34567**. If it's different, note it — the user may need it
+for the Side Panel.
 
-Now route based on what was found. Check these cases in order:
-
-### Case A: approved.json exists (design-shotgun ran)
-
-If `APPROVED` was found, read it. Extract: approved variant PNG path, user feedback,
-screen name. Also read the CEO plan if one exists (it adds strategic context).
-
-Read `DESIGN.md` if it exists in the repo root. These tokens take priority for
-system-level values (fonts, brand colors, spacing scale).
-
-Then check for prior finalized.html. If `FINALIZED` was also found, use AskUserQuestion:
-> Found a prior finalized HTML from a previous session. Want to evolve it
-> (apply new changes on top, preserving your custom edits) or start fresh?
-> A) Evolve — iterate on the existing HTML
-> B) Start fresh — regenerate from the approved mockup
-
-If evolve: read the existing HTML. Apply changes on top during Step 3.
-If fresh or no finalized.html: proceed to Step 1 with the approved PNG as the
-visual reference.
-
-### Case B: CEO plan and/or design variants exist, but no approved.json
-
-If `CEO_PLAN` or `VARIANTS` was found but no `APPROVED`:
-
-Read whichever context exists:
-- If CEO plan found: read it and summarize the product vision and design requirements.
-- If variant PNGs found: show them inline using the Read tool.
-- If DESIGN.md found: read it for design tokens and constraints.
-
-Use AskUserQuestion:
-> Found [CEO plan from /plan-ceo-review | design review variants from /plan-design-review | both]
-> but no approved design mockup.
-> A) Run /design-shotgun — explore design variants based on the existing plan context
-> B) Skip mockups — I'll design the HTML directly from the plan context
-> C) I have a PNG — let me provide the path
-
-If A: tell the user to run /design-shotgun, then come back to /design-html.
-If B: proceed to Step 1 in "plan-driven mode." There is no approved PNG, the plan is
-the source of truth. Ask the user for a screen name to use for the output directory
-(e.g., "landing-page", "dashboard", "pricing").
-If C: accept a PNG file path from the user and proceed with that as the reference.
-
-### Case C: Nothing found (clean slate)
-
-If none of the above produced any context:
-
-Use AskUserQuestion:
-> No design context found for this project. How do you want to start?
-> A) Run /plan-ceo-review first — think through the product strategy before designing
-> B) Run /plan-design-review first — design review with visual mockups
-> C) Run /design-shotgun — jump straight to visual design exploration
-> D) Just describe it — tell me what you want and I'll design the HTML live
-
-If A, B, or C: tell the user to run that skill, then come back to /design-html.
-If D: proceed to Step 1 in "freeform mode." Ask the user for a screen name.
-
-### Context summary
-
-After routing, output a brief context summary:
-- **Mode:** approved-mockup | plan-driven | freeform | evolve
-- **Visual reference:** path to approved PNG, or "none (plan-driven)" or "none (freeform)"
-- **CEO plan:** path or "none"
-- **Design tokens:** "DESIGN.md" or "none"
-- **Screen name:** from approved.json, user-provided, or inferred from CEO plan
-
----
-
-## Step 1: Design Analysis
-
-1. If `$D` is available (`DESIGN_READY`), extract a structured implementation spec:
-```bash
-$D prompt --image <approved-variant.png> --output json
-```
-This returns colors, typography, layout structure, and component inventory via GPT-4o vision.
-
-2. If `$D` is not available, read the approved PNG inline using the Read tool.
-   Describe the visual layout, colors, typography, and component structure yourself.
-
-3. If in plan-driven or freeform mode (no approved PNG), design from context:
-   - **Plan-driven:** read the CEO plan and/or design review notes. Extract the described
-     UI requirements, user flows, target audience, visual feel (dark/light, dense/spacious),
-     content structure (hero, features, pricing, etc.), and design constraints. Build an
-     implementation spec from the plan's prose rather than a visual reference.
-   - **Freeform:** use AskUserQuestion to gather what the user wants to build. Ask about:
-     purpose/audience, visual feel (dark/light, playful/serious, dense/spacious),
-     content structure (hero, features, pricing, etc.), and any reference sites they like.
-   In both cases, describe the intended visual layout, colors, typography, and
-   component structure as your implementation spec. Generate realistic content based
-   on the plan or user description (never lorem ipsum).
-
-4. Read `DESIGN.md` tokens. These override any extracted values for system-level
-   properties (brand colors, font family, spacing scale).
-
-5. Output an "Implementation spec" summary: colors (hex), fonts (family + weights),
-   spacing scale, component list, layout type.
-
----
-
-## Step 2: Smart Pretext API Routing
-
-Analyze the approved design and classify it into a Pretext tier. Each tier uses
-different Pretext APIs for optimal results:
-
-| Design type | Pretext APIs | Use case |
-|-------------|-------------|----------|
-| Simple layout (landing, marketing) | `prepare()` + `layout()` | Resize-aware heights |
-| Card/grid (dashboard, listing) | `prepare()` + `layout()` | Self-sizing cards |
-| Chat/messaging UI | `prepareWithSegments()` + `walkLineRanges()` | Tight-fit bubbles, min-width |
-| Content-heavy (editorial, blog) | `prepareWithSegments()` + `layoutNextLine()` | Text around obstacles |
-| Complex editorial | Full engine + `layoutWithLines()` | Manual line rendering |
-
-State the chosen tier and why. Reference the specific Pretext APIs that will be used.
-
----
-
-## Step 2.5: Framework Detection
-
-Check if the user's project uses a frontend framework:
+Also find the extension path so you can help the user if they need to load it manually:
 
 ```bash
-[ -f package.json ] && cat package.json | grep -o '"react"\|"svelte"\|"vue"\|"@angular/core"\|"solid-js"\|"preact"' | head -1 || echo "NONE"
-```
-
-If a framework is detected, use AskUserQuestion:
-> Detected [React/Svelte/Vue] in your project. What format should the output be?
-> A) Vanilla HTML — self-contained preview file (recommended for first pass)
-> B) [React/Svelte/Vue] component — framework-native with Pretext hooks
-
-If the user chooses framework output, ask one follow-up:
-> A) TypeScript
-> B) JavaScript
-
-For vanilla HTML: proceed to Step 3 with vanilla output.
-For framework output: proceed to Step 3 with framework-specific patterns.
-If no framework detected: default to vanilla HTML, no question needed.
-
----
-
-## Step 3: Generate Pretext-Native HTML
-
-### Pretext Source Embedding
-
-For **vanilla HTML output**, check for the vendored Pretext bundle:
-```bash
-_PRETEXT_VENDOR=""
+_EXT_PATH=""
 _ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
-[ -n "$_ROOT" ] && [ -f "$_ROOT/.claude/skills/gstack/design-html/vendor/pretext.js" ] && _PRETEXT_VENDOR="$_ROOT/.claude/skills/gstack/design-html/vendor/pretext.js"
-[ -z "$_PRETEXT_VENDOR" ] && [ -f ~/.claude/skills/gstack/design-html/vendor/pretext.js ] && _PRETEXT_VENDOR=~/.claude/skills/gstack/design-html/vendor/pretext.js
-[ -n "$_PRETEXT_VENDOR" ] && echo "VENDOR: $_PRETEXT_VENDOR" || echo "VENDOR_MISSING"
+[ -n "$_ROOT" ] && [ -f "$_ROOT/.claude/skills/gstack/extension/manifest.json" ] && _EXT_PATH="$_ROOT/.claude/skills/gstack/extension"
+[ -z "$_EXT_PATH" ] && [ -f "$HOME/.claude/skills/gstack/extension/manifest.json" ] && _EXT_PATH="$HOME/.claude/skills/gstack/extension"
+echo "EXTENSION_PATH: ${_EXT_PATH:-NOT FOUND}"
 ```
 
-- If `VENDOR` found: read the file and inline it in a `<script>` tag. The HTML file
-  is fully self-contained with zero network dependencies.
-- If `VENDOR_MISSING`: use CDN import as fallback:
-  `<script type="module">import { prepare, layout, prepareWithSegments, walkLineRanges, layoutNextLine, layoutWithLines } from 'https://esm.sh/@chenglou/pretext'</script>`
-  Add a comment: `<!-- FALLBACK: vendor/pretext.js missing, using CDN -->`
-
-For **framework output**, add to the project's dependencies instead:
-```bash
-# Detect package manager
-[ -f bun.lockb ] && echo "bun add @chenglou/pretext" || \
-[ -f pnpm-lock.yaml ] && echo "pnpm add @chenglou/pretext" || \
-[ -f yarn.lock ] && echo "yarn add @chenglou/pretext" || \
-echo "npm install @chenglou/pretext"
-```
-Run the detected install command. Then use standard imports in the component.
-
-### HTML Generation
-
-Write a single file using the Write tool. Save to:
-`~/.gstack/projects/$SLUG/designs/<screen-name>-YYYYMMDD/finalized.html`
-
-For framework output, save to:
-`~/.gstack/projects/$SLUG/designs/<screen-name>-YYYYMMDD/finalized.[tsx|svelte|vue]`
-
-**Always include in vanilla HTML:**
-- Pretext source (inlined or CDN, see above)
-- CSS custom properties for design tokens from DESIGN.md / Step 1 extraction
-- Google Fonts via `<link>` tags + `document.fonts.ready` gate before first `prepare()`
-- Semantic HTML5 (`<header>`, `<nav>`, `<main>`, `<section>`, `<footer>`)
-- Responsive behavior via Pretext relayout (not just media queries)
-- Breakpoint-specific adjustments at 375px, 768px, 1024px, 1440px
-- ARIA attributes, heading hierarchy, focus-visible states
-- `contenteditable` on text elements + MutationObserver to re-prepare + re-layout on edit
-- ResizeObserver on containers to re-layout on resize
-- `prefers-color-scheme` media query for dark mode
-- `prefers-reduced-motion` for animation respect
-- Real content extracted from the mockup (never lorem ipsum)
-
-**Never include (AI slop blacklist):**
-- Purple/blue gradients as default
-- Generic 3-column feature grids
-- Center-everything layouts with no visual hierarchy
-- Decorative blobs, waves, or geometric patterns not in the mockup
-- Stock photo placeholder divs
-- "Get Started" / "Learn More" generic CTAs not from the mockup
-- Rounded-corner cards with drop shadows as the default component
-- Emoji as visual elements
-- Generic testimonial sections
-- Cookie-cutter hero sections with left-text right-image
-
-### Pretext Wiring Patterns
-
-Use these patterns based on the tier selected in Step 2. These are the correct
-Pretext API usage patterns. Follow them exactly.
-
-**Pattern 1: Basic height computation (Simple layout, Card/grid)**
-```js
-import { prepare, layout } from './pretext-inline.js'
-// Or if inlined: const { prepare, layout } = window.Pretext
-
-// 1. PREPARE — one-time, after fonts load
-await document.fonts.ready
-const elements = document.querySelectorAll('[data-pretext]')
-const prepared = new Map()
-
-for (const el of elements) {
-  const text = el.textContent
-  const font = getComputedStyle(el).font
-  prepared.set(el, prepare(text, font))
-}
-
-// 2. LAYOUT — cheap, call on every resize
-function relayout() {
-  for (const [el, handle] of prepared) {
-    const { height } = layout(handle, el.clientWidth, parseFloat(getComputedStyle(el).lineHeight))
-    el.style.height = `${height}px`
-  }
-}
-
-// 3. RESIZE-AWARE
-new ResizeObserver(() => relayout()).observe(document.body)
-relayout()
-
-// 4. CONTENT-EDITABLE — re-prepare when text changes
-for (const el of elements) {
-  if (el.contentEditable === 'true') {
-    new MutationObserver(() => {
-      const font = getComputedStyle(el).font
-      prepared.set(el, prepare(el.textContent, font))
-      relayout()
-    }).observe(el, { characterData: true, subtree: true, childList: true })
-  }
-}
-```
-
-**Pattern 2: Shrinkwrap / tight-fit containers (Chat bubbles)**
-```js
-import { prepareWithSegments, walkLineRanges } from './pretext-inline.js'
-
-// Find the tightest width that produces the same line count
-function shrinkwrap(text, font, maxWidth, lineHeight) {
-  const segs = prepareWithSegments(text, font)
-  let bestWidth = maxWidth
-  walkLineRanges(segs, maxWidth, (lineCount, startIdx, endIdx) => {
-    // walkLineRanges calls back with progressively narrower widths
-    // The first call gives us the line count at maxWidth
-    // We want the narrowest width that still produces this line count
-  })
-  // Binary search for tightest width with same line count
-  const { lineCount: targetLines } = layout(prepare(text, font), maxWidth, lineHeight)
-  let lo = 0, hi = maxWidth
-  while (hi - lo > 1) {
-    const mid = (lo + hi) / 2
-    const { lineCount } = layout(prepare(text, font), mid, lineHeight)
-    if (lineCount === targetLines) hi = mid
-    else lo = mid
-  }
-  return hi
-}
-```
-
-**Pattern 3: Text around obstacles (Editorial layout)**
-```js
-import { prepareWithSegments, layoutNextLine } from './pretext-inline.js'
-
-function layoutAroundObstacles(text, font, containerWidth, lineHeight, obstacles) {
-  const segs = prepareWithSegments(text, font)
-  let state = null
-  let y = 0
-  const lines = []
-
-  while (true) {
-    // Calculate available width at current y position, accounting for obstacles
-    let availWidth = containerWidth
-    for (const obs of obstacles) {
-      if (y >= obs.top && y < obs.top + obs.height) {
-        availWidth -= obs.width
-      }
-    }
-
-    const result = layoutNextLine(segs, state, availWidth, lineHeight)
-    if (!result) break
-
-    lines.push({ text: result.text, width: result.width, x: 0, y })
-    state = result.state
-    y += lineHeight
-  }
-
-  return { lines, totalHeight: y }
-}
-```
-
-**Pattern 4: Full line-by-line rendering (Complex editorial)**
-```js
-import { prepareWithSegments, layoutWithLines } from './pretext-inline.js'
-
-const segs = prepareWithSegments(text, font)
-const { lines, height } = layoutWithLines(segs, containerWidth, lineHeight)
-
-// lines = [{ text, width, x, y }, ...]
-// Use for Canvas/SVG rendering or custom DOM positioning
-for (const line of lines) {
-  const span = document.createElement('span')
-  span.textContent = line.text
-  span.style.position = 'absolute'
-  span.style.left = `${line.x}px`
-  span.style.top = `${line.y}px`
-  container.appendChild(span)
-}
-```
-
-### Pretext API Reference
-
-```
-PRETEXT API CHEATSHEET:
-
-prepare(text, font) → handle
-  One-time text measurement. Call after document.fonts.ready.
-  Font: CSS shorthand like '16px Inter' or 'bold 24px Georgia'.
-
-layout(prepared, maxWidth, lineHeight) → { height, lineCount }
-  Fast layout computation. Call on every resize. Sub-millisecond.
-
-prepareWithSegments(text, font) → handle
-  Like prepare() but enables line-level APIs below.
-
-layoutWithLines(segs, maxWidth, lineHeight) → { lines: [{text, width, x, y}...], height }
-  Full line-by-line breakdown. For Canvas/SVG rendering.
-
-walkLineRanges(segs, maxWidth, onLine) → void
-  Calls onLine(lineCount, startIdx, endIdx) for each possible layout.
-  Find minimum width for N lines. For tight-fit containers.
-
-layoutNextLine(segs, state, maxWidth, lineHeight) → { text, width, state } | null
-  Iterator. Different maxWidth per line = text around obstacles.
-  Pass null as initial state. Returns null when text is exhausted.
-
-clearCache() → void
-  Clears internal measurement caches. Use when cycling many fonts.
-
-setLocale(locale?) → void
-  Retargets word segmenter for future prepare() calls.
-```
-
----
-
-## Step 3.5: Live Reload Server
-
-After writing the HTML file, start a simple HTTP server for live preview:
-
-```bash
-# Start a simple HTTP server in the output directory
-_OUTPUT_DIR=$(dirname <path-to-finalized.html>)
-cd "$_OUTPUT_DIR"
-python3 -m http.server 0 --bind 127.0.0.1 &
-_SERVER_PID=$!
-_PORT=$(lsof -i -P -n | grep "$_SERVER_PID" | grep LISTEN | awk '{print $9}' | cut -d: -f2 | head -1)
-echo "SERVER: http://localhost:$_PORT/finalized.html"
-echo "PID: $_SERVER_PID"
-```
-
-If python3 is not available, fall back to:
-```bash
-open <path-to-finalized.html>
-```
-
-Tell the user: "Live preview running at http://localhost:$_PORT/finalized.html.
-After each edit, just refresh the browser (Cmd+R) to see changes."
-
-When the refinement loop ends (Step 4 exits), kill the server:
-```bash
-kill $_SERVER_PID 2>/dev/null || true
-```
-
----
-
-## Step 4: Preview + Refinement Loop
-
-### Verification Screenshots
-
-If `$B` is available (browse binary), take verification screenshots at 3 viewports:
-
-```bash
-$B goto "file://<path-to-finalized.html>"
-$B screenshot /tmp/gstack-verify-mobile.png --width 375
-$B screenshot /tmp/gstack-verify-tablet.png --width 768
-$B screenshot /tmp/gstack-verify-desktop.png --width 1440
-```
-
-Show all three screenshots inline using the Read tool. Check for:
-- Text overflow (text cut off or extending beyond containers)
-- Layout collapse (elements overlapping or missing)
-- Responsive breakage (content not adapting to viewport)
-
-If issues are found, note them and fix before presenting to the user.
-
-If `$B` is not available, skip verification and note:
-"Browse binary not available. Skipping automated viewport verification."
-
-### Refinement Loop
-
-```
-LOOP:
-  1. If server is running, tell user to open http://localhost:PORT/finalized.html
-     Otherwise: open <path>/finalized.html
-
-  2. If an approved mockup PNG exists, show it inline (Read tool) for visual comparison.
-     If in plan-driven or freeform mode, skip this step.
-
-  3. AskUserQuestion (adjust wording based on mode):
-     With mockup: "The HTML is live in your browser. Here's the approved mockup for comparison.
-      Try: resize the window (text should reflow dynamically),
-      click any text (it's editable, layout recomputes instantly).
-      What needs to change? Say 'done' when satisfied."
-     Without mockup: "The HTML is live in your browser. Try: resize the window
-      (text should reflow dynamically), click any text (it's editable, layout
-      recomputes instantly). What needs to change? Say 'done' when satisfied."
-
-  4. If "done" / "ship it" / "looks good" / "perfect" → exit loop, go to Step 5
-
-  5. Apply feedback using targeted Edit tool changes on the HTML file
-     (do NOT regenerate the entire file — surgical edits only)
-
-  6. Brief summary of what changed (2-3 lines max)
-
-  7. If verification screenshots are available, re-take them to confirm the fix
-
-  8. Go to LOOP
-```
-
-Maximum 10 iterations. If the user hasn't said "done" after 10, use AskUserQuestion:
-"We've done 10 rounds of refinement. Want to continue iterating or call it done?"
-
----
-
-## Step 5: Save & Next Steps
-
-### Design Token Extraction
-
-If no `DESIGN.md` exists in the repo root, offer to create one from the generated HTML:
-
-Extract from the HTML:
-- CSS custom properties (colors, spacing, font sizes)
-- Font families and weights used
-- Color palette (primary, secondary, accent, neutral)
-- Spacing scale
-- Border radius values
-- Shadow values
+## Step 3: Guide the user to the Side Panel
 
 Use AskUserQuestion:
-> No DESIGN.md found. I can extract the design tokens from the HTML we just built
-> and create a DESIGN.md for your project. This means future /design-shotgun and
-> /design-html runs will be style-consistent automatically.
-> A) Create DESIGN.md from these tokens
-> B) Skip — I'll handle the design system later
 
-If A: write `DESIGN.md` to the repo root with the extracted tokens.
+> Chrome is launched with gstack control. You should see Playwright's Chromium
+> (not your regular Chrome) with a golden shimmer line at the top of the page.
+>
+> The Side Panel extension should be auto-loaded. To open it:
+> 1. Look for the **puzzle piece icon** (Extensions) in the toolbar — it may
+>    already show the gstack icon if the extension loaded successfully
+> 2. Click the **puzzle piece** → find **gstack browse** → click the **pin icon**
+> 3. Click the pinned **gstack icon** in the toolbar
+> 4. The Side Panel should open on the right showing a live activity feed
+>
+> **Port:** 34567 (auto-detected — the extension connects automatically in the
+> Playwright-controlled Chrome).
 
-### Save Metadata
+Options:
+- A) I can see the Side Panel — let's go!
+- B) I can see Chrome but can't find the extension
+- C) Something went wrong
 
-Write `finalized.json` alongside the HTML:
-```json
-{
-  "source_mockup": "<approved variant PNG path or null>",
-  "source_plan": "<CEO plan path or null>",
-  "mode": "<approved-mockup|plan-driven|freeform|evolve>",
-  "html_file": "<path to finalized.html or component file>",
-  "pretext_tier": "<selected tier>",
-  "framework": "<vanilla|react|svelte|vue>",
-  "iterations": <number of refinement iterations>,
-  "date": "<ISO 8601>",
-  "screen": "<screen name>",
-  "branch": "<current branch>"
-}
+If B: Tell the user:
+
+> The extension is loaded into Playwright's Chromium at launch time, but
+> sometimes it doesn't appear immediately. Try these steps:
+>
+> 1. Type `chrome://extensions` in the address bar
+> 2. Look for **"gstack browse"** — it should be listed and enabled
+> 3. If it's there but not pinned, go back to any page, click the puzzle piece
+>    icon, and pin it
+> 4. If it's NOT listed at all, click **"Load unpacked"** and navigate to:
+>    - Press **Cmd+Shift+G** in the file picker dialog
+>    - Paste this path: `{EXTENSION_PATH}` (use the path from Step 2)
+>    - Click **Select**
+>
+> After loading, pin it and click the icon to open the Side Panel.
+>
+> If the Side Panel badge stays gray (disconnected), click the gstack icon
+> and enter port **34567** manually.
+
+If C:
+
+1. Run `$B status` and show the output
+2. If the server is not healthy, re-run Step 0 cleanup + Step 1 connect
+3. If the server IS healthy but the browser isn't visible, try `$B focus`
+4. If that fails, ask the user what they see (error message, blank screen, etc.)
+
+## Step 4: Demo
+
+After the user confirms the Side Panel is working, run a quick demo:
+
+```bash
+$B goto https://news.ycombinator.com
 ```
 
-### Next Steps
+Wait 2 seconds, then:
 
-Use AskUserQuestion:
-> Design finalized with Pretext-native layout. What's next?
-> A) Copy to project — copy the HTML/component into your codebase
-> B) Iterate more — keep refining
-> C) Done — I'll use this as a reference
+```bash
+$B snapshot -i
+```
 
----
+Tell the user: "Check the Side Panel — you should see the `goto` and `snapshot`
+commands appear in the activity feed. Every command Claude runs shows up here
+in real time."
 
-## Important Rules
+## Step 5: Sidebar chat
 
-- **Source of truth fidelity over code elegance.** When an approved mockup exists,
-  pixel-match it. If that requires `width: 312px` instead of a CSS grid class, that's
-  correct. When in plan-driven or freeform mode, the user's feedback during the
-  refinement loop is the source of truth. Code cleanup happens later during
-  component extraction.
+After the activity feed demo, tell the user about the sidebar chat:
 
-- **Always use Pretext for text layout.** Even if the design looks simple, Pretext
-  ensures correct height computation on resize. The overhead is 30KB. Every page benefits.
+> The Side Panel also has a **chat tab**. Try typing a message like "take a
+> snapshot and describe this page." A sidebar agent (a child Claude instance)
+> executes your request in the browser — you'll see the commands appear in
+> the activity feed as they happen.
+>
+> The sidebar agent can navigate pages, click buttons, fill forms, and read
+> content. Each task gets up to 5 minutes. It runs in an isolated session, so
+> it won't interfere with this Claude Code window.
 
-- **Surgical edits in the refinement loop.** Use the Edit tool to make targeted changes,
-  not the Write tool to regenerate the entire file. The user may have made manual edits
-  via contenteditable that should be preserved.
+## Step 6: What's next
 
-- **Real content only.** When a mockup exists, extract text from it. In plan-driven mode,
-  use content from the plan. In freeform mode, generate realistic content based on the
-  user's description. Never use "Lorem ipsum", "Your text here", or placeholder content.
+Tell the user:
 
-- **One page per invocation.** For multi-page designs, run /design-html once per page.
-  Each run produces one HTML file.
+> You're all set! Here's what you can do with the connected Chrome:
+>
+> **Watch Claude work in real time:**
+> - Run any gstack skill (`/qa`, `/design-review`, `/benchmark`) and watch
+>   every action happen in the visible Chrome window + Side Panel feed
+> - No cookie import needed — the Playwright browser shares its own session
+>
+> **Control the browser directly:**
+> - **Sidebar chat** — type natural language in the Side Panel and the sidebar
+>   agent executes it (e.g., "fill in the login form and submit")
+> - **Browse commands** — `$B goto <url>`, `$B click <sel>`, `$B fill <sel> <val>`,
+>   `$B snapshot -i` — all visible in Chrome + Side Panel
+>
+> **Window management:**
+> - `$B focus` — bring Chrome to the foreground anytime
+> - `$B disconnect` — close headed Chrome and return to headless mode
+>
+> **What skills look like in headed mode:**
+> - `/qa` runs its full test suite in the visible browser — you see every page
+>   load, every click, every assertion
+> - `/design-review` takes screenshots in the real browser — same pixels you see
+> - `/benchmark` measures performance in the headed browser
+
+Then proceed with whatever the user asked to do. If they didn't specify a task,
+ask what they'd like to test or browse.
