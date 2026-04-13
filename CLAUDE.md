@@ -46,10 +46,16 @@
 
 ## Serena MCP Tools
 
-Serena is started manually by the user before each session. **When Serena is available, always prefer its tools over built-in Claude Code tools for all code work.** Do not reach for Grep, Glob, or Read to navigate code when a Serena tool covers the same task.
+Serena is started manually by the user before each session. **Using built-in tools (Read, Grep, Glob, Edit) on code files when Serena is available is a mistake.** Treat it as a hard rule, not a preference.
 
-| Task | Use Serena | NOT built-in |
-|------|-----------|-------------|
+### Decision gate — run this check before every tool call on a `.py` file:
+
+> **"Does a Serena tool cover this task?"**
+> If YES → use Serena. STOP. Do not call Read/Grep/Glob/Edit.
+> If NO → proceed with the built-in tool.
+
+| Task | MUST use Serena | NEVER use |
+|------|----------------|-----------|
 | Find a function / class / symbol | `mcp__serena__find_symbol` | Grep |
 | Search code by pattern | `mcp__serena__search_for_pattern` | Grep |
 | Get file/module overview | `mcp__serena__get_symbols_overview` | Read |
@@ -61,10 +67,19 @@ Serena is started manually by the user before each session. **When Serena is ava
 | Rename a symbol project-wide | `mcp__serena__rename_symbol` | sed / Edit |
 | Persist project knowledge | `mcp__serena__write_memory` / `read_memory` | Memory files |
 
-**Only use built-in tools when:**
-- Reading non-code files (markdown, config, logs, XML)
-- Serena is not running (fall back to Grep/Glob/Read, note the limitation)
-- The target file is outside the project root
+### Schema loading
+Serena tools are deferred — their schemas are not pre-loaded. Before calling any `mcp__serena__*` tool, load its schema first:
+```
+ToolSearch: select:mcp__serena__find_symbol   (or whichever tool you need)
+```
+
+### The only valid exceptions
+Built-in tools are allowed **only** when:
+1. The file is non-code: markdown, config, logs, XML, `.txt`, `.json`, `.toml`
+2. Serena is confirmed not running (note this explicitly before falling back)
+3. The target file is outside the project root
+
+If you catch yourself reaching for Read/Grep/Glob on a `.py` file — stop and use Serena instead.
 
 ---
 
