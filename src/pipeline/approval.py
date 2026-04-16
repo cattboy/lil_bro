@@ -56,7 +56,7 @@ def parse_selection(raw: str, max_num: int) -> list[int] | None:
     return None
 
 
-def run_approval_flow(proposals: list[dict], specs: dict) -> None:
+def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created: bool = False) -> None:
     """
     Renders the numbered proposal list, collects batch selection,
     and executes approved auto-fixable actions.
@@ -121,7 +121,7 @@ def run_approval_flow(proposals: list[dict], specs: dict) -> None:
     # Start session manifest before fix loop so each fix can append its backup entry
     try:
         from src.utils.revert import start_session_manifest
-        start_session_manifest()
+        start_session_manifest(restore_point_created=restore_point_created)
     except Exception:
         from src.utils.formatting import print_warning
         print_warning("Revert will not be available for this session — backup could not be saved.")

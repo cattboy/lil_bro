@@ -14,6 +14,7 @@ class BootstrapPhase:
         print_header("Phase 1: Bootstrapping & Safety")
         try:
             create_restore_point()
+            ctx.restore_point_created = True
         except LilBroError as e:
             log.error("Restore point creation failed: %s", e)
             print_error(str(e))

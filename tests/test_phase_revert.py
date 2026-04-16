@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-import pytest
 
 import src.pipeline.phase_revert  # ensure module is loaded before patching  # noqa: F401
 from src.pipeline.phase_revert import run_revert_phase

@@ -46,8 +46,9 @@ def start_session_manifest(restore_point_created: bool = True) -> None:
 def append_fix_to_manifest(entry: dict) -> None:
     """Append one fix entry to the session manifest.
 
-    Called by each fix wrapper *before* applying the fix, so the backup exists
-    even if the fix raises.  On any failure the fix still proceeds.
+    Called by each fix wrapper *after* applying the fix, so the revert
+    metadata reflects the actual outcome.  On any failure the fix result
+    is unaffected.
     """
     manifest = _read_raw_manifest()
     if manifest is None:
@@ -156,18 +157,14 @@ def _revert_power_plan(entry: dict) -> tuple[bool, str]:
 
 
 def _revert_game_mode(entry: dict) -> tuple[bool, str]:
+    from src.agent_tools.game_mode import set_game_mode
+
     before = entry.get("before", {})
     value = before.get("AutoGameModeEnabled")
     if value is None:
         return False, "game_mode revert: missing before.AutoGameModeEnabled"
     try:
-        with winreg.CreateKeyEx(
-            winreg.HKEY_CURRENT_USER,
-            r"SOFTWARE\Microsoft\GameBar",
-            0,
-            winreg.KEY_SET_VALUE,
-        ) as key:
-            winreg.SetValueEx(key, "AutoGameModeEnabled", 0, winreg.REG_DWORD, int(value))
+        set_game_mode(enabled=bool(value))
         action_logger.log_action(
             "Revert",
             f"Game Mode restored to AutoGameModeEnabled={value}",
@@ -220,7 +217,7 @@ def _revert_display(entry: dict) -> tuple[bool, str]:
     result = ctypes.windll.user32.ChangeDisplaySettingsExW(
         device, ctypes.byref(mode), None, _CDS_UPDATEREGISTRY, None
     )
-    if result == _DISP_CHANGE_SUCCESSFUL:
+    if result in (_DISP_CHANGE_SUCCESSFUL, 1):  # 1 = DISP_CHANGE_RESTART
         action_logger.log_action(
             "Revert", f"Display restored to {width}x{height}@{hz}Hz", device
         )
