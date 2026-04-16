@@ -27,6 +27,19 @@ class TestFixGameMode:
     def test_game_mode_failure(self, mock_set):
         assert execute_fix("game_mode", {}) is False
 
+    @patch("src.utils.revert.append_fix_to_manifest")
+    @patch("src.agent_tools.game_mode.set_game_mode")
+    def test_game_mode_manifest_entry_captured(self, mock_set, mock_append):
+        """Manifest entry written with before-state from specs."""
+        specs = {"GameMode": {"enabled": False}}
+        assert execute_fix("game_mode", specs) is True
+        mock_append.assert_called_once()
+        entry = mock_append.call_args[0][0]
+        assert entry["fix"] == "game_mode"
+        assert entry["revertible"] is True
+        assert entry["before"]["AutoGameModeEnabled"] == 0
+        assert entry["after"]["AutoGameModeEnabled"] == 1
+
 
 class TestFixTempFolders:
     @patch("src.agent_tools.temp_audit.clean_temp_folders")
@@ -58,6 +71,34 @@ class TestFixDisplay:
     @patch("src.collectors.sub.monitor_dumper.get_all_displays", return_value=[])
     def test_display_no_mode_found(self, mock_displays, mock_find):
         assert execute_fix("display", {}) is False
+
+    @patch("src.utils.revert.append_fix_to_manifest")
+    @patch("src.agent_tools.display_setter.apply_display_mode")
+    @patch("src.agent_tools.display_setter.find_best_mode")
+    @patch("src.agent_tools.display_setter.get_current_display_mode")
+    @patch("src.collectors.sub.monitor_dumper.get_all_displays", return_value=["\\\\.\\DISPLAY1"])
+    def test_display_manifest_entry_captured(self, mock_displays, mock_current, mock_find, mock_apply, mock_append):
+        """Manifest entry written with before/after display state."""
+        before = MagicMock()
+        before.dmPelsWidth = 1920
+        before.dmPelsHeight = 1080
+        before.dmDisplayFrequency = 60
+        mock_current.return_value = before
+
+        after = MagicMock()
+        after.dmPelsWidth = 1920
+        after.dmPelsHeight = 1080
+        after.dmDisplayFrequency = 144
+        mock_find.return_value = after
+        mock_apply.side_effect = [(True, "Validated"), (True, "Applied")]
+
+        assert execute_fix("display", {}) is True
+        mock_append.assert_called_once()
+        entry = mock_append.call_args[0][0]
+        assert entry["fix"] == "display"
+        assert entry["revertible"] is True
+        assert entry["before"]["hz"] == 60
+        assert entry["after"]["hz"] == 144
 
 
 class TestFixPowerPlan:
@@ -91,3 +132,40 @@ class TestFixPowerPlan:
     @patch("src.agent_tools.power_plan.list_available_plans", side_effect=Exception("powercfg failed"))
     def test_power_plan_failure(self, mock_list):
         assert execute_fix("power_plan", {}) is False
+
+    @patch("src.utils.revert.append_fix_to_manifest")
+    @patch("src.agent_tools.power_plan.set_active_plan")
+    @patch("src.agent_tools.power_plan.list_available_plans")
+    def test_power_plan_manifest_entry_captured(self, mock_list, mock_set, mock_append):
+        """Manifest entry written with correct before-state from specs."""
+        from src.agent_tools.power_plan import _PERF_GUIDS
+        guid = next(iter(_PERF_GUIDS))
+        mock_list.return_value = [(guid, "High performance")]
+        specs = {"PowerPlan": {"guid": "aaa-bbb", "name": "Balanced"}}
+        assert execute_fix("power_plan", specs) is True
+        mock_append.assert_called_once()
+        entry = mock_append.call_args[0][0]
+        assert entry["fix"] == "power_plan"
+        assert entry["revertible"] is True
+        assert entry["before"]["guid"] == "aaa-bbb"
+        assert entry["before"]["name"] == "Balanced"
+
+    @patch("src.utils.revert.append_fix_to_manifest")
+    @patch("src.agent_tools.power_plan.set_active_plan")
+    @patch("src.agent_tools.power_plan.list_available_plans")
+    def test_power_plan_missing_before_state_marks_not_revertible(self, mock_list, mock_set, mock_append):
+        """Empty specs → manifest entry revertible=False, fix still proceeds."""
+        from src.agent_tools.power_plan import _PERF_GUIDS
+        guid = next(iter(_PERF_GUIDS))
+        mock_list.return_value = [(guid, "High performance")]
+        assert execute_fix("power_plan", {}) is True
+        mock_append.assert_called_once()
+        entry = mock_append.call_args[0][0]
+        assert entry["revertible"] is False
+
+    @patch("src.utils.revert.append_fix_to_manifest")
+    @patch("src.agent_tools.power_plan.list_available_plans", side_effect=Exception("powercfg failed"))
+    def test_power_plan_failure_no_manifest_written(self, mock_list, mock_append):
+        """When set_active_plan raises, no manifest entry is written."""
+        assert execute_fix("power_plan", {}) is False
+        mock_append.assert_not_called()

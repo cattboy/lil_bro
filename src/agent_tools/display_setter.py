@@ -43,6 +43,11 @@ def _get_current_mode(device_name: str) -> DEVMODE | None:
     return dm if ok else None
 
 
+def get_current_display_mode(device_name: str):
+    """Public wrapper around _get_current_mode() for use by revert.py."""
+    return _get_current_mode(device_name)
+
+
 # ── Mode selection strategies ──────────────────────────────────────────────────
 
 def find_best_mode(

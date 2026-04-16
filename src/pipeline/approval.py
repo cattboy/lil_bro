@@ -117,6 +117,15 @@ def run_approval_flow(proposals: list[dict], specs: dict) -> None:
 
     print()
     bar = AnimatedProgressBar(total=len(selected_proposals), label="Applying fixes")
+
+    # Start session manifest before fix loop so each fix can append its backup entry
+    try:
+        from src.utils.revert import start_session_manifest
+        start_session_manifest()
+    except Exception:
+        from src.utils.formatting import print_warning
+        print_warning("Revert will not be available for this session — backup could not be saved.")
+
     bar.start()
 
     for i, (_n, proposal) in enumerate(sorted(selected_proposals.items()), 1):
