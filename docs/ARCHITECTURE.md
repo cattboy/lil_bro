@@ -12,9 +12,10 @@ src/
     _state.py            — Shared _llm state (get_llm/set_llm)
     base.py              — PipelineContext + Phase protocol for modular phases
     banner.py            — ASCII art banner
-    menu.py              — 3-option menu loop + AI model setup
-    approval.py          — Proposal display, selection parsing, fix execution
-    fix_dispatch.py      — Check->fix dispatch registry
+    menu.py              — 4-option menu loop (Pipeline, AI Setup, Exit, Revert)
+    approval.py          — Proposal display, selection parsing, fix execution, manifest session start
+    fix_dispatch.py      — Check->fix dispatch registry (with revert manifest integration)
+    phase_revert.py      — Phase 6: Interactive revert flow (menu option 4 or --revert)
     thermal_gate.py      — Pre-benchmark thermal safety check
     phase_bootstrap.py   — Phase 1: Bootstrapping & Safety (UAC, restore point)
     phase_scan.py        — Phase 2: Deep System Scan (collectors, specs JSON)
@@ -55,7 +56,12 @@ src/
     formatting.py        — Colorama terminal UI helpers (print_step, print_success, etc.)
     integrity.py         — SHA-256 exe hash verification (frozen builds only)
     paths.py             — Centralized CWD-relative path helper (lil_bro/ runtime dir, persistent log paths)
+    platform.py          — Platform detection (IS_WINDOWS) + admin privilege check (is_admin)
     progress_bar.py      — AnimatedProgressBar: plasma-sweep terminal animation during fix execution
+    revert.py            — Session manifest I/O + per-fix revert handlers (power plan, game mode, NVIDIA profile, display)
+    display_utils.py     — Win32 DEVMODE struct + display mode enumeration via ctypes
+    subprocess_utils.py  — Centralized subprocess runner with timeout and error handling
+    pawnio_check.py      — PawnIO kernel driver installation detection (registry check)
 build.py               — Automated build pipeline (5 steps: PawnIO update → lhm-server → PyInstaller → integrity manifest)
 lil_bro.spec           — PyInstaller onefile build specification
 install_deps.ps1       — One-command dev setup (Python, uv, .NET 8, WDK, submodules)
