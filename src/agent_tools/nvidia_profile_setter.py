@@ -24,8 +24,8 @@ from ..utils.action_logger import action_logger
 
 
 def get_backups_dir():
-    """Return ./lil_bro_backups/ (CWD-root). Delegates to src.utils.paths."""
-    from src.utils.paths import get_backups_dir as _gbdir
+    """Return ./lil_bro_backups/ (CWD-root). Delegates to utils.paths."""
+    from ..utils.paths import get_backups_dir as _gbdir
     return _gbdir()
 
 
