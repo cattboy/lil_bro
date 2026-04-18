@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from src.utils.paths import (
-    get_appdata_dir,
+    get_lil_bro_dir,
     get_logs_dir,
     get_specs_path,
     get_action_log_path,
@@ -9,9 +9,9 @@ from src.utils.paths import (
 )
 
 
-def test_get_appdata_dir(tmp_path, monkeypatch):
+def test_get_lil_bro_dir(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    result = get_appdata_dir()
+    result = get_lil_bro_dir()
     assert result == tmp_path / "lil_bro"
     assert result.exists()
 
@@ -45,14 +45,14 @@ def test_get_debug_log_path(tmp_path, monkeypatch):
     assert result == tmp_path / "lil_bro_debug.log"  # CWD root, survives cleanup
 
 
-def test_appdata_dir_creates_parents(tmp_path, monkeypatch):
+def test_lil_bro_dir_creates_parents(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    result = get_appdata_dir()
+    result = get_lil_bro_dir()
     assert result.exists()
 
 
 def test_cwd_based_path(tmp_path, monkeypatch):
     """get_appdata_dir() is relative to CWD, not %APPDATA%."""
     monkeypatch.chdir(tmp_path)
-    result = get_appdata_dir()
+    result = get_lil_bro_dir()
     assert result == Path.cwd() / "lil_bro"

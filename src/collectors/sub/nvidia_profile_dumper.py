@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
-from ...utils.paths import get_appdata_dir, get_temp_dir
+from ...utils.paths import get_lil_bro_dir, get_temp_dir
 from ...utils.action_logger import action_logger
 
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -22,8 +22,8 @@ _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".
 _NPI_SEARCH_PATHS = [
     # 1. PyInstaller frozen bundle — sys._MEIPASS/tools/nvidiaProfileInspector.exe
     os.path.join(getattr(sys, "_MEIPASS", _PROJECT_ROOT), "tools", "nvidiaProfileInspector.exe"),
-    # 2. %APPDATA%\lil_bro\tools\ — extraction fallback for long _MEIPASS paths
-    os.path.join(str(get_appdata_dir()), "tools", "nvidiaProfileInspector.exe"),
+    # 2. ./lil_bro/tools/ — CWD-relative fallback for long _MEIPASS paths
+    os.path.join(str(get_lil_bro_dir()), "tools", "nvidiaProfileInspector.exe"),
     # 3. Source-tree dev path
     os.path.join(_PROJECT_ROOT, "tools", "nvidiaProfileInspector", "nvidiaProfileInspector.exe"),
 ]

@@ -16,7 +16,7 @@ download that should survive between runs.
 from pathlib import Path
 
 
-def get_appdata_dir() -> Path:
+def get_lil_bro_dir() -> Path:
     """Return ``./lil_bro`` (CWD-relative), creating it if needed."""
     base = Path.cwd() / "lil_bro"
     base.mkdir(parents=True, exist_ok=True)
@@ -25,14 +25,14 @@ def get_appdata_dir() -> Path:
 
 def get_logs_dir() -> Path:
     """Return ``./lil_bro/logs``, creating it if needed."""
-    d = get_appdata_dir() / "logs"
+    d = get_lil_bro_dir() / "logs"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def get_specs_path() -> Path:
     """Return the path for ``full_specs.json`` (data snapshot, not a log)."""
-    return get_appdata_dir() / "full_specs.json"
+    return get_lil_bro_dir() / "full_specs.json"
 
 
 def get_action_log_path() -> Path:
@@ -51,7 +51,7 @@ def get_temp_dir() -> Path:
     All subprocess temp files must use this instead of ``tempfile.gettempdir()``
     to avoid scattering artifacts in ``%TEMP%``.
     """
-    d = get_appdata_dir() / "tmp"
+    d = get_lil_bro_dir() / "tmp"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
