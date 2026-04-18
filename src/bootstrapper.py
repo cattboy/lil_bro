@@ -70,20 +70,20 @@ def create_restore_point(description: str | None = None):
     if not prompt_approval("Create a System Restore Point? HIGHLY recommended, save your game before you feed... incase you want to revert lil_bros work"):
         print_error("System Restore Point creation bypassed, yolo mode activated.")
         return False
-        
+
     print_step("Creating System Restore Point (this may take a minute)")
-    
+
     ps_command = f'Checkpoint-Computer -Description "{description}" -RestorePointType "MODIFY_SETTINGS"'
-    
+
     try:
-        # Run the powershell command. Capture output to avoid spamming the console, but check return code.
         result = subprocess.run(
             ["powershell", "-Command", ps_command],
             capture_output=True,
             text=True,
-            check=False # We handle the check manually to provide better error messages
+            check=False,  # We handle the check manually to provide better error messages
+            timeout=240,
         )
-        
+
         if result.returncode == 0:
             print_step_done(success=True)
             print_success(f"Restore point '{description}' created successfully.")
@@ -95,7 +95,10 @@ def create_restore_point(description: str | None = None):
             print_step_done(success=False)
             print_error(f"Failed to create restore point. PowerShell output: {result.stderr.strip()}")
             raise RestorePointError(f"PowerShell returned non-zero exit status: {result.returncode}")
-            
+
+    except subprocess.TimeoutExpired:
+        print_step_done(success=False)
+        raise RestorePointError("System Restore Point creation timed out after 4 minutes.")
     except FileNotFoundError:
         print_step_done(success=False)
         raise RestorePointError("PowerShell executable not found. Ensure PowerShell is installed and in your PATH.")

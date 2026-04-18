@@ -46,10 +46,16 @@
 
 ## Serena MCP Tools
 
-Serena is started manually by the user before each session. **When Serena is available, always prefer its tools over built-in Claude Code tools for all code work.** Do not reach for Grep, Glob, or Read to navigate code when a Serena tool covers the same task.
+Serena is started manually by the user before each session. **Using built-in tools (Read, Grep, Glob, Edit) on code files when Serena is available is a mistake.** Treat it as a hard rule, not a preference.
 
-| Task | Use Serena | NOT built-in |
-|------|-----------|-------------|
+### Decision gate — run this check before every tool call on a `.py` file:
+
+> **"Does a Serena tool cover this task?"**
+> If YES → use Serena. STOP. Do not call Read/Grep/Glob/Edit.
+> If NO → proceed with the built-in tool.
+
+| Task | MUST use Serena | NEVER use |
+|------|----------------|-----------|
 | Find a function / class / symbol | `mcp__serena__find_symbol` | Grep |
 | Search code by pattern | `mcp__serena__search_for_pattern` | Grep |
 | Get file/module overview | `mcp__serena__get_symbols_overview` | Read |
@@ -61,10 +67,34 @@ Serena is started manually by the user before each session. **When Serena is ava
 | Rename a symbol project-wide | `mcp__serena__rename_symbol` | sed / Edit |
 | Persist project knowledge | `mcp__serena__write_memory` / `read_memory` | Memory files |
 
-**Only use built-in tools when:**
-- Reading non-code files (markdown, config, logs, XML)
-- Serena is not running (fall back to Grep/Glob/Read, note the limitation)
-- The target file is outside the project root
+### Creating new Python files
+
+Use the built-in **Write** tool for new `.py` files. Serena's `claude-code` context deliberately excludes `create_text_file` by upstream design — "tools that would duplicate Claude Code's built-in capabilities." The guard hook carves out `Write` on paths that do not yet exist.
+
+Flow: `Write` creates the file → switch to Serena symbol tools for all subsequent reads and edits.
+
+### When NOT to use Serena
+
+Serena's backend here (Pyright via SolidLSP) indexes **only Python**. For markdown, JSON, YAML, TOML, XML, `.txt`, config, logs, images — use built-ins (`Read`, `Grep`, `Glob`, `Edit`, `Write`, `Bash`) directly. Routing a `.md` read through `mcp__serena__search_for_pattern` works but is wasted effort.
+
+Quick check before any tool call: does the target file end in `.py`?
+- No → built-ins.
+- Yes, creating new → `Write`.
+- Yes, existing → Serena (see table above).
+
+### Schema loading
+Serena tools are deferred — their schemas are not pre-loaded. Before calling any `mcp__serena__*` tool, load its schema first:
+```
+ToolSearch: select:mcp__serena__find_symbol   (or whichever tool you need)
+```
+
+### The only valid exceptions
+Built-in tools are allowed **only** when:
+1. The file is non-code: markdown, config, logs, XML, `.txt`, `.json`, `.toml`
+2. Serena is confirmed not running (note this explicitly before falling back)
+3. The target file is outside the project root
+
+If you catch yourself reaching for Read/Grep/Glob on a `.py` file — stop and use Serena instead.
 
 ---
 
@@ -109,3 +139,25 @@ List available docs with:
 ```bash
 ls -t C:/Users/Owner/.gstack/projects/cattboy-lil_bro/*.md 2>/dev/null
 ```
+
+---
+
+## Skill routing
+
+When the user's request matches an available skill, ALWAYS invoke it using the Skill
+tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
+The skill has specialized workflows that produce better results than ad-hoc answers.
+
+Key routing rules:
+- Product ideas, "is this worth building", brainstorming → invoke office-hours
+- Bugs, errors, "why is this broken", 500 errors → invoke investigate
+- Ship, deploy, push, create PR → invoke ship
+- QA, test the site, find bugs → invoke qa
+- Code review, check my diff → invoke review
+- Update docs after shipping → invoke document-release
+- Weekly retro → invoke retro
+- Design system, brand → invoke design-consultation
+- Visual audit, design polish → invoke design-review
+- Architecture review → invoke plan-eng-review
+- Save progress, checkpoint, resume → invoke checkpoint
+- Code quality, health check → invoke health

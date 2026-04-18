@@ -34,6 +34,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable debug logging to lil_bro_debug.log (CWD root)",
     )
+    parser.add_argument(
+        "--revert",
+        action="store_true",
+        help="Revert the last lil_bro session without running the full pipeline.",
+    )
     return parser.parse_args()
 
 
@@ -68,6 +73,12 @@ def main():
             print()
 
         action_logger.log_session_start()
+
+        if args.revert:
+            from src.pipeline.phase_revert import run_revert_phase
+            run_revert_phase()
+            return
+
         startup_lhm, _ = run_startup_thermal_scan()
         menu_loop(startup_lhm)
 

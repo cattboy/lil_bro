@@ -47,12 +47,27 @@
       "mcp__serena__replace_symbol_body",
       "mcp__serena__safe_delete_symbol",
       "mcp__serena__search_for_pattern",
-      "mcp__serena__write_memory"
+      "mcp__serena__write_memory",
+      "Bash(uv venv:*)",
+      "Bash(uv pip:*)"
     ]
   },
   "enabledMcpjsonServers": [
     "serena"
   ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|Write|Grep|Glob|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".venv/Scripts/python.exe .claude/hooks/serena_guard.py"
+          }
+        ]
+      }
+    ]
+  },
   "enabledPlugins": {
     "pyright-lsp@claude-plugins-official": true,
     "github@claude-plugins-official": false,

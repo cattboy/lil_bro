@@ -13,7 +13,7 @@ from src.pipeline.phases import run_optimization_pipeline
 
 
 def menu_loop(startup_lhm: LHMSidecar):
-    """3-option main menu: Pipeline, AI Setup, Exit."""
+    """4-option main menu: Pipeline, AI Setup, Exit, Revert."""
     while True:
         print_header("Main Menu")
 
@@ -25,9 +25,10 @@ def menu_loop(startup_lhm: LHMSidecar):
         print("  1. Run Full Optimization Pipeline")
         print("  2. Setup AI Model")
         print("  3. Exit")
+        print("  4. Revert last session")
 
         print()
-        print_prompt("Select an option [1-3]: ")
+        print_prompt("Select an option [1-4]: ")
         choice = input().strip()
 
         if choice == '1':
@@ -37,6 +38,9 @@ def menu_loop(startup_lhm: LHMSidecar):
         elif choice == '3':
             print_info("shutting down, self destructing in 5, 4, ...")
             sys.exit(0)
+        elif choice == '4':
+            from src.pipeline.phase_revert import run_revert_phase
+            run_revert_phase()
         else:
             print_error("Invalid choice. Try again.")
 

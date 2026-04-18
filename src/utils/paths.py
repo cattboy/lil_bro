@@ -54,3 +54,19 @@ def get_temp_dir() -> Path:
     d = get_appdata_dir() / "tmp"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def get_backups_dir() -> Path:
+    """Return ``./lil_bro_backups/``, creating it if needed.
+
+    CWD-root directory — survives ``post_run_cleanup.py`` deletion of ``./lil_bro/``.
+    Used for NVIDIA .nip backups and the session manifest.
+    """
+    d = Path.cwd() / "lil_bro_backups"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def get_session_backup_path() -> Path:
+    """Return the path to the session manifest: ``./lil_bro_backups/session_latest.json``."""
+    return get_backups_dir() / "session_latest.json"

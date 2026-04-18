@@ -46,6 +46,9 @@ dotnet-runtime = ">=8.0"
 dotnet-runtime-purpose = "Required to run lhm-server.exe at startup for thermal monitoring"
 dotnet-download = "https://dotnet.microsoft.com/download/dotnet/8.0"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.uv]
 required-environments = [
     "sys_platform == 'win32'",

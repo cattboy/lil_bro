@@ -503,8 +503,10 @@ class TestFixDispatchNvidiaProfile:
         expected = {"display", "power_plan", "temp_folders", "game_mode", "nvidia_profile"}
         assert set(FIX_REGISTRY.keys()) == expected
 
+    @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="/backup.nip")
+    @patch("src.collectors.sub.nvidia_profile_dumper.find_npi_exe", return_value="npi.exe")
     @patch("src.agent_tools.nvidia_profile_setter.fix_nvidia_profile", return_value=True)
-    def test_dispatch_success(self, mock_fix):
+    def test_dispatch_success(self, mock_fix, mock_find, mock_backup):
         from src.pipeline.fix_dispatch import execute_fix
         assert execute_fix("nvidia_profile", {}) is True
 
@@ -519,6 +521,20 @@ class TestFixDispatchNvidiaProfile:
     def test_dispatch_runtime_error(self, mock_fix):
         from src.pipeline.fix_dispatch import execute_fix
         assert execute_fix("nvidia_profile", {}) is False
+
+    @patch("src.utils.revert.append_fix_to_manifest")
+    @patch("src.agent_tools.nvidia_profile_setter.fix_nvidia_profile", return_value=True)
+    @patch("src.collectors.sub.nvidia_profile_dumper.find_npi_exe", return_value="npi.exe")
+    @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="/backup.nip")
+    def test_dispatch_manifest_entry_captured(self, mock_backup, mock_find, mock_fix, mock_append):
+        """Manifest entry written with backup path after successful dispatch."""
+        from src.pipeline.fix_dispatch import execute_fix
+        assert execute_fix("nvidia_profile", {}) is True
+        mock_append.assert_called_once()
+        entry = mock_append.call_args[0][0]
+        assert entry["fix"] == "nvidia_profile"
+        assert entry["revertible"] is True
+        assert entry["before_backup"] == "/backup.nip"
 
 
 # ── 10. LLM fallback template ────────────────────────────────────────────────

@@ -82,7 +82,7 @@ class ConfigPhase:
                 print_dim("Generating recommendations...")
             proposals = propose_actions(hardware, findings, ctx.llm)
 
-            run_approval_flow(proposals, ctx.specs)
+            run_approval_flow(proposals, ctx.specs, restore_point_created=ctx.restore_point_created)
         except PipelineAborted:
             raise  # user declined — let orchestrator handle
         except Exception as exc:

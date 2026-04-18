@@ -2,6 +2,35 @@
 
 All notable changes to lil_bro are documented here.
 
+## [0.1.0.0] - 2026-04-16
+
+### Added
+- **Revert/undo system** — You can now undo lil_bro's last session. Menu option 4 or `--revert` flag walks you through reverting each change individually: power plan, display settings, NVIDIA profile, and Game Mode. Non-revertible changes (temp cleanup) are clearly labeled. If anything goes wrong, System Restore Point fallback is offered.
+- Session manifest (`session_latest.json`) records every fix applied with before/after state, enabling targeted per-fix rollback.
+- `src/pipeline/phase_revert.py` — interactive revert UX with confirmation, per-fix status, and partial failure handling.
+- `src/utils/revert.py` — revert handlers for power plan, game mode, NVIDIA profile, and display settings.
+- `--revert` CLI flag for direct revert access without going through the menu.
+
+### Changed
+- Fix dispatch handlers now capture before-state and write manifest entries for each applied fix.
+- `PipelineContext` gains `restore_point_created` field, threaded from bootstrap through approval flow.
+- `nvidia_profile_setter.py` backups dir moved from `%APPDATA%` to CWD-relative `./lil_bro_backups/`.
+- `create_restore_point()` now has a 4-minute timeout instead of hanging indefinitely.
+- NVIDIA profile fix accepts `pre_backup_path` to avoid duplicate backup exports.
+
+### Fixed
+- Display revert now accepts `DISP_CHANGE_RESTART` (1) as success, not just `DISP_CHANGE_SUCCESSFUL` (0).
+- Game mode revert uses canonical `set_game_mode()` instead of direct winreg writes.
+- Absolute import in `nvidia_profile_setter.py` changed to relative for PyInstaller compatibility.
+- `start_session_manifest()` now receives actual `restore_point_created` value instead of hardcoded `True`.
+
+### For contributors
+- 441 tests total, all passing. 5 new test files for revert feature coverage.
+- `CLAUDE.md` updated with gstack skill routing rules.
+- `pyproject.toml` gains `[tool.pytest.ini_options]` with explicit `testpaths`.
+
+---
+
 ## [0.9.1] - 2026-04-06
 
 ### Added

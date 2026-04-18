@@ -19,15 +19,14 @@ from ..collectors.sub.nvidia_profile_dumper import (
     SETTING_IDS, TARGET_VALUES, find_npi_exe, calculate_fps_cap,
 )
 from ..utils.errors import SetterError
-from ..utils.paths import get_appdata_dir, get_temp_dir
+from ..utils.paths import get_temp_dir
 from ..utils.action_logger import action_logger
 
 
-def get_backups_dir() -> Path:
-    """Return %APPDATA%\\lil_bro\\backups, creating it if needed."""
-    d = get_appdata_dir() / "backups"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+def get_backups_dir():
+    """Return ./lil_bro_backups/ (CWD-root). Delegates to utils.paths."""
+    from ..utils.paths import get_backups_dir as _gbdir
+    return _gbdir()
 
 
 def _export_current_profile(npi_exe: str, dest_dir: str) -> str:
@@ -155,10 +154,11 @@ def fix_nvidia_profile(
     specs: dict,
     refresh_hz: int | None = None,
     gpu_generation: str | None = None,
+    pre_backup_path: str | None = None,
 ) -> bool:
     """Apply optimized NVIDIA driver profile.
 
-    1. Backup current profile
+    1. Backup current profile (skipped if pre_backup_path provided)
     2. Export fresh .nip
     3. Modify target settings
     4. Import via NPI -silentImport
@@ -167,6 +167,8 @@ def fix_nvidia_profile(
         specs: Full system specs dict.
         refresh_hz: Override for monitor refresh rate (auto-detected if None).
         gpu_generation: Override for GPU gen like "40" (auto-detected if None).
+        pre_backup_path: Path to an already-created backup .nip. If provided,
+            the internal backup step is skipped (avoids duplicate exports).
 
     Returns True on success.
     """
@@ -176,9 +178,12 @@ def fix_nvidia_profile(
     if npi_exe is None:
         raise FileNotFoundError("NVIDIA Profile Inspector binary not found")
 
-    # 1. Backup
-    backup_path = backup_nvidia_profile(npi_exe)
-    action_logger.log_action("NPI Fix", "Backup created", backup_path)
+    # 1. Backup (skip if caller already made one)
+    if pre_backup_path is not None:
+        backup_path = pre_backup_path
+    else:
+        backup_path = backup_nvidia_profile(npi_exe)
+        action_logger.log_action("NPI Fix", "Backup created", backup_path)
 
     # 2. Export fresh .nip for modification
     with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as tmpdir:

@@ -50,6 +50,9 @@ class PipelineContext:
     baseline_result: dict = field(default_factory=dict)
     peak_temps: dict = field(default_factory=dict)
 
+    # Set by BootstrapPhase — whether a System Restore Point was created
+    restore_point_created: bool = False
+
 
 class Phase(Protocol):
     """Structural protocol for pipeline phases."""
