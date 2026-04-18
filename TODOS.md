@@ -17,16 +17,6 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
-### T-003 — Deduplicate DEVMODE struct + mode enumeration
-**Priority:** P2
-**Effort:** S human / S with CC
-**Why:** `display_setter.py` and `monitor_dumper.py` each define a `DEVMODE` ctypes struct and `_enum_all_modes()` logic independently. Risk of silent divergence if one copy is updated without the other.
-**Fix:** Extract shared struct + enumeration helpers to `src/utils/display_utils.py`. Both files import from there.
-**Blocked by:** Nothing.
-**Added:** 2026-04-07 (from /plan-eng-review, Priority 2 deferred item)
-
----
-
 ### T-004 — Type PipelineContext.llm properly
 **Priority:** P2
 **Effort:** XS human / XS with CC
