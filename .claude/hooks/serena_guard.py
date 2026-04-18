@@ -8,10 +8,9 @@ Also blocks Bash in-place edits of .py files (sed -i, output redirects,
 tee, awk -i inplace, perl -i), so structural code changes go through
 Serena's symbol tools.
 
-Carve-out: `.claude/hooks/` paths are infrastructure (not project Python)
-and Serena cannot extract symbols from module-level scripts, so hook
-files are not gated by themselves. This keeps the hook editable via any
-tool without having to disable itself.
+Carve-out: `.claude/` paths are infrastructure (not project Python) —
+hook files, skills, plugins, etc. Serena indexes only the project source
+tree, so nothing under .claude/ needs Serena enforcement.
 
 Exit codes:
   0 — allow the tool call to proceed
@@ -27,8 +26,8 @@ tool_name = data.get("tool_name", "")
 tool_input = data.get("tool_input", {})
 
 
-def _is_hook_path(text: str) -> bool:
-    return ".claude/hooks/" in text.replace("\\", "/")
+def _is_claude_path(text: str) -> bool:
+    return ".claude/" in text.replace("\\", "/")
 
 
 blocked = False
@@ -36,7 +35,7 @@ suggestion = ""
 
 if tool_name in ("Read", "Edit", "Write"):
     path = str(tool_input.get("file_path", ""))
-    if path.endswith(".py") and not _is_hook_path(path):
+    if path.endswith(".py") and not _is_claude_path(path):
         # Carve-out: allow Write to a path that does not yet exist.
         # Serena runs with --context claude-code, which deliberately
         # excludes create_text_file (see claude-code.yml in the Serena
@@ -66,19 +65,21 @@ if tool_name in ("Read", "Edit", "Write"):
                 )
 
 elif tool_name == "Grep":
+    grep_path = str(tool_input.get("path", ""))
     glob_param = str(tool_input.get("glob", ""))
     type_param = str(tool_input.get("type", ""))
-    if "*.py" in glob_param or ".py" in glob_param or type_param == "py":
-        blocked = True
-        suggestion = (
-            "  mcp__serena__search_for_pattern    — regex/string search in Python files\n"
-            "  mcp__serena__find_symbol           — find a specific symbol by name\n"
-            "  mcp__serena__find_referencing_symbols — find all callers of a symbol"
-        )
+    if not _is_claude_path(grep_path) and not _is_claude_path(glob_param):
+        if "*.py" in glob_param or ".py" in glob_param or type_param == "py":
+            blocked = True
+            suggestion = (
+                "  mcp__serena__search_for_pattern    — regex/string search in Python files\n"
+                "  mcp__serena__find_symbol           — find a specific symbol by name\n"
+                "  mcp__serena__find_referencing_symbols — find all callers of a symbol"
+            )
 
 elif tool_name == "Glob":
     pattern = str(tool_input.get("pattern", ""))
-    if ".py" in pattern and not _is_hook_path(pattern):
+    if ".py" in pattern and not _is_claude_path(pattern):
         blocked = True
         suggestion = (
             "  mcp__serena__find_file             — locate a Python file by name\n"
@@ -88,7 +89,7 @@ elif tool_name == "Glob":
 
 elif tool_name == "Bash":
     command = str(tool_input.get("command", ""))
-    if not _is_hook_path(command):
+    if not _is_claude_path(command):
         # Heuristic — catches common in-place edits. Not a sandbox:
         # `find ... -exec sed -i {} \;` will slip through, and a quoted
         # string containing `> foo.py` false-positives. Acceptable for
