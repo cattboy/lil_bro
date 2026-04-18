@@ -5,7 +5,6 @@ from __future__ import annotations
 import ctypes
 import json
 import subprocess
-import winreg
 from datetime import datetime
 from pathlib import Path
 
@@ -18,6 +17,7 @@ _DM_PELSWIDTH = 0x00080000
 _DM_PELSHEIGHT = 0x00100000
 _DM_DISPLAYFREQUENCY = 0x00400000
 _CDS_UPDATEREGISTRY = 1
+_CDS_TEST = 0x00000002
 _DISP_CHANGE_SUCCESSFUL = 0
 
 
@@ -35,11 +35,21 @@ def start_session_manifest(restore_point_created: bool = True) -> None:
     """
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     manifest: dict = {
+        "schema_version": 1,
         "session_id": session_id,
         "session_date": datetime.now().isoformat(),
         "restore_point_created": restore_point_created,
         "fixes": [],
     }
+    old_path = get_session_backup_path()
+    if old_path.exists():
+        try:
+            import json as _json
+            old_data = _json.loads(old_path.read_text(encoding="utf-8"))
+            old_id = old_data.get("session_id", "unknown")
+            old_path.rename(old_path.parent / f"session_{old_id}.json")
+        except Exception:
+            pass
     _write_manifest(manifest)
 
 
@@ -60,7 +70,12 @@ def append_fix_to_manifest(entry: dict) -> None:
 
 def load_manifest() -> dict | None:
     """Return the session manifest, or None if not found or corrupt."""
-    return _read_raw_manifest()
+    data = _read_raw_manifest()
+    if data is not None:
+        ver = data.get("schema_version")
+        if ver is None or ver != 1:
+            print_warning(f"Session manifest has unexpected schema_version={ver!r}; proceeding anyway.")
+    return data
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +222,11 @@ def _revert_display(entry: dict) -> tuple[bool, str]:
     if not all(v is not None for v in [device, width, height, hz]):
         return False, "display revert: incomplete before state (device/width/height/hz required)"
 
+    if not isinstance(device, str) or not device:
+        return False, "display revert: device must be a non-empty string"
+    if not all(isinstance(v, int) and v > 0 for v in [width, height, hz]):
+        return False, "display revert: width/height/hz must be positive integers"
+
     mode = DEVMODE()
     mode.dmSize = ctypes.sizeof(DEVMODE)
     mode.dmFields = _DM_PELSWIDTH | _DM_PELSHEIGHT | _DM_DISPLAYFREQUENCY
@@ -214,12 +234,23 @@ def _revert_display(entry: dict) -> tuple[bool, str]:
     mode.dmPelsHeight = height
     mode.dmDisplayFrequency = hz
 
+    test_result = ctypes.windll.user32.ChangeDisplaySettingsExW(
+        device, ctypes.byref(mode), None, _CDS_TEST, None
+    )
+    if test_result != _DISP_CHANGE_SUCCESSFUL:
+        return False, f"display revert validation failed (CDS_TEST returned {test_result})"
+
     result = ctypes.windll.user32.ChangeDisplaySettingsExW(
         device, ctypes.byref(mode), None, _CDS_UPDATEREGISTRY, None
     )
-    if result in (_DISP_CHANGE_SUCCESSFUL, 1):  # 1 = DISP_CHANGE_RESTART
+    if result == _DISP_CHANGE_SUCCESSFUL:
         action_logger.log_action(
             "Revert", f"Display restored to {width}x{height}@{hz}Hz", device
         )
         return True, ""
+    if result == 1:  # DISP_CHANGE_RESTART
+        action_logger.log_action(
+            "Revert", f"Display restored to {width}x{height}@{hz}Hz (reboot required)", device
+        )
+        return True, "reboot required to apply display change"
     return False, f"ChangeDisplaySettingsExW returned {result} for {device}"
