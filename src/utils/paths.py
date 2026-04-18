@@ -62,7 +62,7 @@ def get_backups_dir() -> Path:
     CWD-root directory — survives ``post_run_cleanup.py`` deletion of ``./lil_bro/``.
     Used for NVIDIA .nip backups and the session manifest.
     """
-    d = Path(".") / "lil_bro_backups"
+    d = Path.cwd() / "lil_bro_backups"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

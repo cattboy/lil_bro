@@ -19,6 +19,18 @@ from src.utils.revert import load_manifest, revert_fix, trigger_system_restore
 
 def run_revert_phase() -> None:
     """Interactive revert flow — launched from menu option 4 or --revert flag."""
+    # Fix #12: Create a restore point before reverting so the user has a safety net.
+    print_step("Creating a restore point before reverting…")
+    try:
+        from src.bootstrapper import create_restore_point
+        rp_ok = create_restore_point(description="lil_bro Pre-Revert safety snapshot")
+    except Exception as _rp_exc:
+        rp_ok = False
+    if not rp_ok:
+        print_warning("Restore point could not be created — continuing anyway.")
+    else:
+        print_step_done(success=True)
+
     manifest = load_manifest()
     if manifest is None:
         print_info(
@@ -67,6 +79,16 @@ def run_revert_phase() -> None:
         action_logger.log_action(
             "Revert", f"All {len(succeeded)} fix(es) reverted", session_date
         )
+        # Fix #5b: Surface per-fix warnings from successful reverts (e.g. reboot required).
+        for entry, _ok, err in succeeded:
+            if err:
+                print_warning(f"  {_display_name(entry.get('fix', ''))} — {err}")
+        # Fix #5a: Manifest no longer needed — delete after a fully clean revert.
+        try:
+            from src.utils.paths import get_session_backup_path
+            get_session_backup_path().unlink(missing_ok=True)
+        except Exception:
+            pass
         return
 
     print_warning(f"\n{len(succeeded)} of {len(results)} changes reverted.")
