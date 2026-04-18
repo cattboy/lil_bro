@@ -67,6 +67,21 @@ Serena is started manually by the user before each session. **Using built-in too
 | Rename a symbol project-wide | `mcp__serena__rename_symbol` | sed / Edit |
 | Persist project knowledge | `mcp__serena__write_memory` / `read_memory` | Memory files |
 
+### Creating new Python files
+
+Use the built-in **Write** tool for new `.py` files. Serena's `claude-code` context deliberately excludes `create_text_file` by upstream design — "tools that would duplicate Claude Code's built-in capabilities." The guard hook carves out `Write` on paths that do not yet exist.
+
+Flow: `Write` creates the file → switch to Serena symbol tools for all subsequent reads and edits.
+
+### When NOT to use Serena
+
+Serena's backend here (Pyright via SolidLSP) indexes **only Python**. For markdown, JSON, YAML, TOML, XML, `.txt`, config, logs, images — use built-ins (`Read`, `Grep`, `Glob`, `Edit`, `Write`, `Bash`) directly. Routing a `.md` read through `mcp__serena__search_for_pattern` works but is wasted effort.
+
+Quick check before any tool call: does the target file end in `.py`?
+- No → built-ins.
+- Yes, creating new → `Write`.
+- Yes, existing → Serena (see table above).
+
 ### Schema loading
 Serena tools are deferred — their schemas are not pre-loaded. Before calling any `mcp__serena__*` tool, load its schema first:
 ```
