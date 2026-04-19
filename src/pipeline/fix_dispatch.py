@@ -55,38 +55,43 @@ def _fix_display(specs: dict) -> bool:
             return False
 
         ok, msg = apply_display_mode(device, mode, persist=True, dry_run=False)
-        if ok:
-            if before_state:
-                append_fix_to_manifest({
-                    "fix": "display",
-                    "revertible": True,
-                    "before": before_state,
-                    "after": {
-                        "device": device,
-                        "width": mode.dmPelsWidth,
-                        "height": mode.dmPelsHeight,
-                        "hz": mode.dmDisplayFrequency,
-                    },
-                    "applied_at": datetime.now().isoformat(),
-                })
-            else:
-                print_warning("[display] Could not capture before-state — fix will not be revertible.")
-                append_fix_to_manifest({
-                    "fix": "display",
-                    "revertible": False,
-                    "reason": "Before-state not available",
-                    "applied_at": datetime.now().isoformat(),
-                })
-            print_success(
-                f"[display] Refresh rate set to {mode.dmDisplayFrequency}Hz "
-                f"({mode.dmPelsWidth}x{mode.dmPelsHeight}). {msg}"
-            )
-        else:
+        if not ok:
             print_error(f"[display] Apply failed: {msg}")
-        return ok
+            return False
     except Exception as e:
         print_error(f"[display] Error: {e}")
         return False
+
+    try:
+        if before_state:
+            append_fix_to_manifest({
+                "fix": "display",
+                "revertible": True,
+                "before": before_state,
+                "after": {
+                    "device": device,
+                    "width": mode.dmPelsWidth,
+                    "height": mode.dmPelsHeight,
+                    "hz": mode.dmDisplayFrequency,
+                },
+                "applied_at": datetime.now().isoformat(),
+            })
+        else:
+            print_warning("[display] Could not capture before-state — fix will not be revertible.")
+            append_fix_to_manifest({
+                "fix": "display",
+                "revertible": False,
+                "reason": "Before-state not available",
+                "applied_at": datetime.now().isoformat(),
+            })
+    except Exception as e:
+        print_warning(f"[display] Fix applied but revert log failed: {e}")
+
+    print_success(
+        f"[display] Refresh rate set to {mode.dmDisplayFrequency}Hz "
+        f"({mode.dmPelsWidth}x{mode.dmPelsHeight}). {msg}"
+    )
+    return True
 
 
 @register_fix("power_plan")
@@ -117,7 +122,11 @@ def _fix_power_plan(specs: dict) -> bool:
             guid, name = create_high_performance_plan()
 
         set_active_plan(guid)
+    except Exception as e:
+        print_error(f"[power_plan] Failed: {e}")
+        return False
 
+    try:
         if before_guid:
             append_fix_to_manifest({
                 "fix": "power_plan",
@@ -134,12 +143,11 @@ def _fix_power_plan(specs: dict) -> bool:
                 "reason": "Before-state not available in specs",
                 "applied_at": datetime.now().isoformat(),
             })
-
-        print_success(f"[power_plan] Switched to '{name}'.")
-        return True
     except Exception as e:
-        print_error(f"[power_plan] Failed: {e}")
-        return False
+        print_warning(f"[power_plan] Fix applied but revert log failed: {e}")
+
+    print_success(f"[power_plan] Switched to '{name}'.")
+    return True
 
 
 @register_fix("temp_folders")
@@ -156,13 +164,17 @@ def _fix_temp_folders(specs: dict) -> bool:
         print_error(f"[temp_folders] Cleanup failed: {e}")
         return False
 
-    append_fix_to_manifest({
-        "fix": "temp_folders",
-        "revertible": False,
-        "reason": "Deleted temp files cannot be restored",
-        "display": "temp files deleted — files gone",
-        "applied_at": datetime.now().isoformat(),
-    })
+    try:
+        append_fix_to_manifest({
+            "fix": "temp_folders",
+            "revertible": False,
+            "reason": "Deleted temp files cannot be restored",
+            "display": "temp files deleted — files gone",
+            "applied_at": datetime.now().isoformat(),
+        })
+    except Exception as e:
+        print_warning(f"[temp_folders] Fix applied but revert log failed: {e}")
+
     return True
 
 
@@ -176,27 +188,33 @@ def _fix_game_mode(specs: dict) -> bool:
     before_enabled = game_mode_spec.get("enabled")
 
     try:
-        set_game_mode(enabled=True)
+        ok = set_game_mode(enabled=True)
+        if not ok:
+            print_error("[game_mode] set_game_mode returned False.")
+            return False
     except Exception as e:
         print_error(f"[game_mode] Failed: {e}")
         return False
 
-    if before_enabled is not None:
-        append_fix_to_manifest({
-            "fix": "game_mode",
-            "revertible": True,
-            "before": {"AutoGameModeEnabled": 0 if not before_enabled else 1},
-            "after": {"AutoGameModeEnabled": 1},
-            "applied_at": datetime.now().isoformat(),
-        })
-    else:
-        print_warning("[game_mode] Could not capture before-state — fix will not be revertible.")
-        append_fix_to_manifest({
-            "fix": "game_mode",
-            "revertible": False,
-            "reason": "Before-state not available in specs",
-            "applied_at": datetime.now().isoformat(),
-        })
+    try:
+        if before_enabled is not None:
+            append_fix_to_manifest({
+                "fix": "game_mode",
+                "revertible": True,
+                "before": {"AutoGameModeEnabled": 0 if not before_enabled else 1},
+                "after": {"AutoGameModeEnabled": 1},
+                "applied_at": datetime.now().isoformat(),
+            })
+        else:
+            print_warning("[game_mode] Could not capture before-state — fix will not be revertible.")
+            append_fix_to_manifest({
+                "fix": "game_mode",
+                "revertible": False,
+                "reason": "Before-state not available in specs",
+                "applied_at": datetime.now().isoformat(),
+            })
+    except Exception as e:
+        print_warning(f"[game_mode] Fix applied but revert log failed: {e}")
 
     print_success("[game_mode] Game Mode enabled.")
     return True
@@ -229,20 +247,23 @@ def _fix_nvidia_profile(specs: dict) -> bool:
         print_error(f"[nvidia_profile] Failed: {e}")
         return False
 
-    if backup_path is not None:
-        append_fix_to_manifest({
-            "fix": "nvidia_profile",
-            "revertible": True,
-            "before_backup": backup_path,
-            "applied_at": datetime.now().isoformat(),
-        })
-    else:
-        append_fix_to_manifest({
-            "fix": "nvidia_profile",
-            "revertible": False,
-            "reason": "NPI.exe unavailable or backup failed",
-            "applied_at": datetime.now().isoformat(),
-        })
+    try:
+        if backup_path is not None:
+            append_fix_to_manifest({
+                "fix": "nvidia_profile",
+                "revertible": True,
+                "before_backup": backup_path,
+                "applied_at": datetime.now().isoformat(),
+            })
+        else:
+            append_fix_to_manifest({
+                "fix": "nvidia_profile",
+                "revertible": False,
+                "reason": "NPI.exe unavailable or backup failed",
+                "applied_at": datetime.now().isoformat(),
+            })
+    except Exception as e:
+        print_warning(f"[nvidia_profile] Fix applied but revert log failed: {e}")
 
     print_success(
         "[nvidia_profile] NVIDIA driver profile optimized "
