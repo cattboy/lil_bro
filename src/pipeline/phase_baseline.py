@@ -25,7 +25,6 @@ class BaselineBenchPhase:
             ctx.peak_temps = {}
             return PhaseResult("skipped", "No thermal protection available")
 
-        ctx.runner = BenchmarkRunner()
         benchmark_skipped = thermal_safety_gate(ctx.lhm_available)
 
         if benchmark_skipped:
@@ -39,6 +38,7 @@ class BaselineBenchPhase:
             )
             return PhaseResult("skipped", "Idle temperatures too high")
 
+        ctx.runner = BenchmarkRunner()
         ctx.thermal.start()
         print_info("Thermal monitoring active -- sampling temperatures during benchmark.")
         try:

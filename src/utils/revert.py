@@ -26,46 +26,52 @@ _DISP_CHANGE_SUCCESSFUL = 0
 # ---------------------------------------------------------------------------
 
 
-def start_session_manifest(restore_point_created: bool = True) -> None:
-    """Write a fresh manifest at the start of each run.
+_pending_manifest: dict | None = None
 
-    Overwrites the previous session — not called at exit, so a crash does not
-    destroy the last good backup.  On write failure, logs a warning and
-    continues; the fix run proceeds regardless.
-    """
+def start_session_manifest(restore_point_created: bool = True) -> None:
+    """Stage a fresh manifest in memory. Written to disk only if fixes are applied."""
+    global _pending_manifest
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    manifest: dict = {
+    _pending_manifest = {
         "schema_version": 1,
         "session_id": session_id,
         "session_date": datetime.now().isoformat(),
         "restore_point_created": restore_point_created,
         "fixes": [],
     }
-    old_path = get_session_backup_path()
-    if old_path.exists():
-        try:
-            import json as _json
-            old_data = _json.loads(old_path.read_text(encoding="utf-8"))
-            old_id = old_data.get("session_id", "unknown")
-            old_path.rename(old_path.parent / f"session_{old_id}.json")
-        except Exception:
-            pass
-    _write_manifest(manifest)
 
 
 def append_fix_to_manifest(entry: dict) -> None:
     """Append one fix entry to the session manifest.
 
-    Called by each fix wrapper *after* applying the fix, so the revert
-    metadata reflects the actual outcome.  On any failure the fix result
-    is unaffected.
+    On the first call, flushes the pending in-memory manifest to disk (archiving
+    any previous session file). Subsequent calls read, append, and write as before.
+    If no fixes are ever applied, no file is written.
     """
-    manifest = _read_raw_manifest()
-    if manifest is None:
-        print_warning("Revert manifest missing — this fix will not be revertible.")
-        return
-    manifest.setdefault("fixes", []).append(entry)
-    _write_manifest(manifest)
+    global _pending_manifest
+    try:
+        if _pending_manifest is not None:
+            manifest = _pending_manifest
+            _pending_manifest = None
+            old_path = get_session_backup_path()
+            if old_path.exists():
+                try:
+                    import json as _json
+                    old_data = _json.loads(old_path.read_text(encoding="utf-8"))
+                    old_id = old_data.get("session_id", "unknown")
+                    old_path.rename(old_path.parent / f"session_{old_id}.json")
+                except Exception:
+                    pass
+        else:
+            manifest = _read_raw_manifest()
+        if manifest is None:
+            print_warning("Revert manifest missing — this fix will not be revertible.")
+            return
+        manifest.setdefault("fixes", []).append(entry)
+        _write_manifest(manifest)
+    except Exception as e:
+        prefix = entry.get("fix", "unknown")
+        print_warning(f"[{prefix}] Fix applied but revert log failed: {e}")
 
 
 def load_manifest() -> dict | None:

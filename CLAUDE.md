@@ -29,6 +29,7 @@
 ### Safety & User Trust
 - Every system modification must call `prompt_approval()` before executing — no silent changes, ever.
 - System Restore Point must be created via `bootstrapper.py` before any modifications begin.
+- **Do NOT create a restore point before the revert phase.** A second restore point at revert time creates two identically-labelled "lil_bro" entries in `rstrui.exe`, leaving the user unable to tell which one predates the fixes. The Phase 1 restore point is the correct target if System Restore is ever needed.
 - No external HTTP calls, telemetry, or cloud APIs beyond driver version verification URLs and the one-time model download from HuggingFace.
 
 ### Code Architecture

@@ -19,18 +19,6 @@ from src.utils.revert import load_manifest, revert_fix, trigger_system_restore
 
 def run_revert_phase() -> None:
     """Interactive revert flow — launched from menu option 4 or --revert flag."""
-    # Fix #12: Create a restore point before reverting so the user has a safety net.
-    print_step("Creating a restore point before reverting…")
-    try:
-        from src.bootstrapper import create_restore_point
-        rp_ok = create_restore_point(description="lil_bro Pre-Revert safety snapshot")
-    except Exception as _rp_exc:
-        rp_ok = False
-    if not rp_ok:
-        print_warning("Restore point could not be created — continuing anyway.")
-    else:
-        print_step_done(success=True)
-
     manifest = load_manifest()
     if manifest is None:
         print_info(

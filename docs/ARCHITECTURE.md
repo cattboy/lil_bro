@@ -22,7 +22,7 @@ src/
     phase_baseline.py    — Phase 3: Baseline Benchmark (Cinebench single-core, thermals)
     phase_config.py      — Phase 4: Optimization Configuration Check (all checks, LLM proposals, batch approval)
     phase_final.py       — Phase 5: Final Verification Benchmark (compare delta)
-    phases.py            — 5-phase orchestrator + PipelineContext management
+    phases.py            — 5-phase optimization orchestrator + PipelineContext management
     post_run_cleanup.py  — Deletes ./lil_bro/ on exit; preserves CWD-root persistent logs
     startup_thermals.py  — Pre-benchmark thermal safety gate
   collectors/
@@ -58,7 +58,7 @@ src/
     paths.py             — Centralized CWD-relative path helper (lil_bro/ runtime dir, persistent log paths)
     platform.py          — Platform detection (IS_WINDOWS) + admin privilege check (is_admin)
     progress_bar.py      — AnimatedProgressBar: plasma-sweep terminal animation during fix execution
-    revert.py            — Session manifest I/O + per-fix revert handlers (power plan, game mode, NVIDIA profile, display)
+    revert.py            — Session manifest I/O (start/append/load, JSON schema v1, session archiving); per-fix revert handlers (power plan, game mode, NVIDIA profile, display); System Restore fallback launcher
     display_utils.py     — Win32 DEVMODE struct + display mode enumeration via ctypes
     subprocess_utils.py  — Centralized subprocess runner with timeout and error handling
     pawnio_check.py      — PawnIO kernel driver installation detection (registry check)
@@ -75,15 +75,16 @@ docs/                  — All progress docs, plans, reports, and notes go here
 memory-bank/           — Project design docs (brief, progress, patterns, active context)
 ```
 
-## 5-Phase Pipeline
+## Pipeline Architecture
 
-Implemented as modular Phase classes inheriting context via PipelineContext dataclass:
+Implemented as modular Phase classes inheriting context via PipelineContext dataclass. Phases 1–5 run automatically during optimization; Phase 6 is a standalone user-triggered revert workflow.
 
 1. **Bootstrap Phase** (`phase_bootstrap.py`) — UAC check, System Restore Point creation
 2. **Scan Phase** (`phase_scan.py`) — WMI, dxdiag, nvidia-smi, NVIDIA Profile Inspector, EDID, monitor enum → unified JSON
 3. **Baseline Bench Phase** (`phase_baseline.py`) — Cinebench 2026 single-core + thermal baseline
 4. **Config Phase** (`phase_config.py`) — All agent_tools checks (display, power, RAM, GPU, thermal, NVIDIA Profile) → LLM proposals (or static fallback) → numbered batch approval UX
 5. **Final Phase** (`phase_final.py`) — Re-run benchmark, compare delta vs baseline
+6. **Revert Phase** (`phase_revert.py`) — User-triggered via menu option 4 or `--revert`; loads session manifest (`revert.py`), dispatches per-fix revert handlers in reverse order (display → NVIDIA profile → game mode → power plan); falls back to Windows System Restore (`rstrui.exe`) on partial failure. **No additional restore point is created before reverting** — doing so would create a second "lil_bro" restore point and leave the user unable to tell which one to select in `rstrui.exe`. The single restore point created at bootstrap (Phase 1) is the one to use if System Restore is needed.
 
 All phases share state via `PipelineContext` (LHM sidecar, thermal monitor, specs, LLM, benchmark results).
 

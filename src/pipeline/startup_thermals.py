@@ -33,6 +33,8 @@ _SENSOR_RETRIES = 10
 _SENSOR_RETRY_DELAY = 0.5  # seconds between attempts
 
 
+from src.agent_tools.thermal_guidance import derive_cpu_temp
+
 def run_startup_thermal_scan() -> tuple[LHMSidecar, bool]:
     """Start LHM, take a single temperature snapshot, and display the results.
 
@@ -53,12 +55,14 @@ def run_startup_thermal_scan() -> tuple[LHMSidecar, bool]:
         print_dim("Thermal sensors unavailable — temperature display skipped.")
         return lhm, False
 
-    # Retry until sensors populate (LHM HTTP-ready ≠ sensors enumerated)
+    # Retry until both CPU and GPU sensors populate. LHM HTTP-ready ≠ sensors
+    # enumerated — GPU sensors (NVIDIA fast path) appear before CPU sensors
+    # (PawnIO kernel driver), so we keep retrying until derive_cpu_temp succeeds.
     temps: dict = {}
     attempt = 0
     for attempt in range(_SENSOR_RETRIES):
         temps = fetch_snapshot()
-        if temps:
+        if temps and derive_cpu_temp(temps) is not None:
             break
         if attempt == 0:
             print_step("Waiting for sensor data")
