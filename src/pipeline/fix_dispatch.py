@@ -22,11 +22,52 @@ def register_fix(check_name: str) -> Callable:
     return decorator
 
 
+def _record_revertible(fix_name: str, **state: object) -> None:
+    """Append a revertible manifest entry.
+
+    `state` holds fix-specific keys (e.g. ``before=...``, ``after=...``,
+    or ``before_backup=...``).
+    """
+    from src.utils.revert import append_fix_to_manifest
+    append_fix_to_manifest({
+        "fix": fix_name,
+        "revertible": True,
+        "applied_at": datetime.now().isoformat(),
+        **state,
+    })
+
+
+def _record_non_revertible(
+    fix_name: str,
+    reason: str,
+    *,
+    warn: bool = True,
+    display: str | None = None,
+) -> None:
+    """Append a non-revertible manifest entry.
+
+    When ``warn=True``, prints the standard "Could not capture before-state"
+    warning first. ``display`` is an optional human-readable summary.
+    """
+    from src.utils.revert import append_fix_to_manifest
+    if warn:
+        print_warning(f"[{fix_name}] Could not capture before-state — fix will not be revertible.")
+    entry: dict = {
+        "fix": fix_name,
+        "revertible": False,
+        "reason": reason,
+        "applied_at": datetime.now().isoformat(),
+    }
+    if display:
+        entry["display"] = display
+    append_fix_to_manifest(entry)
+
+
+@register_fix("display")
 def _fix_display(specs: dict) -> bool:
     """Sets monitor to highest available refresh rate."""
     from src.agent_tools.display_setter import apply_display_mode, find_best_mode, get_current_display_mode
     from src.collectors.sub.monitor_dumper import get_all_displays
-    from src.utils.revert import append_fix_to_manifest
 
     try:
         devices = get_all_displays()
@@ -61,26 +102,18 @@ def _fix_display(specs: dict) -> bool:
         return False
 
     if before_state:
-        append_fix_to_manifest({
-            "fix": "display",
-            "revertible": True,
-            "before": before_state,
-            "after": {
+        _record_revertible(
+            "display",
+            before=before_state,
+            after={
                 "device": device,
                 "width": mode.dmPelsWidth,
                 "height": mode.dmPelsHeight,
                 "hz": mode.dmDisplayFrequency,
             },
-            "applied_at": datetime.now().isoformat(),
-        })
+        )
     else:
-        print_warning("[display] Could not capture before-state — fix will not be revertible.")
-        append_fix_to_manifest({
-            "fix": "display",
-            "revertible": False,
-            "reason": "Before-state not available",
-            "applied_at": datetime.now().isoformat(),
-        })
+        _record_non_revertible("display", "Before-state not available")
 
     print_success(
         f"[display] Refresh rate set to {mode.dmDisplayFrequency}Hz "
@@ -89,6 +122,7 @@ def _fix_display(specs: dict) -> bool:
     return True
 
 
+@register_fix("power_plan")
 def _fix_power_plan(specs: dict) -> bool:
     """Switches to a high-performance power plan."""
     from src.agent_tools.power_plan import (
@@ -97,7 +131,6 @@ def _fix_power_plan(specs: dict) -> bool:
         list_available_plans,
         set_active_plan,
     )
-    from src.utils.revert import append_fix_to_manifest
 
     power_plan_spec = specs.get("PowerPlan", {})
     before_guid = power_plan_spec.get("guid")
@@ -121,30 +154,22 @@ def _fix_power_plan(specs: dict) -> bool:
         return False
 
     if before_guid:
-        append_fix_to_manifest({
-            "fix": "power_plan",
-            "revertible": True,
-            "before": {"guid": before_guid, "name": before_name},
-            "after": {"guid": guid, "name": name},
-            "applied_at": datetime.now().isoformat(),
-        })
+        _record_revertible(
+            "power_plan",
+            before={"guid": before_guid, "name": before_name},
+            after={"guid": guid, "name": name},
+        )
     else:
-        print_warning("[power_plan] Could not capture before-state — fix will not be revertible.")
-        append_fix_to_manifest({
-            "fix": "power_plan",
-            "revertible": False,
-            "reason": "Before-state not available in specs",
-            "applied_at": datetime.now().isoformat(),
-        })
+        _record_non_revertible("power_plan", "Before-state not available in specs")
 
     print_success(f"[power_plan] Switched to '{name}'.")
     return True
 
 
+@register_fix("temp_folders")
 def _fix_temp_folders(specs: dict) -> bool:
     """Cleans temporary file directories."""
     from src.agent_tools.temp_audit import clean_temp_folders
-    from src.utils.revert import append_fix_to_manifest
 
     details = specs.get("TempFolders", {}).get("details", {})
 
@@ -154,21 +179,20 @@ def _fix_temp_folders(specs: dict) -> bool:
         print_error(f"[temp_folders] Cleanup failed: {e}")
         return False
 
-    append_fix_to_manifest({
-        "fix": "temp_folders",
-        "revertible": False,
-        "reason": "Deleted temp files cannot be restored",
-        "display": "temp files deleted — files gone",
-        "applied_at": datetime.now().isoformat(),
-    })
+    _record_non_revertible(
+        "temp_folders",
+        "Deleted temp files cannot be restored",
+        warn=False,
+        display="temp files deleted — files gone",
+    )
 
     return True
 
 
+@register_fix("game_mode")
 def _fix_game_mode(specs: dict) -> bool:
     """Enables Windows Game Mode via registry."""
     from src.agent_tools.game_mode import set_game_mode
-    from src.utils.revert import append_fix_to_manifest
 
     game_mode_spec = specs.get("GameMode", {})
     before_enabled = game_mode_spec.get("enabled")
@@ -180,31 +204,23 @@ def _fix_game_mode(specs: dict) -> bool:
         return False
 
     if before_enabled is not None:
-        append_fix_to_manifest({
-            "fix": "game_mode",
-            "revertible": True,
-            "before": {"AutoGameModeEnabled": 0 if not before_enabled else 1},
-            "after": {"AutoGameModeEnabled": 1},
-            "applied_at": datetime.now().isoformat(),
-        })
+        _record_revertible(
+            "game_mode",
+            before={"AutoGameModeEnabled": 0 if not before_enabled else 1},
+            after={"AutoGameModeEnabled": 1},
+        )
     else:
-        print_warning("[game_mode] Could not capture before-state — fix will not be revertible.")
-        append_fix_to_manifest({
-            "fix": "game_mode",
-            "revertible": False,
-            "reason": "Before-state not available in specs",
-            "applied_at": datetime.now().isoformat(),
-        })
+        _record_non_revertible("game_mode", "Before-state not available in specs")
 
     print_success("[game_mode] Game Mode enabled.")
     return True
 
 
+@register_fix("nvidia_profile")
 def _fix_nvidia_profile(specs: dict) -> bool:
     """Applies optimized NVIDIA driver profile via NPI."""
     from src.agent_tools.nvidia_profile_setter import backup_nvidia_profile, fix_nvidia_profile
     from src.collectors.sub.nvidia_profile_dumper import find_npi_exe
-    from src.utils.revert import append_fix_to_manifest
 
     npi_exe = find_npi_exe()
     backup_path: str | None = None
@@ -227,19 +243,13 @@ def _fix_nvidia_profile(specs: dict) -> bool:
         return False
 
     if backup_path is not None:
-        append_fix_to_manifest({
-            "fix": "nvidia_profile",
-            "revertible": True,
-            "before_backup": backup_path,
-            "applied_at": datetime.now().isoformat(),
-        })
+        _record_revertible("nvidia_profile", before_backup=backup_path)
     else:
-        append_fix_to_manifest({
-            "fix": "nvidia_profile",
-            "revertible": False,
-            "reason": "NPI.exe unavailable or backup failed",
-            "applied_at": datetime.now().isoformat(),
-        })
+        _record_non_revertible(
+            "nvidia_profile",
+            "NPI.exe unavailable or backup failed",
+            warn=False,
+        )
 
     print_success(
         "[nvidia_profile] NVIDIA driver profile optimized "
