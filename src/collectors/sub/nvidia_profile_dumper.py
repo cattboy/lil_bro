@@ -7,6 +7,7 @@ ReBar, DLSS preset, power management).
 """
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -86,7 +87,6 @@ DLSS_LETTER_MAP: dict[int, str] = {
     7: "G", 8: "H", 9: "I", 10: "J", 11: "K", 12: "L", 13: "M",
     14: "N", 15: "O", 0x00FFFFFF: "recommended",
 }
-
 
 def find_npi_exe() -> str | None:
     """Locate nvidiaProfileInspector.exe in search paths."""
@@ -215,8 +215,17 @@ def get_nvidia_profile() -> dict[str, Any]:
 
         nip_files = list(Path(tmpdir).glob("*.nip"))
         if not nip_files:
-            action_logger.log_action("NPI Collector", "Failed", "no .nip file produced", outcome="FAIL")
-            return {"available": True, "error": "NPI export produced no .nip file"}
+            # NPI writes the .nip next to its own exe (ignores cwd). Check
+            # there and move the file into tmpdir so cleanup runs normally.
+            npi_dir = Path(npi_exe).parent
+            fallback = list(npi_dir.glob("*.nip"))
+            if fallback:
+                target = Path(tmpdir) / fallback[0].name
+                shutil.move(str(fallback[0]), str(target))
+                nip_files = [target]
+            else:
+                action_logger.log_action("NPI Collector", "Failed", "no .nip file produced", outcome="FAIL")
+                return {"available": True, "error": "NPI export produced no .nip file"}
 
         try:
             raw_settings = parse_nip(str(nip_files[0]))

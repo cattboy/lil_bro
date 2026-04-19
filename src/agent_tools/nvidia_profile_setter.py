@@ -30,7 +30,12 @@ def get_backups_dir():
 
 
 def _export_current_profile(npi_exe: str, dest_dir: str) -> str:
-    """Run NPI -exportCustomized into dest_dir. Returns path to .nip file."""
+    """Run NPI -exportCustomized into dest_dir. Returns path to .nip file.
+
+    NPI writes the .nip next to its own exe (ignores cwd), so we also look
+    in ``Path(npi_exe).parent`` and move the file into ``dest_dir`` for
+    normal cleanup.
+    """
     result = subprocess.run(
         [npi_exe, "-exportCustomized"],
         cwd=dest_dir,
@@ -43,6 +48,12 @@ def _export_current_profile(npi_exe: str, dest_dir: str) -> str:
 
     nip_files = list(Path(dest_dir).glob("*.nip"))
     if not nip_files:
+        npi_dir = Path(npi_exe).parent
+        fallback = list(npi_dir.glob("*.nip"))
+        if fallback:
+            target = Path(dest_dir) / fallback[0].name
+            shutil.move(str(fallback[0]), str(target))
+            return str(target)
         raise SetterError("NPI export produced no .nip file")
     return str(nip_files[0])
 
