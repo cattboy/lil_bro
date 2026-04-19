@@ -84,7 +84,7 @@ Implemented as modular Phase classes inheriting context via PipelineContext data
 3. **Baseline Bench Phase** (`phase_baseline.py`) — Cinebench 2026 single-core + thermal baseline
 4. **Config Phase** (`phase_config.py`) — All agent_tools checks (display, power, RAM, GPU, thermal, NVIDIA Profile) → LLM proposals (or static fallback) → numbered batch approval UX
 5. **Final Phase** (`phase_final.py`) — Re-run benchmark, compare delta vs baseline
-6. **Revert Phase** (`phase_revert.py`) — User-triggered via menu option 4 or `--revert`; loads session manifest (`revert.py`), dispatches per-fix revert handlers in reverse order (display → NVIDIA profile → game mode → power plan); falls back to Windows System Restore (`rstrui.exe`) on partial failure
+6. **Revert Phase** (`phase_revert.py`) — User-triggered via menu option 4 or `--revert`; loads session manifest (`revert.py`), dispatches per-fix revert handlers in reverse order (display → NVIDIA profile → game mode → power plan); falls back to Windows System Restore (`rstrui.exe`) on partial failure. **No additional restore point is created before reverting** — doing so would create a second "lil_bro" restore point and leave the user unable to tell which one to select in `rstrui.exe`. The single restore point created at bootstrap (Phase 1) is the one to use if System Restore is needed.
 
 All phases share state via `PipelineContext` (LHM sidecar, thermal monitor, specs, LLM, benchmark results).
 

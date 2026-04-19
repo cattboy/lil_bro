@@ -17,16 +17,6 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
-### T-004 — Type PipelineContext.llm properly
-**Priority:** P2
-**Effort:** XS human / XS with CC
-**Why:** `llm: object = None` in `base.py` defeats type checking. If the wrong object is passed, the error surfaces deep in `action_proposer.py` with no useful traceback. A Protocol or proper Optional type fixes this at zero runtime cost.
-**Fix:** Define a `LLMProtocol` with `__call__` signature, or import `Optional[Llama]` under a `TYPE_CHECKING` guard in `base.py`.
-**Blocked by:** Nothing.
-**Added:** 2026-04-07 (from /plan-eng-review, Priority 2 deferred item)
-
----
-
 ### T-006 — Observability & Instrumentation
 **Priority:** P3
 **Effort:** L human / L with CC
@@ -34,6 +24,17 @@ Format: Priority | Effort (human / CC) | Context
 **Fix:** Optional metric collection via `@instrument` decorator or a metrics registry.
 **Blocked by:** Nothing. Defer until codebase or team grows.
 **Added:** 2026-04-11 (merged from todo.md Issue 3.3)
+
+---
+
+### T-007 — Multi-arch PawnIO extraction + build.py arch flag
+**Priority:** P3
+**Effort:** M human / M with CC
+**Why:** `PawnIO_setup.exe` is a multi-arch installer (x64 + ARM64 `.sys` files). Currently only the x64 variant is kept; the ARM64 file is discarded. An ARM64 lil_bro build would require re-running the full extractor for a file we already had.
+**Fix:** Update `tools/PawnIO_Latest_Check/update_pawnio.ps1` to copy each arch variant into `resources/extracted/<arch>/PawnIO.sys`; add `--arch` flag to `build.py` that selects the correct variant before the lhm-server build step. Step 0 guard must validate both arch subfolders before short-circuiting. Add `/tools/PawnIO_Latest_Check/resources/extracted/` to `.gitignore`.
+**Acceptance:** `python build.py` unchanged (x64 default); `python build.py --arch arm64` embeds ARM64 driver; re-run with both subfolders present is a no-op.
+**Blocked by:** Nothing. Target post pawnio-cleanup sprint.
+**Added:** 2026-04-19 (consolidated from docs/todos.md)
 
 ---
 
