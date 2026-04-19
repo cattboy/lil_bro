@@ -41,55 +41,41 @@ from src.utils.revert import (
 
 
 
+import src.utils.revert as revert_mod
+
 class TestStartSessionManifest:
 
+    def setup_method(self):
+        revert_mod._pending_manifest = None
 
+    def teardown_method(self):
+        revert_mod._pending_manifest = None
 
-    def test_creates_manifest_with_correct_schema(self, tmp_path):
-
+    def test_stages_manifest_in_memory(self, tmp_path):
         manifest_path = tmp_path / "session_latest.json"
-
         with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
-
             start_session_manifest(restore_point_created=True)
+        assert not manifest_path.exists()
+        pending = revert_mod._pending_manifest
+        assert pending is not None
+        assert "session_id" in pending
+        assert "session_date" in pending
+        assert pending["restore_point_created"] is True
+        assert pending["fixes"] == []
 
-        assert manifest_path.exists()
-
-        data = json.loads(manifest_path.read_text())
-
-        assert "session_id" in data
-
-        assert "session_date" in data
-
-        assert data["restore_point_created"] is True
-
-        assert data["fixes"] == []
-
-
-
-    def test_writes_manifest_when_dir_exists(self, tmp_path):
-
+    def test_does_not_write_file_to_disk(self, tmp_path):
         manifest_path = tmp_path / "session_latest.json"
-
         with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
-
             start_session_manifest()
+        assert not manifest_path.exists()
 
-        assert manifest_path.exists()
-
-
-
-    def test_oserror_logs_warning_no_raise(self, tmp_path):
-
+    def test_second_call_replaces_pending_manifest(self, tmp_path):
         manifest_path = tmp_path / "session_latest.json"
-
-        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path), \
-             patch("pathlib.Path.write_text", side_effect=OSError("disk full")), \
-             patch("src.utils.revert.print_warning") as mock_warn:
-
-            start_session_manifest()  # must not raise
-
-        mock_warn.assert_called_once()
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            start_session_manifest(restore_point_created=True)
+            start_session_manifest(restore_point_created=False)
+        assert revert_mod._pending_manifest is not None
+        assert revert_mod._pending_manifest["restore_point_created"] is False
 
 
 
@@ -107,54 +93,72 @@ class TestStartSessionManifest:
 
 class TestAppendFixToManifest:
 
+    def setup_method(self):
+        revert_mod._pending_manifest = None
 
+    def teardown_method(self):
+        revert_mod._pending_manifest = None
+
+    def test_first_call_flushes_pending_to_disk(self, tmp_path):
+        manifest_path = tmp_path / "session_latest.json"
+        entry = {"fix": "power_plan", "revertible": True}
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            start_session_manifest(restore_point_created=True)
+            assert not manifest_path.exists()
+            append_fix_to_manifest(entry)
+        assert manifest_path.exists()
+        data = json.loads(manifest_path.read_text())
+        assert len(data["fixes"]) == 1
+        assert data["fixes"][0]["fix"] == "power_plan"
+        assert revert_mod._pending_manifest is None
+
+    def test_no_file_written_if_no_fixes_applied(self, tmp_path):
+        manifest_path = tmp_path / "session_latest.json"
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            start_session_manifest()
+        assert not manifest_path.exists()
+
+    def test_archives_previous_session_on_first_fix(self, tmp_path):
+        manifest_path = tmp_path / "session_latest.json"
+        manifest_path.write_text(json.dumps({"session_id": "old123", "fixes": []}))
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            start_session_manifest()
+            append_fix_to_manifest({"fix": "game_mode"})
+        assert (tmp_path / "session_old123.json").exists()
 
     def test_appends_entry_to_fixes(self, tmp_path):
-
+        # Subsequent-call path: no pending manifest, file already on disk.
         manifest_path = tmp_path / "session_latest.json"
-
         manifest_path.write_text(json.dumps({"session_id": "x", "fixes": []}))
-
         entry = {"fix": "power_plan", "revertible": True}
-
         with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
-
             append_fix_to_manifest(entry)
-
         data = json.loads(manifest_path.read_text())
-
         assert len(data["fixes"]) == 1
-
         assert data["fixes"][0]["fix"] == "power_plan"
 
-
-
     def test_write_failure_calls_warning_no_raise(self, tmp_path):
-
         manifest_path = tmp_path / "session_latest.json"
-
         manifest_path.write_text(json.dumps({"session_id": "x", "fixes": []}))
-
         with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path), \
              patch("pathlib.Path.write_text", side_effect=OSError("disk full")), \
              patch("src.utils.revert.print_warning") as mock_warn:
-
             append_fix_to_manifest({"fix": "game_mode"})  # must not raise
-
         mock_warn.assert_called()
 
-
-
     def test_corrupt_manifest_graceful(self, tmp_path):
-
         manifest_path = tmp_path / "session_latest.json"
-
         manifest_path.write_text("NOT JSON {{{")
-
         with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path), \
              patch("src.utils.revert.print_warning"):
-
             append_fix_to_manifest({"fix": "game_mode"})  # must not raise
+
+    def test_missing_manifest_warns(self, tmp_path):
+        manifest_path = tmp_path / "missing.json"
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path), \
+             patch("src.utils.revert.print_warning") as mock_warn:
+            append_fix_to_manifest({"fix": "game_mode"})
+        mock_warn.assert_called()  # must not raise
 
 
 
