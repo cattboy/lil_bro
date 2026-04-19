@@ -60,12 +60,16 @@ def append_fix_to_manifest(entry: dict) -> None:
     metadata reflects the actual outcome.  On any failure the fix result
     is unaffected.
     """
-    manifest = _read_raw_manifest()
-    if manifest is None:
-        print_warning("Revert manifest missing — this fix will not be revertible.")
-        return
-    manifest.setdefault("fixes", []).append(entry)
-    _write_manifest(manifest)
+    try:
+        manifest = _read_raw_manifest()
+        if manifest is None:
+            print_warning("Revert manifest missing — this fix will not be revertible.")
+            return
+        manifest.setdefault("fixes", []).append(entry)
+        _write_manifest(manifest)
+    except Exception as e:
+        prefix = entry.get("fix", "unknown")
+        print_warning(f"[{prefix}] Fix applied but revert log failed: {e}")
 
 
 def load_manifest() -> dict | None:
