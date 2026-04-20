@@ -187,17 +187,20 @@ def get_nvidia_profile() -> dict[str, Any]:
         action_logger.log_action("NPI Collector", "Skipped", "binary not found", outcome="SKIP")
         return {"available": False, "reason": "NPI binary not found"}
 
+    # NPI must run from its own directory to initialise correctly.
+    npi_dir = Path(npi_exe).parent
     action_logger.log_action("NPI Collector", "Invoked", npi_exe)
+
     with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as tmpdir:
         try:
             result = subprocess.run(
                 [npi_exe, "-exportCustomized"],
-                cwd=tmpdir,
+                cwd=str(npi_dir),
                 capture_output=True,
-                timeout=15,
+                timeout=30,
             )
         except subprocess.TimeoutExpired:
-            action_logger.log_action("NPI Collector", "Timeout", "export timed out after 15s", outcome="FAIL")
+            action_logger.log_action("NPI Collector", "Timeout", "export timed out after 30s", outcome="FAIL")
             return {"available": True, "error": "NPI export timed out"}
         except FileNotFoundError:
             action_logger.log_action("NPI Collector", "Skipped", "binary not found at runtime", outcome="SKIP")
@@ -215,31 +218,25 @@ def get_nvidia_profile() -> dict[str, Any]:
             action_logger.log_action("NPI Collector", "Failed", f"rc={result.returncode}: {stderr}", outcome="FAIL")
             return {"available": True, "error": f"NPI export failed (rc={result.returncode}): {stderr}"}
 
-        # NPI may spawn a child writer that outlives the parent process.
-        # Wait for all nvidiaProfileInspector processes to exit before reading.
+        # Wait for any child writer NPI spawns to finish before reading.
         npi_procs = [
             p for p in psutil.process_iter(["name"])
             if "nvidiaProfileInspector" in (p.info.get("name") or "")
         ]
         if npi_procs:
-            psutil.wait_procs(npi_procs, timeout=20)
+            psutil.wait_procs(npi_procs, timeout=10)
 
-        nip_files = list(Path(tmpdir).glob("*.nip"))
+        nip_files = list(npi_dir.glob("*.nip"))
         if not nip_files:
-            # NPI ignores cwd and writes next to its own exe. Check there
-            # and move into tmpdir so cleanup runs normally.
-            npi_dir = Path(npi_exe).parent
-            fallback = list(npi_dir.glob("*.nip"))
-            if fallback:
-                target = Path(tmpdir) / fallback[0].name
-                shutil.move(str(fallback[0]), str(target))
-                nip_files = [target]
-            else:
-                action_logger.log_action("NPI Collector", "Failed", "no .nip file produced", outcome="FAIL")
-                return {"available": True, "error": "NPI export produced no .nip file"}
+            action_logger.log_action("NPI Collector", "Failed", "no .nip file produced", outcome="FAIL")
+            return {"available": True, "error": "NPI export produced no .nip file"}
+
+        # Move into tmpdir so TemporaryDirectory handles cleanup.
+        target = Path(tmpdir) / nip_files[0].name
+        shutil.move(str(nip_files[0]), str(target))
 
         try:
-            raw_settings = parse_nip(str(nip_files[0]))
+            raw_settings = parse_nip(str(target))
         except (ET.ParseError, UnicodeDecodeError, ValueError) as e:
             action_logger.log_action("NPI Collector", "ParseError", str(e), outcome="FAIL")
             return {"available": True, "error": f"Failed to parse .nip XML: {e}"}
