@@ -1,15 +1,12 @@
 """
-Benchmark orchestration — Cinebench 2024/2026 with CPU stress fallback.
+Benchmark orchestration — Cinebench 2024/2026.
 
 Detects installed Cinebench across common paths, launches it via CLI, and
-parses results.  When Cinebench is unavailable, falls back to a pure-Python
-multiprocessing CPU stress test that generates enough thermal load for
-monitoring while producing a relative before/after score.
+parses results.  When Cinebench is unavailable, both benchmark phases are
+skipped and the user is shown installation instructions.
 """
 
-import math
 import msvcrt
-import multiprocessing
 import os
 import subprocess
 import threading
@@ -35,6 +32,8 @@ from ..utils.formatting import (
 _REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
 
 _CINEBENCH_SEARCH_PATHS = [
+    # Placed next to lil_bro.exe by the user
+    str(Path.cwd() / "Cinebench.exe"),
     # Bundled with lil_bro (future installer puts it here)
     os.path.join(_REPO_ROOT, "bench-exe", "Cinebench.exe"),
     # Maxon default installs
@@ -62,18 +61,29 @@ _CINEBENCH_TIMEOUT = _cfg.benchmark.cinebench_timeout  # max seconds for a singl
 
 def _keyboard_abort_watcher(abort_event: threading.Event) -> None:
     """
-    Background thread — sets abort_event when Q or q is pressed.
+    Background thread — sets abort_event when Q, q, or Enter is pressed.
 
-    Uses ``msvcrt.kbhit()`` (Windows, no Enter required).  Polls every 50 ms
-    so it stays responsive without busy-spinning.
+    Uses ``msvcrt.kbhit()`` (Windows, no Enter required for Q).  Polls every
+    50 ms so it stays responsive without busy-spinning.
     """
     while not abort_event.is_set():
         if msvcrt.kbhit():
             key = msvcrt.getch()
-            if key in (b"q", b"Q"):
+            if key in (b"q", b"Q", b"\r"):
                 abort_event.set()
                 return
         time.sleep(0.05)
+
+
+def _benchmark_progress_printer(abort_event: threading.Event, start_time: float) -> None:
+    """Prints elapsed time + abort hint every 30 s during a benchmark run."""
+    while not abort_event.is_set():
+        time.sleep(30)
+        if abort_event.is_set():
+            break
+        elapsed = int(time.monotonic() - start_time)
+        mins, secs = divmod(elapsed, 60)
+        print_info(f"Still running... [{mins}m {secs:02d}s elapsed]  Press Q or Enter to abort.")
 
 
 def find_cinebench() -> Optional[str]:
@@ -84,71 +94,12 @@ def find_cinebench() -> Optional[str]:
     return None
 
 
-# ── CPU fallback benchmark ───────────────────────────────────────────────────
-
-_FALLBACK_DURATION = _cfg.benchmark.stress_test_duration  # seconds — enough to observe thermal trends
 
 
-def _stress_core(duration_secs: float) -> int:
-    """
-    Stress a single CPU core with trigonometric math until time runs out.
-
-    Returns the number of completed 1 000-op iterations. This function lives
-    at module level so ``multiprocessing`` can pickle it on Windows.
-    """
-    iterations = 0
-    deadline = time.monotonic() + duration_secs
-    while time.monotonic() < deadline:
-        x = 0.0
-        for i in range(1000):
-            x = math.sin(x + i) + math.cos(x * 0.999)
-        iterations += 1
-    return iterations
 
 
-def run_cpu_fallback(duration_secs: int = _FALLBACK_DURATION) -> dict:
-    """
-    Lightweight CPU stress test using all available cores.
 
-    Runs parallel trig math for *duration_secs* and returns a relative score
-    (total iterations across all cores).  Not comparable to Cinebench points,
-    but good for before/after deltas and generating thermal load.
-    """
-    core_count = os.cpu_count() or 4
-    print_info(
-        f"Running CPU stress test — {core_count} cores x {duration_secs}s"
-    )
-    print_info(
-        "Your PC will be under full CPU load. Avoid heavy tasks during the test."
-    )
 
-    start = time.monotonic()
-    try:
-        with multiprocessing.Pool(processes=core_count) as pool:
-            results = pool.starmap(
-                _stress_core, [(float(duration_secs),)] * core_count
-            )
-    except Exception as e:
-        # Fallback to single-core if multiprocessing setup fails
-        print_warning(f"Multiprocessing unavailable ({e}) — running single-core.")
-        results = [_stress_core(float(duration_secs))]
-        core_count = 1
-
-    elapsed = time.monotonic() - start
-    total = sum(results)
-    per_core = total / core_count
-
-    return {
-        "status": "success",
-        "benchmark": "cpu_stress",
-        "cores_used": core_count,
-        "duration_seconds": round(elapsed, 1),
-        "total_iterations": total,
-        "scores": {
-            "CPU_Multi": f"{total:,} iterations ({core_count} cores)",
-            "CPU_Single": f"{per_core:,.0f} iterations/core",
-        },
-    }
 
 
 # ── Benchmark runner ─────────────────────────────────────────────────────────
@@ -174,11 +125,10 @@ class BenchmarkRunner:
 
     def run_benchmark(self, full_suite: bool = False, lhm_available: bool = False) -> dict:
         """
-        Run a benchmark — Cinebench if installed, CPU stress fallback otherwise.
+        Run a Cinebench benchmark.
 
         Args:
-            full_suite: If True and Cinebench is available, run all test modes.
-                        If False, run CPU single-core only.
+            full_suite: If True, run all test modes; otherwise CPU single-core only.
             lhm_available: If True, enables the thermal watchdog during the run.
         Returns:
             dict with ``status``, ``benchmark``, ``scores``, and extra metadata.
@@ -186,10 +136,16 @@ class BenchmarkRunner:
         if self.has_cinebench:
             return self._run_cinebench(full_suite, lhm_available)
 
-        print_warning("Cinebench not found — falling back to built-in CPU stress test.")
-        if not prompt_approval("Run built-in CPU stress test instead?"):
-            return {"status": "skipped", "message": "User declined fallback benchmark"}
-        return run_cpu_fallback()
+        print_warning("Cinebench not found — benchmark phases will be skipped.")
+        print_info("Cinebench is required to produce before/after scores.")
+        print_info("  1. Download Cinebench from http://maxon.net/en/downloads/cinebench-downloads")
+        print_info("  2. Place Cinebench.exe in the same folder as lil_bro.exe")
+        print_info("  3. Re-run lil_bro")
+        return {
+            "status": "skipped",
+            "benchmark": "cinebench",
+            "message": "Cinebench not installed — place Cinebench.exe next to lil_bro.exe and re-run.",
+        }
 
     # ── Cinebench ─────────────────────────────────────────────────────────
 
@@ -197,11 +153,12 @@ class BenchmarkRunner:
         """Launch Cinebench via CLI and capture results."""
         mode = "All Tests" if full_suite else "CPU Single-Core"
         print_step(f"Running Cinebench ({mode})")
+        print()  # newline so subsequent print_info calls appear on their own lines
         print_info(
             "This will take several minutes. NO TOUCHY /afk a bit while lil_bro runs the benchmark. "
             "Your PC will be under high load, set fans to WARP SPEED."
         )
-        print_info("Press Q to abort the benchmark at any time.")
+        print_info("Press Q or Enter to abort the benchmark at any time.")
 
         # Build CLI args per docs/vendor-supplied/cinebench.md
         cb_flag = "g_CinebenchAllTests=true" if full_suite else "g_CinebenchCpu1Test=true"
@@ -213,6 +170,15 @@ class BenchmarkRunner:
             target=_keyboard_abort_watcher, args=(abort_event,), daemon=True
         )
         kb_thread.start()
+
+        # Progress printer — reminds the user how to abort every 30 s
+        bench_start = time.monotonic()
+        progress_thread = threading.Thread(
+            target=_benchmark_progress_printer,
+            args=(abort_event, bench_start),
+            daemon=True,
+        )
+        progress_thread.start()
 
         # Thermal watchdog — only when LHM sensor data is available
         watchdog: Optional[ThermalWatchdog] = None
@@ -240,7 +206,7 @@ class BenchmarkRunner:
                         reason = (
                             watchdog.abort_reason
                             if watchdog and watchdog.abort_reason
-                            else "Aborted by user (Q key)."
+                            else "Aborted by user (Q or Enter)."
                         )
                         print_step_done(False)
                         print_warning(f"Benchmark aborted: {reason}")
@@ -270,7 +236,7 @@ class BenchmarkRunner:
                 stdout, stderr = proc.communicate()  # normal completion
 
             finally:
-                abort_event.set()  # signal keyboard watcher to exit cleanly
+                abort_event.set()  # signal keyboard watcher and progress printer to exit cleanly
                 if watchdog:
                     watchdog.stop()
 

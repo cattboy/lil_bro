@@ -4,8 +4,6 @@ from unittest.mock import patch, MagicMock
 from src.benchmarks.cinebench import (
     BenchmarkRunner,
     find_cinebench,
-    run_cpu_fallback,
-    _stress_core,
     _CINEBENCH_SEARCH_PATHS,
 )
 
@@ -37,51 +35,18 @@ def test_find_cinebench_checks_all_paths(mock_isfile):
 
 # ── _stress_core ──────────────────────────────────────────────────────────────
 
-def test_stress_core_runs():
-    """Should run for at least 0.05s and return a positive iteration count."""
-    result = _stress_core(0.05)
-    assert isinstance(result, int)
-    assert result > 0
 
 
-def test_stress_core_duration_scales():
-    """Longer duration → more iterations (roughly)."""
-    short = _stress_core(0.05)
-    long = _stress_core(0.15)
-    assert long >= short
+
+
 
 
 # ── run_cpu_fallback ──────────────────────────────────────────────────────────
 
-@patch("src.benchmarks.cinebench.multiprocessing.Pool")
-def test_cpu_fallback_success(mock_pool_cls):
-    """Returns structured result with scores when multiprocessing works."""
-    mock_pool = MagicMock()
-    mock_pool.__enter__ = MagicMock(return_value=mock_pool)
-    mock_pool.__exit__ = MagicMock(return_value=False)
-    mock_pool.starmap.return_value = [100, 95, 105, 98]
-    mock_pool_cls.return_value = mock_pool
-
-    result = run_cpu_fallback(duration_secs=1)
-
-    assert result["status"] == "success"
-    assert result["benchmark"] == "cpu_stress"
-    assert result["total_iterations"] == 398
-    assert "CPU_Multi" in result["scores"]
-    assert "CPU_Single" in result["scores"]
 
 
-@patch("src.benchmarks.cinebench._stress_core", return_value=50)
-@patch(
-    "src.benchmarks.cinebench.multiprocessing.Pool",
-    side_effect=RuntimeError("spawn failed"),
-)
-def test_cpu_fallback_multiprocessing_fails(mock_pool, mock_stress):
-    """Falls back to single-core when multiprocessing can't start."""
-    result = run_cpu_fallback(duration_secs=1)
-    assert result["status"] == "success"
-    assert result["cores_used"] == 1
-    assert result["total_iterations"] == 50
+
+
 
 
 # ── BenchmarkRunner.__init__ ─────────────────────────────────────────────────
@@ -163,25 +128,10 @@ def test_run_cinebench_error(mock_isfile, mock_popen):
 
 # ── BenchmarkRunner.run_benchmark — fallback path ───────────────────────────
 
-@patch("src.benchmarks.cinebench.run_cpu_fallback")
-@patch("src.benchmarks.cinebench.prompt_approval", return_value=True)
-@patch("src.benchmarks.cinebench.find_cinebench", return_value=None)
-def test_run_fallback_when_no_cinebench(mock_find, mock_approve, mock_fallback):
-    """Falls back to CPU stress test when Cinebench not found and user approves."""
-    mock_fallback.return_value = {"status": "success", "benchmark": "cpu_stress"}
-    runner = BenchmarkRunner()
-    result = runner.run_benchmark()
-    assert result["benchmark"] == "cpu_stress"
-    mock_approve.assert_called_once()
 
 
-@patch("src.benchmarks.cinebench.prompt_approval", return_value=False)
-@patch("src.benchmarks.cinebench.find_cinebench", return_value=None)
-def test_run_fallback_declined(mock_find, mock_approve):
-    """User declines CPU fallback → skipped result."""
-    runner = BenchmarkRunner()
-    result = runner.run_benchmark()
-    assert result["status"] == "skipped"
+
+
 
 
 # ── _parse_output ─────────────────────────────────────────────────────────────
@@ -201,3 +151,14 @@ def test_parse_output_single():
 
 def test_parse_output_empty():
     assert BenchmarkRunner._parse_output("no scores here\n") == {}
+
+# ── run_benchmark — no Cinebench installed ────────────────────────────────────
+
+@patch("src.benchmarks.cinebench.find_cinebench", return_value=None)
+def test_run_benchmark_no_cinebench_skipped(mock_find):
+    """When Cinebench is missing, run_benchmark returns a skipped result."""
+    runner = BenchmarkRunner()
+    result = runner.run_benchmark()
+    assert result["status"] == "skipped"
+    assert result["benchmark"] == "cinebench"
+    assert "Cinebench.exe" in result["message"]
