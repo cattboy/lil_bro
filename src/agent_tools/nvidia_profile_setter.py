@@ -36,7 +36,7 @@ def _export_current_profile(npi_exe: str, dest_dir: str) -> str:
     paths). The .nip is written there too, so we move it into dest_dir after
     completion so the caller's TemporaryDirectory handles cleanup.
     """
-    import psutil
+    import time
 
     npi_dir = Path(npi_exe).parent
 
@@ -50,20 +50,31 @@ def _export_current_profile(npi_exe: str, dest_dir: str) -> str:
         stderr = result.stderr.decode(errors="replace").strip()
         raise SetterError(f"NPI export failed (rc={result.returncode}): {stderr}")
 
-    # Wait for any child writer NPI spawns to finish before reading.
-    npi_procs = [
-        p for p in psutil.process_iter(["name"])
-        if "nvidiaProfileInspector" in (p.info.get("name") or "")
-    ]
-    if npi_procs:
-        psutil.wait_procs(npi_procs, timeout=10)
-
     nip_files = list(npi_dir.glob("*.nip"))
     if not nip_files:
         raise SetterError("NPI export produced no .nip file")
 
     target = Path(dest_dir) / nip_files[0].name
     shutil.move(str(nip_files[0]), str(target))
+
+    # NPI spawns a child writer that outlives the parent; the child holds the
+    # file handle through the rename, so poll until size is stable.
+    deadline = time.monotonic() + 10.0
+    prev_size, stable = -1, 0
+    while time.monotonic() < deadline:
+        try:
+            sz = target.stat().st_size
+        except OSError:
+            sz = 0
+        if sz > 0 and sz == prev_size:
+            stable += 1
+            if stable >= 3:
+                break
+        else:
+            stable = 0
+        prev_size = sz
+        time.sleep(0.25)
+
     return str(target)
 
 

@@ -88,6 +88,22 @@ def _benchmark_progress_printer(abort_event: threading.Event, start_time: float)
         print_info(f"Still running... [{mins}m {secs:02d}s elapsed]  Press Q or Enter to abort.")
 
 
+def _refocus_console_window(delay: float, abort_event: threading.Event) -> None:
+    """Bring the lil_bro console back to the foreground after Cinebench loads."""
+    import ctypes
+    time.sleep(delay)
+    if abort_event.is_set():
+        return
+    try:
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if not hwnd:
+            return
+        ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        ctypes.windll.user32.SetForegroundWindow(hwnd)
+    except Exception:
+        pass
+
+
 def find_cinebench() -> Optional[str]:
     """Search common install paths for Cinebench. Returns exe path or None."""
     for path in _CINEBENCH_SEARCH_PATHS:
@@ -207,6 +223,11 @@ class BenchmarkRunner:
 
         try:
             proc = subprocess.Popen(["cmd.exe", "/C", str(batch_file)])
+
+            # Refocus lil_bro after Cinebench has had time to open its GUI
+            threading.Thread(
+                target=_refocus_console_window, args=(30.0, abort_event), daemon=True
+            ).start()
 
             start = time.monotonic()
             try:

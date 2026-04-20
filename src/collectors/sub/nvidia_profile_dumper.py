@@ -180,7 +180,7 @@ def get_nvidia_profile() -> dict[str, Any]:
     Returns a dict with parsed settings. On failure, returns a dict with
     ``available=False`` or an ``error`` key describing the failure.
     """
-    import psutil
+    import time
 
     npi_exe = find_npi_exe()
     if npi_exe is None:
@@ -218,14 +218,6 @@ def get_nvidia_profile() -> dict[str, Any]:
             action_logger.log_action("NPI Collector", "Failed", f"rc={result.returncode}: {stderr}", outcome="FAIL")
             return {"available": True, "error": f"NPI export failed (rc={result.returncode}): {stderr}"}
 
-        # Wait for any child writer NPI spawns to finish before reading.
-        npi_procs = [
-            p for p in psutil.process_iter(["name"])
-            if "nvidiaProfileInspector" in (p.info.get("name") or "")
-        ]
-        if npi_procs:
-            psutil.wait_procs(npi_procs, timeout=10)
-
         nip_files = list(npi_dir.glob("*.nip"))
         if not nip_files:
             action_logger.log_action("NPI Collector", "Failed", "no .nip file produced", outcome="FAIL")
@@ -234,6 +226,24 @@ def get_nvidia_profile() -> dict[str, Any]:
         # Move into tmpdir so TemporaryDirectory handles cleanup.
         target = Path(tmpdir) / nip_files[0].name
         shutil.move(str(nip_files[0]), str(target))
+
+        # NPI spawns a child writer that outlives the parent; the child holds
+        # the file handle through the rename, so poll until size is stable.
+        deadline = time.monotonic() + 10.0
+        prev_size, stable = -1, 0
+        while time.monotonic() < deadline:
+            try:
+                sz = target.stat().st_size
+            except OSError:
+                sz = 0
+            if sz > 0 and sz == prev_size:
+                stable += 1
+                if stable >= 3:
+                    break
+            else:
+                stable = 0
+            prev_size = sz
+            time.sleep(0.25)
 
         try:
             raw_settings = parse_nip(str(target))
