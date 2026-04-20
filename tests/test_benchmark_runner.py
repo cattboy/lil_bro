@@ -77,9 +77,10 @@ def test_runner_auto_discovery(mock_find):
 
 # ── BenchmarkRunner.run_benchmark — Cinebench path ──────────────────────────
 
+@patch("src.benchmarks.cinebench.prompt_approval", return_value=True)
 @patch("src.benchmarks.cinebench.subprocess.Popen")
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
-def test_run_cinebench_success(mock_isfile, mock_popen):
+def test_run_cinebench_success(mock_isfile, mock_popen, mock_approve):
     """Cinebench runs and returns success with parsed output."""
     mock_proc = MagicMock()
     mock_proc.communicate.return_value = (
@@ -99,9 +100,10 @@ def test_run_cinebench_success(mock_isfile, mock_popen):
     assert "g_CinebenchCpu1Test=true" in call_args[0][0]
 
 
+@patch("src.benchmarks.cinebench.prompt_approval", return_value=True)
 @patch("src.benchmarks.cinebench.subprocess.Popen")
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
-def test_run_cinebench_full_suite(mock_isfile, mock_popen):
+def test_run_cinebench_full_suite(mock_isfile, mock_popen, mock_approve):
     """full_suite=True passes the AllTests flag."""
     mock_proc = MagicMock()
     mock_proc.communicate.return_value = (b"", b"")
@@ -114,16 +116,27 @@ def test_run_cinebench_full_suite(mock_isfile, mock_popen):
     assert "g_CinebenchAllTests=true" in call_args[0][0]
 
 
+@patch("src.benchmarks.cinebench.prompt_approval", return_value=True)
 @patch(
     "src.benchmarks.cinebench.subprocess.Popen",
     side_effect=Exception("crash"),
 )
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
-def test_run_cinebench_error(mock_isfile, mock_popen):
+def test_run_cinebench_error(mock_isfile, mock_popen, mock_approve):
     """Cinebench crash → error result."""
     runner = BenchmarkRunner(cinebench_path=r"C:\CB\Cinebench.exe")
     result = runner.run_benchmark()
     assert result["status"] == "error"
+
+
+@patch("src.benchmarks.cinebench.prompt_approval", return_value=False)
+@patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
+def test_run_benchmark_user_declines(mock_isfile, mock_approve):
+    """User declines the Y/N prompt → skipped result, Cinebench never launched."""
+    runner = BenchmarkRunner(cinebench_path=r"C:\CB\Cinebench.exe")
+    result = runner.run_benchmark()
+    assert result["status"] == "skipped"
+    assert result["benchmark"] == "cinebench"
 
 
 # ── BenchmarkRunner.run_benchmark — fallback path ───────────────────────────

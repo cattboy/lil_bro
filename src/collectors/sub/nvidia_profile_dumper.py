@@ -180,6 +180,8 @@ def get_nvidia_profile() -> dict[str, Any]:
     Returns a dict with parsed settings. On failure, returns a dict with
     ``available=False`` or an ``error`` key describing the failure.
     """
+    import psutil
+
     npi_exe = find_npi_exe()
     if npi_exe is None:
         action_logger.log_action("NPI Collector", "Skipped", "binary not found", outcome="SKIP")
@@ -213,10 +215,19 @@ def get_nvidia_profile() -> dict[str, Any]:
             action_logger.log_action("NPI Collector", "Failed", f"rc={result.returncode}: {stderr}", outcome="FAIL")
             return {"available": True, "error": f"NPI export failed (rc={result.returncode}): {stderr}"}
 
+        # NPI may spawn a child writer that outlives the parent process.
+        # Wait for all nvidiaProfileInspector processes to exit before reading.
+        npi_procs = [
+            p for p in psutil.process_iter(["name"])
+            if "nvidiaProfileInspector" in (p.info.get("name") or "")
+        ]
+        if npi_procs:
+            psutil.wait_procs(npi_procs, timeout=20)
+
         nip_files = list(Path(tmpdir).glob("*.nip"))
         if not nip_files:
-            # NPI writes the .nip next to its own exe (ignores cwd). Check
-            # there and move the file into tmpdir so cleanup runs normally.
+            # NPI ignores cwd and writes next to its own exe. Check there
+            # and move into tmpdir so cleanup runs normally.
             npi_dir = Path(npi_exe).parent
             fallback = list(npi_dir.glob("*.nip"))
             if fallback:

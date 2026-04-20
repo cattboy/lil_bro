@@ -133,19 +133,23 @@ class BenchmarkRunner:
         Returns:
             dict with ``status``, ``benchmark``, ``scores``, and extra metadata.
         """
-        if self.has_cinebench:
-            return self._run_cinebench(full_suite, lhm_available)
+        if not self.has_cinebench:
+            print_warning("Cinebench not found — benchmark phases will be skipped.")
+            print_info("Cinebench is required to produce before/after scores.")
+            print_info("  1. Download Cinebench from https://www.maxon.net/cinebench")
+            print_info("  2. Place Cinebench.exe in the same folder as lil_bro.exe")
+            print_info("  3. Re-run lil_bro")
+            return {
+                "status": "skipped",
+                "benchmark": "cinebench",
+                "message": "Cinebench not installed — place Cinebench.exe next to lil_bro.exe and re-run.",
+            }
 
-        print_warning("Cinebench not found — benchmark phases will be skipped.")
-        print_info("Cinebench is required to produce before/after scores.")
-        print_info("  1. Download Cinebench from http://maxon.net/en/downloads/cinebench-downloads")
-        print_info("  2. Place Cinebench.exe in the same folder as lil_bro.exe")
-        print_info("  3. Re-run lil_bro")
-        return {
-            "status": "skipped",
-            "benchmark": "cinebench",
-            "message": "Cinebench not installed — place Cinebench.exe next to lil_bro.exe and re-run.",
-        }
+        mode = "All Tests" if full_suite else "CPU Single-Core"
+        if not prompt_approval(f"Run Cinebench ({mode})?"):
+            return {"status": "skipped", "benchmark": "cinebench", "message": "User declined benchmark."}
+
+        return self._run_cinebench(full_suite, lhm_available)
 
     # ── Cinebench ─────────────────────────────────────────────────────────
 

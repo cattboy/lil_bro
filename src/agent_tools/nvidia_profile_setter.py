@@ -32,10 +32,14 @@ def get_backups_dir():
 def _export_current_profile(npi_exe: str, dest_dir: str) -> str:
     """Run NPI -exportCustomized into dest_dir. Returns path to .nip file.
 
-    NPI writes the .nip next to its own exe (ignores cwd), so we also look
-    in ``Path(npi_exe).parent`` and move the file into ``dest_dir`` for
-    normal cleanup.
+    NPI ignores cwd and writes the .nip next to its own exe, so we also
+    check ``Path(npi_exe).parent`` and move the file into dest_dir.
+    NPI may also spawn a child writer that outlives the parent process, so
+    we use psutil to wait for all nvidiaProfileInspector processes to exit
+    before reading the file.
     """
+    import psutil
+
     result = subprocess.run(
         [npi_exe, "-exportCustomized"],
         cwd=dest_dir,
@@ -45,6 +49,14 @@ def _export_current_profile(npi_exe: str, dest_dir: str) -> str:
     if result.returncode != 0:
         stderr = result.stderr.decode(errors="replace").strip()
         raise SetterError(f"NPI export failed (rc={result.returncode}): {stderr}")
+
+    # Wait for any lingering NPI child processes to finish writing.
+    npi_procs = [
+        p for p in psutil.process_iter(["name"])
+        if "nvidiaProfileInspector" in (p.info.get("name") or "")
+    ]
+    if npi_procs:
+        psutil.wait_procs(npi_procs, timeout=20)
 
     nip_files = list(Path(dest_dir).glob("*.nip"))
     if not nip_files:
