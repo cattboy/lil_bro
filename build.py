@@ -11,13 +11,10 @@ Steps:
           Falls back to WDK source build if offline / rate-limited / 7-Zip absent.
     [3/5] Build lhm-server.exe (requires .NET 8 SDK; embeds PawnIO.sys)
     [4/5] Build lil_bro.exe with PyInstaller
-    [5/5] Generate SHA-256 integrity manifest
-
+    
 Requires: pyinstaller (listed in [project.optional-dependencies] dev)
 """
 
-import hashlib
-import json
 import shutil
 import subprocess
 import sys
@@ -26,7 +23,6 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 DIST_DIR = ROOT / "dist"
 EXE_NAME = "lil_bro.exe"
-MANIFEST_NAME = "integrity.json"
 
 
 def clean():
@@ -60,29 +56,7 @@ def run_pyinstaller():
     return exe_path
 
 
-def generate_manifest(exe_path: Path):
-    """Generate integrity.json with the SHA-256 hash of the .exe."""
-    # Read version from source
-    version = "unknown"
-    version_file = ROOT / "src" / "_version.py"
-    if version_file.exists():
-        ns = {}
-        exec(version_file.read_text(), ns)
-        version = ns.get("__version__", "unknown")
 
-    exe_hash = hashlib.sha256(exe_path.read_bytes()).hexdigest()
-
-    manifest = {
-        "version": version,
-        "algorithm": "sha256",
-        "exe_hash": exe_hash,
-        "exe_name": EXE_NAME,
-    }
-
-    manifest_path = DIST_DIR / MANIFEST_NAME
-    manifest_path.write_text(json.dumps(manifest, indent=2))
-    print(f"  Manifest: {manifest_path}")
-    print(f"  SHA-256:  {exe_hash[:32]}...")
 
 
 def run_pawnio_update():
@@ -211,30 +185,26 @@ def main():
     print("=" * 40)
 
     if "--clean" in sys.argv:
-        print("\n[1/5] Cleaning...")
+        print("\n[1/4] Cleaning...")
         clean()
     else:
-        print("\n[1/5] Clean skipped (use --clean to force)")
+        print("\n[1/4] Clean skipped (use --clean to force)")
 
-    print("\n[2/5] Building NPI (GPU profile optimizer)...")
+    print("\n[2/4] Building NPI (GPU profile optimizer)...")
     build_npi()
-    print("\n[2/5] Fetching latest signed PawnIO.sys from GitHub...")
+    print("\n[2/4] Fetching latest signed PawnIO.sys from GitHub...")
     run_pawnio_update()
 
-    print("\n[3/5] Building lhm-server (thermal sensor server)...")
+    print("\n[3/4] Building lhm-server (thermal sensor server)...")
     build_lhm_server()
 
-    print("\n[4/5] Building with PyInstaller...")
-    exe_path = run_pyinstaller()
-
-    print("\n[5/5] Generating integrity manifest...")
-    generate_manifest(exe_path)
+    print("\n[4/4] Building with PyInstaller...")
+    run_pyinstaller()
 
     print("\n" + "=" * 40)
     print("Build complete!")
     print(f"  Portable exe: {DIST_DIR / EXE_NAME}")
-    print(f"  Manifest:     {DIST_DIR / MANIFEST_NAME}")
-    print(f"\nCopy both files to distribute.")
+    print("\nReady to distribute.")
 
 
 if __name__ == "__main__":
