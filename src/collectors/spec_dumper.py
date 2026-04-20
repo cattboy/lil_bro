@@ -53,7 +53,7 @@ def dump_system_specs(output_path: str | None = None) -> str:
     specs = {
         "CollectionTime": datetime.now().isoformat(),
         "WMI": _safe_collect(get_wmi_specs),
-        "DXDiag": _safe_collect(get_dxdiag),
+        #"DXDiag": _safe_collect(get_dxdiag), # Commented out for time being, todo add later when need DXDIAG data
         "NVIDIA": _safe_collect(get_nvidia_smi),
         "AMD": _safe_collect(get_amd_smi),
         "LibreHardwareMonitor": _safe_collect(get_lhm_data),

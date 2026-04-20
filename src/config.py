@@ -39,7 +39,7 @@ def _strip_jsonc(text: str) -> str:
 
 @dataclass
 class BenchmarkConfig:
-    cinebench_timeout: int = 600      # seconds before Cinebench run is aborted
+    cinebench_timeout: int = 6000      # seconds before Cinebench run is aborted
     stress_test_duration: int = 30    # seconds for CPU stress fallback
 
 
