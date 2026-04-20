@@ -8,6 +8,7 @@ skipped and the user is shown installation instructions.
 
 import msvcrt
 import os
+import re
 import subprocess
 import threading
 import time
@@ -26,6 +27,7 @@ from ..utils.formatting import (
     print_warning,
     prompt_approval,
 )
+from ..utils.paths import get_lil_bro_dir, get_temp_dir
 
 # ── Cinebench discovery ──────────────────────────────────────────────────────
 
@@ -167,6 +169,19 @@ class BenchmarkRunner:
         # Build CLI args per docs/vendor-supplied/cinebench.md
         cb_flag = "g_CinebenchAllTests=true" if full_suite else "g_CinebenchCpu1Test=true"
 
+        # Output file — receives the full Cinebench console log
+        output_file = get_temp_dir() / "cinebench_output.txt"
+
+        # Batch file wraps the invocation so we get the Windows console log.
+        # 'start /b /wait "parentconsole"' is required per vendor docs to enable output.
+        # The ""path" flag > "file"" quoting handles paths with spaces inside cmd /C.
+        batch_file = get_temp_dir() / "_run_cinebench.bat"
+        batch_file.write_text(
+            "@echo off\r\n"
+            f'start /b /wait "parentconsole" cmd.exe /C ""{self.cinebench_path}" {cb_flag} > "{output_file}""\r\n',
+            encoding="ascii",
+        )
+
         abort_event = threading.Event()
 
         # Keyboard watcher — active for the full duration of the run
@@ -191,11 +206,7 @@ class BenchmarkRunner:
             watchdog.start()
 
         try:
-            proc = subprocess.Popen(
-                [str(self.cinebench_path), cb_flag],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
+            proc = subprocess.Popen(["cmd.exe", "/C", str(batch_file)])
 
             start = time.monotonic()
             try:
@@ -206,7 +217,7 @@ class BenchmarkRunner:
                             ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
                             capture_output=True,
                         )
-                        proc.communicate()  # drain pipes
+                        proc.communicate()
                         reason = (
                             watchdog.abort_reason
                             if watchdog and watchdog.abort_reason
@@ -237,7 +248,7 @@ class BenchmarkRunner:
                         )
                     time.sleep(0.5)
 
-                stdout, stderr = proc.communicate()  # normal completion
+                proc.communicate()  # drain (no pipes, but ensures clean exit)
 
             finally:
                 abort_event.set()  # signal keyboard watcher and progress printer to exit cleanly
@@ -246,14 +257,21 @@ class BenchmarkRunner:
 
             print_step_done(True)
 
-            out = (stdout.decode("utf-8", errors="replace") + "\n" +
-                   stderr.decode("utf-8", errors="replace"))
-            scores = self._parse_output(out)
+            raw = output_file.read_text(encoding="utf-8", errors="replace") if output_file.exists() else ""
+            scores = self._parse_output(raw, full_suite)
+
+            # Write filtered results file (FINDSTR "CB" equivalent) for human reference
+            cb_lines = [ln for ln in raw.splitlines() if re.match(r"^\s*CB\s+", ln)]
+            results_file = get_lil_bro_dir() / "cinebench_results.txt"
+            results_file.write_text(
+                "\n".join(cb_lines) + "\n" if cb_lines else "No CB scores found.\n",
+                encoding="utf-8",
+            )
 
             return {
                 "status": "success",
                 "benchmark": "cinebench",
-                "raw_output": out[:500],
+                "raw_output": raw[:500],
                 "scores": scores,
             }
 
@@ -280,17 +298,40 @@ class BenchmarkRunner:
             return {"status": "error", "benchmark": "cinebench", "message": str(e)}
 
     @staticmethod
-    def _parse_output(output: str) -> dict[str, str]:
-        """Extract score lines from Cinebench console output."""
+    def _parse_output(output: str, full_suite: bool = False) -> dict[str, str]:
+        """Extract scores from Cinebench console log.
+
+        Score line format: CB 247.39 (0.00)
+        Context lines (e.g. 'Running Single CPU Render Test...') label each score.
+        """
         scores: dict[str, str] = {}
+        last_context = ""
+
         for line in output.splitlines():
-            low = line.lower()
-            if "pts" not in low and "score" not in low:
+            stripped = line.strip()
+            low = stripped.lower()
+
+            if low.startswith("running") or "render test" in low:
+                last_context = low
+
+            m = re.match(r"^CB\s+([\d.]+)\s+\([\d.]+\)", stripped)
+            if not m:
                 continue
-            if "single" in low:
-                scores["CPU_Single"] = line.strip()
-            elif "multi" in low or "cpu" in low:
-                scores["CPU_Multi"] = line.strip()
-            elif "gpu" in low:
-                scores["GPU"] = line.strip()
+
+            pts = f"{m.group(1)} pts"
+
+            if "single" in last_context or "cpu1" in last_context:
+                scores["CPU_Single"] = pts
+            elif "multi" in last_context or "cpux" in last_context or "nthread" in last_context:
+                scores["CPU_Multi"] = pts
+            elif "gpu" in last_context:
+                scores["GPU"] = pts
+            else:
+                if "CPU_Single" not in scores:
+                    scores["CPU_Single"] = pts
+                elif "CPU_Multi" not in scores:
+                    scores["CPU_Multi"] = pts
+                else:
+                    scores[f"Score_{len(scores) + 1}"] = pts
+
         return scores

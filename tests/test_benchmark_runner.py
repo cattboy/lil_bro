@@ -78,16 +78,16 @@ def test_runner_auto_discovery(mock_find):
 # ── BenchmarkRunner.run_benchmark — Cinebench path ──────────────────────────
 
 @patch("src.benchmarks.cinebench.prompt_approval", return_value=True)
+@patch("src.benchmarks.cinebench.Path.read_text", return_value="Running Single CPU Render Test...\nCB 247.39 (0.00)\n")
+@patch("src.benchmarks.cinebench.Path.write_text")
+@patch("src.benchmarks.cinebench.Path.exists", return_value=True)
 @patch("src.benchmarks.cinebench.subprocess.Popen")
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
-def test_run_cinebench_success(mock_isfile, mock_popen, mock_approve):
-    """Cinebench runs and returns success with parsed output."""
+def test_run_cinebench_success(mock_isfile, mock_popen, mock_exists, mock_write, mock_read, mock_approve):
+    """Cinebench runs and returns success with parsed CB score."""
     mock_proc = MagicMock()
-    mock_proc.communicate.return_value = (
-        b"CB 2024 Score: CPU Multi 15320 pts\n",
-        b"",
-    )
-    mock_proc.pid = 1234
+    mock_proc.poll.return_value = 0
+    mock_proc.communicate.return_value = (None, None)
     mock_popen.return_value = mock_proc
 
     runner = BenchmarkRunner(cinebench_path=r"C:\CB\Cinebench.exe")
@@ -95,34 +95,41 @@ def test_run_cinebench_success(mock_isfile, mock_popen, mock_approve):
 
     assert result["status"] == "success"
     assert result["benchmark"] == "cinebench"
-    # The CLI args list should include the single-core flag
-    call_args = mock_popen.call_args
-    assert "g_CinebenchCpu1Test=true" in call_args[0][0]
+    assert result["scores"].get("CPU_Single") == "247.39 pts"
 
 
 @patch("src.benchmarks.cinebench.prompt_approval", return_value=True)
+@patch("src.benchmarks.cinebench.Path.read_text", return_value="Running Multi CPU Render Test...\nCB 15320.11 (0.00)\n")
+@patch("src.benchmarks.cinebench.Path.write_text")
+@patch("src.benchmarks.cinebench.Path.exists", return_value=True)
 @patch("src.benchmarks.cinebench.subprocess.Popen")
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
-def test_run_cinebench_full_suite(mock_isfile, mock_popen, mock_approve):
-    """full_suite=True passes the AllTests flag."""
+def test_run_cinebench_full_suite(mock_isfile, mock_popen, mock_exists, mock_write, mock_read, mock_approve):
+    """full_suite=True passes AllTests flag and parses multi-core score."""
     mock_proc = MagicMock()
-    mock_proc.communicate.return_value = (b"", b"")
-    mock_proc.pid = 1234
+    mock_proc.poll.return_value = 0
+    mock_proc.communicate.return_value = (None, None)
     mock_popen.return_value = mock_proc
 
     runner = BenchmarkRunner(cinebench_path=r"C:\CB\Cinebench.exe")
-    runner.run_benchmark(full_suite=True)
-    call_args = mock_popen.call_args
-    assert "g_CinebenchAllTests=true" in call_args[0][0]
+    result = runner.run_benchmark(full_suite=True)
+
+    assert result["status"] == "success"
+    assert result["scores"].get("CPU_Multi") == "15320.11 pts"
+    # Verify AllTests flag used in the batch file written to disk
+    write_calls = mock_write.call_args_list
+    bat_call = next((c for c in write_calls if "g_CinebenchAllTests" in str(c)), None)
+    assert bat_call is not None
 
 
 @patch("src.benchmarks.cinebench.prompt_approval", return_value=True)
+@patch("src.benchmarks.cinebench.Path.write_text")
 @patch(
     "src.benchmarks.cinebench.subprocess.Popen",
     side_effect=Exception("crash"),
 )
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
-def test_run_cinebench_error(mock_isfile, mock_popen, mock_approve):
+def test_run_cinebench_error(mock_isfile, mock_popen, mock_write, mock_approve):
     """Cinebench crash → error result."""
     runner = BenchmarkRunner(cinebench_path=r"C:\CB\Cinebench.exe")
     result = runner.run_benchmark()
@@ -150,16 +157,19 @@ def test_run_benchmark_user_declines(mock_isfile, mock_approve):
 # ── _parse_output ─────────────────────────────────────────────────────────────
 
 def test_parse_output_multi():
-    output = "CB 2024 Score: CPU Multi 15320 pts\nGPU Score: 24310 pts\n"
-    scores = BenchmarkRunner._parse_output(output)
-    assert "CPU_Multi" in scores
-    assert "GPU" in scores
+    output = (
+        "Running Single CPU Render Test...\nCB 247.39 (0.00)\n"
+        "Running Multi CPU Render Test...\nCB 15320.11 (0.00)\n"
+    )
+    scores = BenchmarkRunner._parse_output(output, full_suite=True)
+    assert scores["CPU_Single"] == "247.39 pts"
+    assert scores["CPU_Multi"] == "15320.11 pts"
 
 
 def test_parse_output_single():
-    output = "Single Core Score: 1823 pts\n"
-    scores = BenchmarkRunner._parse_output(output)
-    assert "CPU_Single" in scores
+    output = "Running Single CPU Render Test...\nCB 247.39 (0.00)\n"
+    scores = BenchmarkRunner._parse_output(output, full_suite=False)
+    assert scores["CPU_Single"] == "247.39 pts"
 
 
 def test_parse_output_empty():
