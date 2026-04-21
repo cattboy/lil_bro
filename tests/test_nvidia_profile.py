@@ -573,3 +573,127 @@ class TestActionProposerNvidiaProfile:
         proposals = _build_fallback(findings)
         assert len(proposals) == 1
         assert proposals[0]["finding"] == "nvidia_profile"
+
+
+
+# ── 10. wait_for_nip_ready ───────────────────────────────────────────────────
+
+class TestWaitForNipReady:
+    def test_passes_on_valid_sample(self, tmp_path):
+        from src.utils.nip_io import wait_for_nip_ready
+        nip = tmp_path / "valid.nip"
+        _write_nip(str(nip), _SAMPLE_NIP)
+        wait_for_nip_ready(str(nip), timeout=2.0, poll_interval=0.05)
+
+    def test_tolerates_trailing_whitespace(self, tmp_path):
+        from src.utils.nip_io import wait_for_nip_ready
+        nip = tmp_path / "trail.nip"
+        # Append CRLF after closing tag (common on Windows)
+        nip.write_bytes((_SAMPLE_NIP + "\r\n").encode("utf-16"))
+        wait_for_nip_ready(str(nip), timeout=2.0, poll_interval=0.05)
+
+    def test_raises_on_missing_bom(self, tmp_path):
+        from src.utils.nip_io import wait_for_nip_ready
+        from src.utils.errors import SetterError
+        nip = tmp_path / "nobom.nip"
+        # UTF-16-LE body without BOM
+        nip.write_bytes(_SAMPLE_NIP.encode("utf-16-le"))
+        with pytest.raises(SetterError, match="not ready"):
+            wait_for_nip_ready(str(nip), timeout=0.5, poll_interval=0.05)
+
+    def test_raises_on_odd_byte_count(self, tmp_path):
+        from src.utils.nip_io import wait_for_nip_ready
+        from src.utils.errors import SetterError
+        nip = tmp_path / "odd.nip"
+        # Valid bytes but odd length (truncated UTF-16)
+        data = _SAMPLE_NIP.encode("utf-16")[:-1]
+        nip.write_bytes(data)
+        with pytest.raises(SetterError, match="not ready"):
+            wait_for_nip_ready(str(nip), timeout=0.5, poll_interval=0.05)
+
+    def test_raises_when_tail_missing_close_bracket(self, tmp_path):
+        from src.utils.nip_io import wait_for_nip_ready
+        from src.utils.errors import SetterError
+        nip = tmp_path / "midtag.nip"
+        # Strip the final `>` (and its UTF-16 low byte) to simulate mid-tag flush
+        full = _SAMPLE_NIP.encode("utf-16")
+        nip.write_bytes(full[:-2])
+        with pytest.raises(SetterError, match="not ready"):
+            wait_for_nip_ready(str(nip), timeout=0.5, poll_interval=0.05)
+
+    def test_raises_on_missing_file(self, tmp_path):
+        from src.utils.nip_io import wait_for_nip_ready
+        from src.utils.errors import SetterError
+        with pytest.raises(SetterError, match="not ready"):
+            wait_for_nip_ready(str(tmp_path / "ghost.nip"), timeout=0.3, poll_interval=0.05)
+
+    def test_raises_when_file_keeps_growing(self, tmp_path):
+        """Writer that never settles should time out (size-stable check)."""
+        import threading
+        import time
+        from src.utils.nip_io import wait_for_nip_ready
+        from src.utils.errors import SetterError
+
+        nip = tmp_path / "growing.nip"
+        full = _SAMPLE_NIP.encode("utf-16")
+        stop = threading.Event()
+
+        def writer():
+            # Keep writing a valid-looking file but append junk every tick
+            # so size never stabilizes.
+            extra = b""
+            while not stop.is_set():
+                nip.write_bytes(full + extra)
+                extra += b"\x20\x00"  # append a UTF-16 space
+                time.sleep(0.03)
+
+        t = threading.Thread(target=writer, daemon=True)
+        t.start()
+        try:
+            with pytest.raises(SetterError, match="not ready"):
+                wait_for_nip_ready(str(nip), timeout=0.4, poll_interval=0.05)
+        finally:
+            stop.set()
+            t.join(timeout=1.0)
+
+
+# ── 11. parse_nip_with_retry ─────────────────────────────────────────────────
+
+class TestParseNipRetry:
+    def test_succeeds_on_first_attempt(self, tmp_path):
+        from src.utils.nip_io import parse_nip_with_retry
+        nip = tmp_path / "ok.nip"
+        _write_nip(str(nip), _SAMPLE_NIP)
+        result = parse_nip_with_retry(str(nip))
+        assert result[277041154] == 225
+
+    def test_retries_then_succeeds(self, tmp_path, monkeypatch):
+        from src.utils import nip_io
+        calls = {"n": 0}
+
+        def flaky(path):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise UnicodeDecodeError("utf-16-le", b"", 0, 1, "truncated data")
+            return {42: 100}
+
+        monkeypatch.setattr(
+            "src.collectors.sub.nvidia_profile_dumper.parse_nip", flaky
+        )
+        monkeypatch.setattr(nip_io.time, "sleep", lambda *_: None)
+        result = nip_io.parse_nip_with_retry("ignored", attempts=3, delay=0.01)
+        assert result == {42: 100}
+        assert calls["n"] == 2
+
+    def test_raises_after_attempts_exhausted(self, tmp_path, monkeypatch):
+        from src.utils import nip_io
+
+        def always_bad(path):
+            raise UnicodeDecodeError("utf-16-le", b"", 0, 1, "truncated data")
+
+        monkeypatch.setattr(
+            "src.collectors.sub.nvidia_profile_dumper.parse_nip", always_bad
+        )
+        monkeypatch.setattr(nip_io.time, "sleep", lambda *_: None)
+        with pytest.raises(UnicodeDecodeError):
+            nip_io.parse_nip_with_retry("ignored", attempts=2, delay=0.01)

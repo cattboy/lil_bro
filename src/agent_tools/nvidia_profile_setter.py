@@ -23,6 +23,9 @@ from ..utils.paths import get_temp_dir
 from ..utils.action_logger import action_logger
 
 
+from ..utils.nip_io import wait_for_nip_ready
+
+
 def get_backups_dir():
     """Return ./lil_bro_backups/ (CWD-root). Delegates to utils.paths."""
     from ..utils.paths import get_backups_dir as _gbdir
@@ -36,8 +39,6 @@ def _export_current_profile(npi_exe: str, dest_dir: str) -> str:
     paths). The .nip is written there too, so we move it into dest_dir after
     completion so the caller's TemporaryDirectory handles cleanup.
     """
-    import time
-
     npi_dir = Path(npi_exe).parent
 
     result = subprocess.run(
@@ -51,29 +52,24 @@ def _export_current_profile(npi_exe: str, dest_dir: str) -> str:
         raise SetterError(f"NPI export failed (rc={result.returncode}): {stderr}")
 
     nip_files = list(npi_dir.glob("*.nip"))
+    action_logger.log_action(
+        "NPI Setter", "Glob",
+        f"dir={npi_dir} count={len(nip_files)} names={[p.name for p in nip_files]}",
+    )
     if not nip_files:
-        raise SetterError("NPI export produced no .nip file")
-
-    target = Path(dest_dir) / nip_files[0].name
-    shutil.move(str(nip_files[0]), str(target))
-
-    # NPI spawns a child writer that outlives the parent; the child holds the
-    # file handle through the rename, so poll until size is stable.
-    deadline = time.monotonic() + 10.0
-    prev_size, stable = -1, 0
-    while time.monotonic() < deadline:
         try:
-            sz = target.stat().st_size
-        except OSError:
-            sz = 0
-        if sz > 0 and sz == prev_size:
-            stable += 1
-            if stable >= 3:
-                break
-        else:
-            stable = 0
-        prev_size = sz
-        time.sleep(0.25)
+            listing = [p.name for p in npi_dir.iterdir()]
+        except OSError as e:
+            listing = f"<iterdir failed: {e}>"
+        raise SetterError(f"NPI export produced no .nip file (dir contents: {listing})")
+
+    # Wait for NPI's child writer to finish in-place BEFORE moving. Moving a
+    # file with an open writer handle can orphan bytes on Windows.
+    original = nip_files[0]
+    wait_for_nip_ready(str(original))
+
+    target = Path(dest_dir) / original.name
+    shutil.move(str(original), str(target))
 
     return str(target)
 

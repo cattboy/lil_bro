@@ -88,20 +88,33 @@ def _benchmark_progress_printer(abort_event: threading.Event, start_time: float)
         print_info(f"Still running... [{mins}m {secs:02d}s elapsed]  Press Q or Enter to abort.")
 
 
-def _refocus_console_window(delay: float, abort_event: threading.Event) -> None:
-    """Bring the lil_bro console back to the foreground after Cinebench loads."""
+def _minimize_cinebench_window(timeout: float, abort_event: threading.Event) -> None:
+    """Poll for the Cinebench GUI window and minimize it as soon as it appears."""
     import ctypes
-    time.sleep(delay)
-    if abort_event.is_set():
-        return
-    try:
-        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
-        if not hwnd:
+    user32 = ctypes.windll.user32
+    found = []
+
+    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_size_t, ctypes.c_size_t)
+
+    def _callback(hwnd, _):
+        length = user32.GetWindowTextLengthW(hwnd)
+        if length > 0:
+            buf = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, buf, length + 1)
+            if "cinebench" in buf.value.lower():
+                found.append(hwnd)
+        return True
+
+    callback = WNDENUMPROC(_callback)
+    deadline = time.monotonic() + timeout
+    while not abort_event.is_set() and time.monotonic() < deadline:
+        found.clear()
+        user32.EnumWindows(callback, 0)
+        if found:
+            for hwnd in found:
+                user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
             return
-        ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-        ctypes.windll.user32.SetForegroundWindow(hwnd)
-    except Exception:
-        pass
+        time.sleep(1)
 
 
 def find_cinebench() -> Optional[str]:
@@ -184,7 +197,6 @@ class BenchmarkRunner:
 
         # Build CLI args per docs/vendor-supplied/cinebench.md
         cb_flag = "g_CinebenchAllTests=true" if full_suite else "g_CinebenchCpu1Test=true"
-        cb_exe = os.path.basename(self.cinebench_path)  # used for image-name kill
 
         # Output file — receives the full Cinebench console log
         output_file = get_temp_dir() / "cinebench_output.txt"
@@ -225,19 +237,18 @@ class BenchmarkRunner:
         try:
             proc = subprocess.Popen(["cmd.exe", "/C", str(batch_file)])
 
+            # Minimize the Cinebench GUI as soon as it appears so it doesn't cover lil_bro
+            threading.Thread(
+                target=_minimize_cinebench_window, args=(60.0, abort_event), daemon=True
+            ).start()
+
             start = time.monotonic()
             try:
                 while proc.poll() is None:
                     if abort_event.is_set():
                         proc.kill()
-                        # /T kills the batch cmd.exe tree; /IM kills Cinebench itself
-                        # which is detached from proc's tree by 'start /b /wait'.
                         subprocess.run(
                             ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                            capture_output=True,
-                        )
-                        subprocess.run(
-                            ["taskkill", "/F", "/IM", cb_exe],
                             capture_output=True,
                         )
                         proc.communicate()
@@ -265,10 +276,6 @@ class BenchmarkRunner:
                             ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
                             capture_output=True,
                         )
-                        subprocess.run(
-                            ["taskkill", "/F", "/IM", cb_exe],
-                            capture_output=True,
-                        )
                         proc.communicate()
                         raise subprocess.TimeoutExpired(
                             str(self.cinebench_path), _CINEBENCH_TIMEOUT
@@ -278,7 +285,7 @@ class BenchmarkRunner:
                 proc.communicate()  # drain (no pipes, but ensures clean exit)
 
             finally:
-                abort_event.set()  # signal keyboard watcher and progress printer to exit cleanly
+                abort_event.set()  # signal all background threads to exit cleanly
                 if watchdog:
                     watchdog.stop()
 

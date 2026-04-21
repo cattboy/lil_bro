@@ -18,6 +18,9 @@ from typing import Any
 from ...utils.paths import get_lil_bro_dir, get_temp_dir
 from ...utils.action_logger import action_logger
 
+from ...utils.errors import SetterError
+from ...utils.nip_io import parse_nip_with_retry, wait_for_nip_ready
+
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 _NPI_SEARCH_PATHS = [
@@ -180,8 +183,6 @@ def get_nvidia_profile() -> dict[str, Any]:
     Returns a dict with parsed settings. On failure, returns a dict with
     ``available=False`` or an ``error`` key describing the failure.
     """
-    import time
-
     npi_exe = find_npi_exe()
     if npi_exe is None:
         action_logger.log_action("NPI Collector", "Skipped", "binary not found", outcome="SKIP")
@@ -219,34 +220,38 @@ def get_nvidia_profile() -> dict[str, Any]:
             return {"available": True, "error": f"NPI export failed (rc={result.returncode}): {stderr}"}
 
         nip_files = list(npi_dir.glob("*.nip"))
+        action_logger.log_action(
+            "NPI Collector", "Glob",
+            f"dir={npi_dir} count={len(nip_files)} names={[p.name for p in nip_files]}",
+        )
         if not nip_files:
-            action_logger.log_action("NPI Collector", "Failed", "no .nip file produced", outcome="FAIL")
+            # Log full dir listing to diagnose write-location issues.
+            try:
+                listing = [p.name for p in npi_dir.iterdir()]
+            except OSError as e:
+                listing = f"<iterdir failed: {e}>"
+            action_logger.log_action(
+                "NPI Collector", "Failed",
+                f"no .nip file produced (dir contents: {listing})", outcome="FAIL",
+            )
             return {"available": True, "error": "NPI export produced no .nip file"}
 
-        # Move into tmpdir so TemporaryDirectory handles cleanup.
-        target = Path(tmpdir) / nip_files[0].name
-        shutil.move(str(nip_files[0]), str(target))
+        # Wait for NPI's child writer to finish BEFORE moving. Moving while
+        # the writer holds the handle can orphan bytes and permanently
+        # truncate the file.
+        original = nip_files[0]
+        try:
+            wait_for_nip_ready(str(original))
+        except SetterError as e:
+            action_logger.log_action("NPI Collector", "NotReady", str(e), outcome="FAIL")
+            return {"available": True, "error": f"NPI export not ready: {e}"}
 
-        # NPI spawns a child writer that outlives the parent; the child holds
-        # the file handle through the rename, so poll until size is stable.
-        deadline = time.monotonic() + 10.0
-        prev_size, stable = -1, 0
-        while time.monotonic() < deadline:
-            try:
-                sz = target.stat().st_size
-            except OSError:
-                sz = 0
-            if sz > 0 and sz == prev_size:
-                stable += 1
-                if stable >= 3:
-                    break
-            else:
-                stable = 0
-            prev_size = sz
-            time.sleep(0.25)
+        # Move into tmpdir so TemporaryDirectory handles cleanup.
+        target = Path(tmpdir) / original.name
+        shutil.move(str(original), str(target))
 
         try:
-            raw_settings = parse_nip(str(target))
+            raw_settings = parse_nip_with_retry(str(target))
         except (ET.ParseError, UnicodeDecodeError, ValueError) as e:
             action_logger.log_action("NPI Collector", "ParseError", str(e), outcome="FAIL")
             return {"available": True, "error": f"Failed to parse .nip XML: {e}"}
