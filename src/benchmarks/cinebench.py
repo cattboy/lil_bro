@@ -184,6 +184,7 @@ class BenchmarkRunner:
 
         # Build CLI args per docs/vendor-supplied/cinebench.md
         cb_flag = "g_CinebenchAllTests=true" if full_suite else "g_CinebenchCpu1Test=true"
+        cb_exe = os.path.basename(self.cinebench_path)  # used for image-name kill
 
         # Output file — receives the full Cinebench console log
         output_file = get_temp_dir() / "cinebench_output.txt"
@@ -224,18 +225,19 @@ class BenchmarkRunner:
         try:
             proc = subprocess.Popen(["cmd.exe", "/C", str(batch_file)])
 
-            # Refocus lil_bro after Cinebench has had time to open its GUI
-            threading.Thread(
-                target=_refocus_console_window, args=(30.0, abort_event), daemon=True
-            ).start()
-
             start = time.monotonic()
             try:
                 while proc.poll() is None:
                     if abort_event.is_set():
                         proc.kill()
+                        # /T kills the batch cmd.exe tree; /IM kills Cinebench itself
+                        # which is detached from proc's tree by 'start /b /wait'.
                         subprocess.run(
                             ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                            capture_output=True,
+                        )
+                        subprocess.run(
+                            ["taskkill", "/F", "/IM", cb_exe],
                             capture_output=True,
                         )
                         proc.communicate()
@@ -261,6 +263,10 @@ class BenchmarkRunner:
                         proc.kill()
                         subprocess.run(
                             ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                            capture_output=True,
+                        )
+                        subprocess.run(
+                            ["taskkill", "/F", "/IM", cb_exe],
                             capture_output=True,
                         )
                         proc.communicate()

@@ -36,7 +36,7 @@ class FinalBenchPhase:
 
         ctx.thermal.start()
         try:
-            final = ctx.runner.run_benchmark(full_suite=True, lhm_available=ctx.lhm_available)
+            final = ctx.runner.run_benchmark(full_suite=False, lhm_available=ctx.lhm_available)
         finally:
             ctx.thermal.stop()
 
