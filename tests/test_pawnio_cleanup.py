@@ -119,62 +119,41 @@ class TestUninstallPawnio:
         from src.pipeline.post_run_cleanup import _uninstall_pawnio
         sc_not_found = self._make_sc_result(1060)
         with patch("src.pipeline.post_run_cleanup.is_admin", return_value=True), \
-             patch("subprocess.run", return_value=sc_not_found), \
-             patch("os.path.isfile", return_value=False), \
-             patch("os.remove") as mock_remove:
-            _uninstall_pawnio()
-            mock_remove.assert_not_called()
-
-    def test_stops_service_before_deleting_file(self):
-        """sc stop must precede the file removal attempt."""
-        from src.pipeline.post_run_cleanup import _uninstall_pawnio
-        # sc_found has "STOPPED" so _wait_for_driver_stopped returns True on first poll
-        sc_found = self._make_sc_result(0, "STATE              : 1  STOPPED")
-        sc_gone  = self._make_sc_result(1060)
-        # subprocess.run call order (pawnio_setup + pnputil patched out):
-        # 1. _pawnio_service_exists()      -> sc_found
-        # 2. _run_sc("stop")               -> sc_found
-        # 3. _wait_for_driver_stopped poll -> sc_found (STOPPED -> returns True)
-        # 4. _pawnio_service_exists() step4-> sc_gone  (skip sc delete)
-        sc_calls = iter([sc_found, sc_found, sc_found, sc_gone])
-
-        with patch("src.pipeline.post_run_cleanup.is_admin", return_value=True), \
              patch("src.pipeline.post_run_cleanup._find_pawnio_setup_exe", return_value=None), \
              patch("src.pipeline.post_run_cleanup._find_pawnio_oem_inf", return_value=None), \
-             patch("subprocess.run", side_effect=lambda *a, **kw: next(sc_calls)), \
-             patch("os.path.isfile", return_value=True), \
-             patch("os.remove") as mock_remove, \
+             patch("subprocess.run", return_value=sc_not_found) as mock_run:
+            _uninstall_pawnio()
+            # Only _pawnio_service_exists() should be called (returns not-found -> early exit)
+            assert mock_run.call_count == 1
+
+    def test_stops_service_before_uninstall(self):
+        """sc stop must precede the pawnio_setup.exe -uninstall call."""
+        from src.pipeline.post_run_cleanup import _uninstall_pawnio
+        sc_found = self._make_sc_result(0, "STATE              : 1  STOPPED")
+        setup_ok  = self._make_sc_result(0)
+
+        call_order: list[str] = []
+
+        def side_effect(*args, **kwargs):
+            cmd = args[0]
+            tag = str(cmd[1]) if len(cmd) > 1 else str(cmd[0])
+            call_order.append(tag)
+            if "pawnio_setup" in str(cmd[0]):
+                return setup_ok
+            return sc_found
+
+        with patch("src.pipeline.post_run_cleanup.is_admin", return_value=True), \
+             patch("src.pipeline.post_run_cleanup._find_pawnio_setup_exe",
+                   return_value="C:/fake/pawnio_setup.exe"), \
+             patch("src.pipeline.post_run_cleanup._find_pawnio_oem_inf", return_value=None), \
+             patch("subprocess.run", side_effect=side_effect), \
              patch("time.sleep"):
             _uninstall_pawnio()
-            mock_remove.assert_called_once()
 
-    def test_schedules_reboot_deletion_when_file_locked(self):
-        """If os.remove raises PermissionError, MoveFileExW must be called."""
-        from src.pipeline.post_run_cleanup import _uninstall_pawnio
-        sc_found = self._make_sc_result(0, "STATE              : 1  STOPPED")
-        sc_gone  = self._make_sc_result(1060)
-        sc_calls = iter([sc_found, sc_found, sc_found, sc_gone])
-
-        mock_kernel32 = MagicMock()
-        mock_kernel32.MoveFileExW.return_value = 1  # success
-
-        with patch("src.pipeline.post_run_cleanup.is_admin", return_value=True), \
-             patch("src.pipeline.post_run_cleanup._find_pawnio_setup_exe", return_value=None), \
-             patch("src.pipeline.post_run_cleanup._find_pawnio_oem_inf", return_value=None), \
-             patch("subprocess.run", side_effect=lambda *a, **kw: next(sc_calls)), \
-             patch("os.path.isfile", return_value=True), \
-             patch("os.remove", side_effect=PermissionError("locked")), \
-             patch("ctypes.windll") as mock_windll, \
-             patch("time.sleep"), \
-             patch("src.pipeline.post_run_cleanup.print_warning"):
-            mock_windll.kernel32 = mock_kernel32
-            mock_windll.shell32.IsUserAnAdmin.return_value = 1
-            _uninstall_pawnio()
-            mock_kernel32.MoveFileExW.assert_called_once()
-            # Second arg must be None (delete on reboot), third must be 4
-            args = mock_kernel32.MoveFileExW.call_args[0]
-            assert args[1] is None
-            assert args[2] == 4
+        assert "stop" in call_order, "sc stop was not called"
+        assert "-uninstall" in call_order, "pawnio_setup.exe -uninstall was not called"
+        assert call_order.index("stop") < call_order.index("-uninstall"), \
+            "sc stop must precede -uninstall"
 
 
 # ---------------------------------------------------------------------------

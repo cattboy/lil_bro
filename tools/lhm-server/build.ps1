@@ -5,34 +5,17 @@
 $ErrorActionPreference = "Stop"
 $OutDir = Join-Path $PSScriptRoot "dist"
 
-# ── PawnIO.sys prerequisite ───────────────────────────────────────────────────
-# lhm-server.exe embeds PawnIO.sys so it can auto-install the thermal driver on
-# first run.  Build PawnIO.sys from source if it is not already present.
+# ── pawnio_setup.exe prerequisite ────────────────────────────────────────────
+# lhm-server.exe embeds pawnio_setup.exe so it can install PawnIO via the
+# Driver Store on first run.  Run update_pawnio.ps1 first if not present.
 
-$PawnIOSys = Resolve-Path (Join-Path $PSScriptRoot "..\..\tools\PawnIO\dist\PawnIO.sys") `
-             -ErrorAction SilentlyContinue
-
-if (-not $PawnIOSys) {
-    Write-Host ""
-    Write-Host "PawnIO.sys not found - attempting auto-build from tools/PawnIO/..." `
-               -ForegroundColor Yellow
-    $PawnIOBuild = Join-Path $PSScriptRoot "..\..\tools\PawnIO\build.ps1"
-    if (Test-Path $PawnIOBuild) {
-        try {
-            & $PawnIOBuild
-        } catch {
-            Write-Warning (
-                "PawnIO build failed: $_`n" +
-                "  lhm-server.exe will be built WITHOUT embedded PawnIO.sys.`n" +
-                "  Thermal sensors fall back to WMI-only (no ring-0 access).`n" +
-                "  See tools/PawnIO/build.ps1 for WDK requirements."
-            )
-        }
-    } else {
-        Write-Warning "tools/PawnIO/build.ps1 not found - skipping PawnIO embed."
-    }
+$PawnIOSetup = Join-Path $PSScriptRoot "..\..\tools\PawnIO\dist\pawnio_setup.exe"
+if (Test-Path $PawnIOSetup) {
+    Write-Host "pawnio_setup.exe found - will embed in lhm-server.exe." -ForegroundColor Green
 } else {
-    Write-Host "PawnIO.sys found - will embed in lhm-server.exe." -ForegroundColor Green
+    Write-Host "pawnio_setup.exe not found - run tools/PawnIO_Latest_Check/update_pawnio.ps1 first." `
+               -ForegroundColor Yellow
+    Write-Host "  lhm-server.exe will be built WITHOUT embedded PawnIO installer." -ForegroundColor Yellow
 }
 Write-Host ""
 

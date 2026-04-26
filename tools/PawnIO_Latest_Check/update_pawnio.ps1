@@ -1,34 +1,21 @@
 <#
 .SYNOPSIS
     Checks for the latest PawnIO.Setup release on GitHub, downloads if newer,
-    verifies SHA256, and extracts PawnIO.sys for the build pipeline.
+    verifies SHA256, and copies pawnio_setup.exe to the build pipeline.
 
 .DESCRIPTION
-    0. Check if PawnIO.sys already exists in dist
+    0. Check if pawnio_setup.exe already exists in dist
     1. Queries GitHub API for the latest namazso/PawnIO.Setup release
     2. Compares against locally tracked version
     3. Downloads new release if available, archives the old one
     4. Verifies SHA256 against GitHub's asset.digest
-    5. Extracts PawnIO.sys via 7-Zip and places it at tools/PawnIO/dist/PawnIO.sys
+    5. Copies pawnio_setup.exe to tools/PawnIO/dist/pawnio_setup.exe
 
-    Requires: 7-Zip installed at "C:\Program Files\7-Zip\7z.exe"
     Requires: Internet access to api.github.com and github.com
 #>
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-# Read the PE Machine field (offset 4 into the PE header) to determine CPU arch.
-# Returns the COFF machine type as a UInt16 (0x8664 = AMD64, 0xAA64 = ARM64, etc.)
-function Get-PEMachineType([string]$Path) {
-    $bytes    = [System.IO.File]::ReadAllBytes($Path)
-    $peOffset = [System.BitConverter]::ToInt32($bytes, 0x3C)
-    return    [System.BitConverter]::ToUInt16($bytes, $peOffset + 4)
-}
-
-$AMD64 = [uint16]0x8664   # x64 / AMD64 machine type
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
@@ -39,37 +26,25 @@ $ArchiveDir  = Join-Path $ResourceDir "archive"
 $VersionFile = Join-Path $ScriptDir "version.json"
 $SetupExe    = Join-Path $ResourceDir "PawnIO_setup.exe"
 $PawnIODist  = Join-Path (Join-Path (Join-Path $RepoRoot "tools") "PawnIO") "dist"
-$TargetSys   = Join-Path $PawnIODist "PawnIO.sys"
 $TargetSetup = Join-Path $PawnIODist "pawnio_setup.exe"
-$SevenZip    = "C:\Program Files\7-Zip\7z.exe"
 
 $GitHubAPI   = "https://api.github.com/repos/namazso/PawnIO.Setup/releases/latest"
 
-# ── Step 0: Check if both PawnIO.sys and pawnio_setup.exe already exist in dist ─
+# ── Step 0: Check if pawnio_setup.exe already exists in dist ─────────────────
 
-if ((Test-Path $TargetSys) -and (Test-Path $TargetSetup)) {
-    $existingMachine = Get-PEMachineType $TargetSys
-    if ($existingMachine -eq $AMD64) {
-        Write-Host "PawnIO.sys (x64) and pawnio_setup.exe already in dist - skipping update check." -ForegroundColor Green
-        Write-Host "  $TargetSys" -ForegroundColor DarkGray
+if (Test-Path $TargetSetup) {
+    # Also check that cached version.json matches so we don't skip a pending update.
+    if (Test-Path $VersionFile) {
+        $versionData  = Get-Content $VersionFile -Raw | ConvertFrom-Json
+        $localVersion = $versionData.version
+        Write-Host "pawnio_setup.exe already in dist ($localVersion) - skipping update check." -ForegroundColor Green
+        Write-Host "  $TargetSetup" -ForegroundColor DarkGray
         exit 0
     }
-    # Wrong architecture (e.g. ARM64 was extracted on a previous run) - re-extract.
-    Write-Host ("PawnIO.sys in dist is wrong architecture " +
-                ("(0x{0:X4} - expected 0x8664 x64). Re-extracting..." -f $existingMachine)) `
-               -ForegroundColor Yellow
+    Write-Host "pawnio_setup.exe in dist but no version file - running update check." -ForegroundColor Yellow
+} else {
+    Write-Host "pawnio_setup.exe not found in dist - running update check." -ForegroundColor Yellow
 }
-else {
-    Write-Host "PawnIO.sys or pawnio_setup.exe not found in dist - running update check." -ForegroundColor Yellow
-}
-
-# ── Prerequisite: 7-Zip ─────────────────────────────────────────────────────
-
-if (-not (Test-Path $SevenZip)) {
-    Write-Error ("7-Zip not found at '$SevenZip'.`n" +
-                 "  Install from https://7-zip.org and re-run this script.")
-}
-Write-Host "7-Zip: found" -ForegroundColor DarkGray
 
 # ── Step 1: Query GitHub API for latest release ─────────────────────────────
 
@@ -135,7 +110,7 @@ if ($localVersion) {
         $localVer = [System.Version]$localVersion
         if ($ghVer -le $localVer) {
             Write-Host ""
-            Write-Host "Already up to date ($localVersion) - extracting from cached installer..." -ForegroundColor Green
+            Write-Host "Already up to date ($localVersion) - using cached installer..." -ForegroundColor Green
             $skipDownload = $true
         }
     } catch {
@@ -210,100 +185,12 @@ if (-not $skipDownload) {
     Write-Host "  SHA256 verified: $($actualSHA.Substring(0,16))..." -ForegroundColor Green
 }
 
-# ── Step 7: Extract PawnIO.sys using 7-Zip ──────────────────────────────────
-# PawnIO_setup.exe is a PE containing a zstd-compressed CAB in RCDATA resource 105.
-# Extraction is two-step: PE -> zstd payload ("105~") -> CAB contents.
-# The CAB contains multiple PawnIO.sys for different architectures (x64, ARM64).
-# Using -aou (auto-rename) keeps all variants; the first "PawnIO.sys" is x64 signed.
+# ── Step 7: Copy pawnio_setup.exe to dist/ ───────────────────────────────────
 
-Write-Host ""
-Write-Host "Extracting PawnIO.sys..." -ForegroundColor Cyan
-
-$tempExtract = Join-Path $ScriptDir "_extract_temp"
-$step1Dir    = Join-Path $tempExtract "step1"
-$step2Dir    = Join-Path $tempExtract "step2"
-
-# Clean up any leftover temp dir
-if (Test-Path $tempExtract) {
-    Remove-Item -Recurse -Force $tempExtract
-}
-
-# Step 7a: Extract PE resources (produces zstd-compressed "105~")
-New-Item -ItemType Directory -Force -Path $step1Dir | Out-Null
-& $SevenZip x $SetupExe "-o$step1Dir" -y 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    Remove-Item -Recurse -Force $tempExtract -ErrorAction SilentlyContinue
-    Write-Error "7-Zip PE extraction failed (exit code $LASTEXITCODE)."
-}
-
-# Find the zstd payload (7z auto-decompresses zstd, producing the inner file)
-$payload = Get-ChildItem -Path $step1Dir -Recurse -File -ErrorAction SilentlyContinue |
-           Select-Object -First 1
-
-if (-not $payload) {
-    Remove-Item -Recurse -Force $tempExtract -ErrorAction SilentlyContinue
-    Write-Error "No payload found after PE extraction."
-}
-Write-Host "  Payload: $($payload.Name) ($([math]::Round($payload.Length / 1MB, 1)) MB)" -ForegroundColor DarkGray
-
-# Step 7b: Extract CAB contents with -aou to preserve all architecture variants
-New-Item -ItemType Directory -Force -Path $step2Dir | Out-Null
-& $SevenZip x $payload.FullName "-o$step2Dir" -aou -y 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    Remove-Item -Recurse -Force $tempExtract -ErrorAction SilentlyContinue
-    Write-Error "7-Zip CAB extraction failed (exit code $LASTEXITCODE)."
-}
-
-# PawnIO_setup.exe is a multi-arch installer — the CAB contains both x64 and
-# ARM64 drivers.  7-Zip -aou renames duplicates (PawnIO.sys, PawnIO_1.sys …)
-# so the first file is NOT guaranteed to be x64.  Select explicitly by PE
-# machine type (0x8664 = AMD64/x64) to avoid embedding the ARM64 variant on
-# x64 Windows, which causes a silent sc-start failure (wrong architecture).
-$allSys = Get-ChildItem -Path $step2Dir -Filter "PawnIO*.sys" -ErrorAction SilentlyContinue
-
-# Log what was extracted so the CI log makes arch selection transparent
-foreach ($f in $allSys) {
-    $mt = Get-PEMachineType $f.FullName
-    $archLabel = if ($mt -eq $AMD64) { "x64" } elseif ($mt -eq 0xAA64) { "ARM64" } else { "0x{0:X4}" -f $mt }
-    Write-Host "  Found: $($f.Name) ($($f.Length) bytes, $archLabel)" -ForegroundColor DarkGray
-}
-
-$x64Sys = $allSys | Where-Object { (Get-PEMachineType $_.FullName) -eq $AMD64 } | Select-Object -First 1
-
-if ($x64Sys) {
-    $foundSys = $x64Sys.FullName
-    Write-Host "  Selected x64 driver: $($x64Sys.Name)" -ForegroundColor Green
-} elseif ($allSys) {
-    # No x64 variant found — warn and fall back to the largest file
-    $fallback = $allSys | Sort-Object Length -Descending | Select-Object -First 1
-    $foundSys = $fallback.FullName
-    Write-Warning ("No x64 (0x8664) PawnIO.sys found in extracted contents.`n" +
-                   "  Falling back to: $($fallback.Name) ($($fallback.Length) bytes).`n" +
-                   "  This may fail on x64 Windows if the wrong architecture is selected.")
-} else {
-    Write-Host "  Extracted contents:" -ForegroundColor Yellow
-    Get-ChildItem -Path $step2Dir | ForEach-Object {
-        Write-Host "    $($_.Name) ($($_.Length) bytes)" -ForegroundColor DarkGray
-    }
-    Remove-Item -Recurse -Force $tempExtract -ErrorAction SilentlyContinue
-    Write-Error ("PawnIO.sys not found in extracted contents.`n" +
-                 "  The installer format may have changed -- manual extraction required.")
-}
-
-# Copy to build pipeline target
 New-Item -ItemType Directory -Force -Path $PawnIODist | Out-Null
-Copy-Item -Path $foundSys -Destination $TargetSys -Force
-
-$sysSize = [math]::Round((Get-Item $TargetSys).Length / 1KB, 1)
-Write-Host "  PawnIO.sys -> $TargetSys ($($sysSize) KB)" -ForegroundColor Green
-
-# Copy pawnio_setup.exe to dist/ so lhm-server can embed and run it silently
 Copy-Item -Path $SetupExe -Destination $TargetSetup -Force
 $setupSize = [math]::Round((Get-Item $TargetSetup).Length / 1MB, 1)
 Write-Host "  pawnio_setup.exe -> $TargetSetup ($($setupSize) MB)" -ForegroundColor Green
-
-# Clean up temp dir
-Remove-Item -Recurse -Force $tempExtract
 
 # ── Step 8: Update version tracking (only when a new version was downloaded) ─
 
@@ -320,11 +207,10 @@ if (-not $skipDownload) {
     Write-Host "PawnIO updated to $latestVersion successfully." -ForegroundColor Green
 } else {
     Write-Host ""
-    Write-Host "PawnIO extracted from cached installer ($localVersion)." -ForegroundColor Green
+    Write-Host "PawnIO setup exe copied from cache ($localVersion)." -ForegroundColor Green
 }
 
 Write-Host "  Setup exe: $SetupExe" -ForegroundColor DarkGray
-Write-Host "  Driver:    $TargetSys" -ForegroundColor DarkGray
 Write-Host "  Dist copy: $TargetSetup" -ForegroundColor DarkGray
 Write-Host ""
-Write-Host "Next: run build.py or tools/lhm-server/build.ps1 to embed PawnIO.sys + pawnio_setup.exe." -ForegroundColor DarkGray
+Write-Host "Next: run build.py or tools/lhm-server/build.ps1 to embed pawnio_setup.exe." -ForegroundColor DarkGray

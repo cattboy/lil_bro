@@ -60,16 +60,15 @@ def run_pyinstaller():
 
 
 def run_pawnio_update():
-    """Try to fetch the latest signed PawnIO.sys from GitHub releases.
+    """Try to fetch the latest pawnio_setup.exe from GitHub releases.
 
     Runs tools/PawnIO_Latest_Check/update_pawnio.ps1, which:
       1. Checks namazso/PawnIO.Setup for a newer release
-      2. Downloads + SHA256-verifies PawnIO_setup.exe if newer
-      3. Extracts the signed PawnIO.sys to tools/PawnIO/dist/PawnIO.sys
+      2. Downloads + SHA256-verifies pawnio_setup.exe if newer
+      3. Copies pawnio_setup.exe to tools/PawnIO/dist/pawnio_setup.exe
 
-    Non-fatal: network failures, rate limits, and missing 7-Zip all exit 0
-    from the script.  If PawnIO.sys is already up to date, this is a no-op.
-    On any failure the lhm-server build falls back to WDK source compilation.
+    Non-fatal: network failures and rate limits exit 0 from the script.
+    If pawnio_setup.exe is already up to date, this is a no-op.
     """
     script = ROOT / "tools" / "PawnIO_Latest_Check" / "update_pawnio.ps1"
     if not script.exists():
@@ -81,19 +80,19 @@ def run_pawnio_update():
         cwd=str(script.parent),
     )
 
-    target_sys = ROOT / "tools" / "PawnIO" / "dist" / "PawnIO.sys"
+    target_setup = ROOT / "tools" / "PawnIO" / "dist" / "pawnio_setup.exe"
     if result.returncode != 0:
         print(
             "  WARNING: PawnIO update script failed — "
-            "lhm-server build will fall back to WDK source compilation."
+            "lhm-server will be built without embedded PawnIO installer."
         )
-    elif target_sys.exists():
-        size_kb = target_sys.stat().st_size / 1024
-        print(f"  PawnIO.sys ready: {target_sys} ({size_kb:.1f} KB)")
+    elif target_setup.exists():
+        size_mb = target_setup.stat().st_size / 1024 / 1024
+        print(f"  pawnio_setup.exe ready: {target_setup} ({size_mb:.1f} MB)")
     else:
         print(
-            "  WARNING: update_pawnio.ps1 exited cleanly but PawnIO.sys not found — "
-            "lhm-server build will fall back to WDK source compilation."
+            "  WARNING: update_pawnio.ps1 exited cleanly but pawnio_setup.exe not found — "
+            "lhm-server will be built without embedded PawnIO installer."
         )
 
 
@@ -185,20 +184,20 @@ def main():
     print("=" * 40)
 
     if "--clean" in sys.argv:
-        print("\n[1/4] Cleaning...")
+        print("\n[1/5] Cleaning...")
         clean()
     else:
-        print("\n[1/4] Clean skipped (use --clean to force)")
+        print("\n[1/5] Clean skipped (use --clean to force)")
 
-    print("\n[2/4] Building NPI (GPU profile optimizer)...")
+    print("\n[2/5] Building NPI (GPU profile optimizer)...")
     build_npi()
-    print("\n[2/4] Fetching latest signed PawnIO.sys from GitHub...")
+    print("\n[3/5] Fetching latest pawnio_setup.exe from GitHub...")
     run_pawnio_update()
 
-    print("\n[3/4] Building lhm-server (thermal sensor server)...")
+    print("\n[4/5] Building lhm-server (thermal sensor server)...")
     build_lhm_server()
 
-    print("\n[4/4] Building with PyInstaller...")
+    print("\n[5/5] Building with PyInstaller...")
     run_pyinstaller()
 
     print("\n" + "=" * 40)
