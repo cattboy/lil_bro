@@ -118,6 +118,8 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
     If was_preinstalled is True the driver was present before lil_bro launched
     (i.e. the user installed it via pawnio_setup.exe) and must not be touched.
     """
+    from src.utils.formatting import print_step, print_step_done
+
     if not is_admin():
         return
     if was_preinstalled:
@@ -131,6 +133,9 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
 
     if not pawnio_exists and not driver_on_disk and not oem_inf:
         return  # nothing to clean
+
+    print_step("Removing PawnIO kernel driver")
+    action_logger.log_action("PawnIO", "Uninstalling kernel driver")
 
     # 1. Stop the running driver, then poll until kernel releases the lock
     if pawnio_exists:
@@ -178,6 +183,9 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
         winreg.DeleteKey(winreg.HKEY_LOCAL_MACHINE, _PAWNIO_UNINSTALL_KEY)
     except (FileNotFoundError, OSError):
         pass
+
+    print_step_done(True)
+    action_logger.log_action("PawnIO", "Kernel driver removed", outcome="PASS")
 
 
 def _cleanup_cwd_tempdir() -> None:
