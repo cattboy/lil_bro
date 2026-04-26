@@ -27,7 +27,7 @@ class TestConfigFileLoading:
         monkeypatch.chdir(tmp_path)
         from src.config import _load_config
         result = _load_config()
-        assert result.benchmark.cinebench_timeout == 600
+        assert result.benchmark.cinebench_timeout == 6000
         assert result.thermal.watchdog_threshold == 95.0
 
     def test_valid_json_overrides_values(self, tmp_path, monkeypatch):

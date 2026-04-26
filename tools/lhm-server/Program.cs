@@ -11,6 +11,7 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading;
 using LibreHardwareMonitor.Hardware;
 using Microsoft.Win32;
 
@@ -74,53 +75,45 @@ static SensorNode HardwareToNode(IHardware hw)
 }
 
 // ── PawnIO auto-install ───────────────────────────────────────────────────────
-// PawnIO.sys is embedded in this exe at build time.  On first run (admin
-// required), it is extracted to System32\drivers\ and registered as an
-// auto-start kernel service.  Subsequent runs reuse the already-installed
-// service -- no admin needed after the first launch.
+// PawnIO.sys from the official namazso/PawnIO.Setup release is WHQL-signed via
+// catalog file only (no Authenticode/PE-embedded signature).  Windows DSE
+// rejects catalog-only drivers loaded via sc create from System32\drivers.
+// The driver MUST go through the Driver Store (pnputil + INF + CAT), and the
+// Root\PawnIO device node must exist for LHM to open the ring-0 interface.
 //
-// SIGNING: PawnIO.sys must be code-signed to load on Windows with Secure Boot.
-// Source-built (unsigned) drivers fail with error 577 (ERROR_DRIVER_BLOCKED).
-// For development: bcdedit /set testsigning on  (then reboot)
-// For production:  use the officially signed PawnIO.sys from pawnio.eu
+// Solution: run pawnio_setup.exe /S (NSIS silent install), which handles the
+// full Driver Store + device node setup correctly.  pawnio_setup.exe is
+// embedded as a resource and extracted to a temp dir at runtime.
 
 static bool EnsurePawnIoInstalled()
 {
-    // Check if PawnIO service already exists AND is running.
-    // sc query returns 0 when the service entry exists -- but the service may be
-    // STOPPED with error 577 (unsigned driver rejected by Secure Boot).  We must
-    // inspect the actual state, not just the exit code.
     var (serviceExists, serviceRunning) = QueryPawnIoService();
-
     if (serviceExists && serviceRunning)
-        return true;  // already installed and running -- nothing to do
+        return true;
 
     if (serviceExists && !serviceRunning)
     {
-        // Service entry exists but driver isn't running -- try to start it.
-        // This handles the reboot case (auto-start service not yet started).
+        // Service registered but stopped — try to start (demand-start after reboot).
         if (RunSc("start PawnIO"))
             return true;
-
-        // Start failed -- stale/broken service entry (e.g. unsigned driver,
-        // error 577).  Delete it so we can re-install cleanly below.
+        // Stale entry (wrong arch, previous failed install, etc.) — remove and retry.
         Console.Error.WriteLine("[lhm-server] PawnIO service exists but failed to start " +
-                                "-- removing stale entry to retry installation.");
+                                "-- removing stale entry.");
+        RunSc("stop PawnIO");
         RunSc("delete PawnIO");
     }
 
-    // Locate PawnIO.sys — prefer embedded resource, fall back to file on disk
-    // (PyInstaller bundles PawnIO.sys next to lhm-server.exe in _MEIPASS/tools/).
-    Stream? resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("PawnIO.sys");
+    // Locate pawnio_setup.exe — embedded resource first, then disk fallback
+    // (PyInstaller bundles it next to lhm-server.exe in _MEIPASS/tools/).
+    Stream? resource = Assembly.GetExecutingAssembly().GetManifestResourceStream("pawnio_setup.exe");
 
     string? diskFallback = null;
     if (resource is null)
     {
-        // Look next to the running exe (covers PyInstaller extraction and dev tree)
         var exeDir = Path.GetDirectoryName(Environment.ProcessPath);
         if (exeDir is not null)
         {
-            var candidate = Path.Combine(exeDir, "PawnIO.sys");
+            var candidate = Path.Combine(exeDir, "pawnio_setup.exe");
             if (File.Exists(candidate))
                 diskFallback = candidate;
         }
@@ -128,64 +121,94 @@ static bool EnsurePawnIoInstalled()
 
     if (resource is null && diskFallback is null)
     {
-        Console.Error.WriteLine("[lhm-server] PawnIO.sys not embedded and not found on disk -- " +
-                                "temperatures may be unavailable.");
+        Console.Error.WriteLine("[lhm-server] pawnio_setup.exe not embedded and not found on disk -- " +
+                                "CPU temperatures will be unavailable.");
         return false;
     }
 
-    // Extract to System32\drivers\
-    var sysRoot    = Environment.GetEnvironmentVariable("SystemRoot") ?? @"C:\Windows";
-    var driverPath = Path.Combine(sysRoot, "System32", "drivers", "PawnIO.sys");
+    // Stage pawnio_setup.exe to a temp dir and run it with NSIS silent flag /S.
+    // lil_bro.exe carries uac_admin=True manifest, so lhm-server inherits the
+    // elevated token — no UAC prompt is shown.
+    var tempDir = Path.Combine(Path.GetTempPath(), $"lil_bro_pawnio_{Environment.ProcessId}");
     try
     {
-        using var fs = File.Create(driverPath);
-        if (resource is not null)
+        Directory.CreateDirectory(tempDir);
+        var setupPath = Path.Combine(tempDir, "pawnio_setup.exe");
+
+        using (var fs = File.Create(setupPath))
         {
-            resource.CopyTo(fs);
-            resource.Dispose();
+            if (resource is not null)
+            {
+                resource.CopyTo(fs);
+                resource.Dispose();
+            }
+            else
+            {
+                using var src = File.OpenRead(diskFallback!);
+                src.CopyTo(fs);
+            }
         }
-        else
+
+        Console.WriteLine("[lhm-server] Installing PawnIO via Driver Store (pawnio_setup.exe -install -silent) ...");
+        using var p = Process.Start(new ProcessStartInfo(setupPath, "-install -silent")
         {
-            using var src = File.OpenRead(diskFallback!);
-            src.CopyTo(fs);
+            UseShellExecute  = false,
+            CreateNoWindow   = true,
+            WorkingDirectory = tempDir,
+        });
+
+        if (p is null)
+        {
+            Console.Error.WriteLine("[lhm-server] Failed to launch pawnio_setup.exe.");
+            return false;
+        }
+
+        if (!p.WaitForExit(60_000))
+        {
+            p.Kill();
+            Console.Error.WriteLine("[lhm-server] pawnio_setup.exe timed out after 60s.");
+            return false;
+        }
+
+        if (p.ExitCode != 0)
+        {
+            Console.Error.WriteLine($"[lhm-server] pawnio_setup.exe exited with code {p.ExitCode}.");
+            return false;
         }
     }
     catch (Exception ex)
     {
-        Console.Error.WriteLine($"[lhm-server] Failed to write PawnIO.sys: {ex.Message} " +
-                                "(run as administrator on first launch)");
+        Console.Error.WriteLine($"[lhm-server] Failed to run pawnio_setup.exe: {ex.Message}");
         return false;
     }
-
-    // Register and start the kernel service
-    if (!RunSc($"create PawnIO binPath= \"{driverPath}\" type= kernel start= auto " +
-               "error= normal DisplayName= PawnIO"))
-        return false;
-
-    if (!RunSc("start PawnIO"))
+    finally
     {
-        // Driver failed to load -- most likely unsigned (error 577).
-        // Clean up the broken service entry so the next run doesn't think
-        // it's already installed.
-        Console.Error.WriteLine("[lhm-server] PawnIO driver failed to start -- the .sys " +
-                                "file may be unsigned. Enable test-signing mode for " +
-                                "development builds, or use the signed release from pawnio.eu.");
-        RunSc("delete PawnIO");
-        return false;
+        try { Directory.Delete(tempDir, recursive: true); }
+        catch { /* non-fatal */ }
     }
 
-    // Write Uninstall registry key so pawnio_check.is_pawnio_installed() returns true
-    try
+    // Poll for the PawnIO service to appear — Driver Store install and sc start
+    // happen asynchronously inside pawnio_setup.exe.
+    for (int i = 0; i < 20; i++)
     {
-        using var key = Registry.LocalMachine.CreateSubKey(
-            @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO");
-        key.SetValue("DisplayVersion", "2.2.0");
-        key.SetValue("DisplayName", "PawnIO");
+        Thread.Sleep(500);
+        var (exists, running) = QueryPawnIoService();
+        if (exists && running)
+        {
+            Console.WriteLine("[lhm-server] PawnIO installed and running via Driver Store.");
+            return true;
+        }
     }
-    catch { /* non-fatal -- driver is running regardless */ }
 
-    Console.WriteLine("[lhm-server] PawnIO driver installed successfully.");
-    return true;
+    // pawnio_setup.exe may use StartType=demand — try an explicit sc start.
+    if (RunSc("start PawnIO"))
+    {
+        Console.WriteLine("[lhm-server] PawnIO service started.");
+        return true;
+    }
+
+    Console.Error.WriteLine("[lhm-server] PawnIO installed but service did not start.");
+    return false;
 }
 
 static (bool exists, bool running) QueryPawnIoService()

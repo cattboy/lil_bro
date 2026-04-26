@@ -34,6 +34,17 @@
         Include="..\..\tools\PawnIO\dist\PawnIO.sys"
         LogicalName="PawnIO.sys"
         Condition="Exists('..\..\tools\PawnIO\dist\PawnIO.sys')" />
+    <!--
+      pawnio_setup.exe is the official NSIS installer from namazso/PawnIO.Setup.
+      Run with -install flag for headless Driver Store installation.
+      Required because PawnIO.sys is WHQL catalog-signed only — direct
+      sc create loading is rejected by Windows DSE on modern systems.
+      Populated by: tools/PawnIO_Latest_Check/update_pawnio.ps1
+    -->
+    <EmbeddedResource
+        Include="..\..\tools\PawnIO\dist\pawnio_setup.exe"
+        LogicalName="pawnio_setup.exe"
+        Condition="Exists('..\..\tools\PawnIO\dist\pawnio_setup.exe')" />
   </ItemGroup>
 
 </Project>

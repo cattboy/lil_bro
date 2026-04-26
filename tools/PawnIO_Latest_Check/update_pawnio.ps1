@@ -40,16 +40,17 @@ $VersionFile = Join-Path $ScriptDir "version.json"
 $SetupExe    = Join-Path $ResourceDir "PawnIO_setup.exe"
 $PawnIODist  = Join-Path (Join-Path (Join-Path $RepoRoot "tools") "PawnIO") "dist"
 $TargetSys   = Join-Path $PawnIODist "PawnIO.sys"
+$TargetSetup = Join-Path $PawnIODist "pawnio_setup.exe"
 $SevenZip    = "C:\Program Files\7-Zip\7z.exe"
 
 $GitHubAPI   = "https://api.github.com/repos/namazso/PawnIO.Setup/releases/latest"
 
-# ── Step 0: Check if PawnIO.sys already exists in dist ──────────────────────
+# ── Step 0: Check if both PawnIO.sys and pawnio_setup.exe already exist in dist ─
 
-if (Test-Path $TargetSys) {
+if ((Test-Path $TargetSys) -and (Test-Path $TargetSetup)) {
     $existingMachine = Get-PEMachineType $TargetSys
     if ($existingMachine -eq $AMD64) {
-        Write-Host "PawnIO.sys (x64) already present in dist - skipping update check." -ForegroundColor Green
+        Write-Host "PawnIO.sys (x64) and pawnio_setup.exe already in dist - skipping update check." -ForegroundColor Green
         Write-Host "  $TargetSys" -ForegroundColor DarkGray
         exit 0
     }
@@ -59,7 +60,7 @@ if (Test-Path $TargetSys) {
                -ForegroundColor Yellow
 }
 else {
-    Write-Host "PawnIO.sys not found in dist - running update check." -ForegroundColor Yellow
+    Write-Host "PawnIO.sys or pawnio_setup.exe not found in dist - running update check." -ForegroundColor Yellow
 }
 
 # ── Prerequisite: 7-Zip ─────────────────────────────────────────────────────
@@ -296,6 +297,11 @@ Copy-Item -Path $foundSys -Destination $TargetSys -Force
 $sysSize = [math]::Round((Get-Item $TargetSys).Length / 1KB, 1)
 Write-Host "  PawnIO.sys -> $TargetSys ($($sysSize) KB)" -ForegroundColor Green
 
+# Copy pawnio_setup.exe to dist/ so lhm-server can embed and run it silently
+Copy-Item -Path $SetupExe -Destination $TargetSetup -Force
+$setupSize = [math]::Round((Get-Item $TargetSetup).Length / 1MB, 1)
+Write-Host "  pawnio_setup.exe -> $TargetSetup ($($setupSize) MB)" -ForegroundColor Green
+
 # Clean up temp dir
 Remove-Item -Recurse -Force $tempExtract
 
@@ -319,5 +325,6 @@ if (-not $skipDownload) {
 
 Write-Host "  Setup exe: $SetupExe" -ForegroundColor DarkGray
 Write-Host "  Driver:    $TargetSys" -ForegroundColor DarkGray
+Write-Host "  Dist copy: $TargetSetup" -ForegroundColor DarkGray
 Write-Host ""
-Write-Host "Next: run build.py or tools/lhm-server/build.ps1 to embed the new PawnIO.sys." -ForegroundColor DarkGray
+Write-Host "Next: run build.py or tools/lhm-server/build.ps1 to embed PawnIO.sys + pawnio_setup.exe." -ForegroundColor DarkGray

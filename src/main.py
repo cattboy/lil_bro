@@ -58,6 +58,7 @@ def main():
 
     resize_console_window()
     startup_lhm = None
+    pawnio_was_preinstalled = False
     try:
         from src.utils.integrity import verify_integrity
         verify_integrity()
@@ -79,6 +80,8 @@ def main():
             run_revert_phase()
             return
 
+        from src.utils.pawnio_check import is_pawnio_installed
+        pawnio_was_preinstalled = is_pawnio_installed()
         startup_lhm, _ = run_startup_thermal_scan()
         menu_loop(startup_lhm)
 
@@ -89,7 +92,7 @@ def main():
         sys.exit(1)
     finally:
         save_default_config()
-        post_run_cleanup(startup_lhm)
+        post_run_cleanup(startup_lhm, pawnio_was_preinstalled=pawnio_was_preinstalled)
         action_logger.log_session_end()
 
 
