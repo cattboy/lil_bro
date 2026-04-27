@@ -319,7 +319,45 @@ class LHMSidecar:
         if self._already_running:
             # We didn't start it — don't kill it
             return
+        if self._request_graceful_shutdown():
+            action_logger.log_action("LHM Sidecar", "Stopped (graceful)")
+            self._elevated = False
+            self._process = None
+            return
         self._kill_process()
+
+    def _request_graceful_shutdown(self) -> bool:
+        """Ask lhm-server to drain via /shutdown and wait for the process to exit.
+
+        Cleanup must block on this so the OS releases the PawnIO driver handle
+        (via Computer.Close() in lhm-server's CTS-cancellation path) before
+        _uninstall_pawnio() runs.  Otherwise the SCM cannot remove the service
+        entry without a reboot.
+        """
+        try:
+            req = urllib.request.Request(
+                f"http://localhost:{LHM_PORT}/shutdown", method="POST"
+            )
+            urllib.request.urlopen(req, timeout=2).close()
+        except Exception:
+            return False
+
+        if self._process is not None:
+            try:
+                self._process.wait(timeout=10)
+            except Exception:
+                return False
+            return True
+
+        if self._elevated:
+            deadline = time.monotonic() + 10.0
+            while time.monotonic() < deadline:
+                if _find_elevated_pid("lhm-server.exe") is None:
+                    return True
+                time.sleep(0.5)
+            return False
+
+        return True
 
     def _kill_process(self) -> None:
         if self._elevated:
@@ -336,6 +374,14 @@ class LHMSidecar:
                     )
                 except Exception:
                     pass
+                # taskkill /F is fire-and-forget — wait for the process to
+                # actually disappear so the PawnIO driver handle is released
+                # before downstream cleanup attempts to delete the service.
+                deadline = time.monotonic() + 5.0
+                while time.monotonic() < deadline:
+                    if _find_elevated_pid("lhm-server.exe") is None:
+                        break
+                    time.sleep(0.5)
             action_logger.log_action("LHM Sidecar", "Stopped (elevated)")
             self._elevated = False
             return

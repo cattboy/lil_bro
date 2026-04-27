@@ -46,8 +46,11 @@ def _run_sc(*args: str) -> bool:
             ["sc", *args],
             capture_output=True, timeout=10, text=True,
         )
-        # 0 = success, 1060 = service does not exist, 1062 = service not started
-        return result.returncode in (0, 1060, 1062)
+        # 0    = success
+        # 1060 = service does not exist
+        # 1062 = service not started
+        # 1072 = service marked for deletion (will finish at next reboot)
+        return result.returncode in (0, 1060, 1062, 1072)
     except Exception:
         return False
 
@@ -160,7 +163,7 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
     if setup_exe:
         try:
             result = subprocess.run(
-                [setup_exe, "-uninstall -silent"],
+                [setup_exe, "-uninstall", "-silent"],
                 capture_output=True, timeout=60, text=True,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )
@@ -183,6 +186,31 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
             action_logger.log_action("Cleanup", f"PawnIO removed from Driver Store ({oem_inf})")
         else:
             action_logger.log_action("Cleanup", f"pnputil /delete-driver {oem_inf} failed")
+
+    # 4. Explicit sc delete — guarantees the SCM entry is removed.  If a driver
+    #    handle is still open (rare once the LHM sidecar has shut down
+    #    gracefully) the service is marked for deletion and finishes at the
+    #    next reboot — surface that so the user knows.
+    try:
+        delete_result = subprocess.run(
+            ["sc", "delete", _PAWNIO_SERVICE],
+            capture_output=True, timeout=10, text=True,
+        )
+        if delete_result.returncode == 0:
+            action_logger.log_action("Cleanup", "PawnIO service entry removed (sc delete)")
+        elif delete_result.returncode == 1060:
+            pass  # Service already gone — no-op.
+        elif delete_result.returncode == 1072:
+            action_logger.log_action(
+                "Cleanup",
+                "PawnIO marked for deletion — will complete at next reboot",
+            )
+        else:
+            action_logger.log_action(
+                "Cleanup", f"sc delete PawnIO exited {delete_result.returncode}"
+            )
+    except Exception as e:
+        action_logger.log_action("Cleanup", f"sc delete PawnIO failed ({e})")
 
     print_step_done(True)
     action_logger.log_action("PawnIO", "Kernel driver removed", outcome="PASS")
