@@ -75,13 +75,14 @@ def main():
 
         action_logger.log_session_start()
 
+        from src.utils.pawnio_check import is_pawnio_installed
+        pawnio_was_preinstalled = is_pawnio_installed()
+
         if args.revert:
             from src.pipeline.phase_revert import run_revert_phase
             run_revert_phase()
             return
 
-        from src.utils.pawnio_check import is_pawnio_installed
-        pawnio_was_preinstalled = is_pawnio_installed()
         startup_lhm, _ = run_startup_thermal_scan()
         menu_loop(startup_lhm)
 

@@ -122,6 +122,7 @@ class LHMSidecar:
         self._exe_path = executable_path
         self._already_running = False
         self._elevated = False  # True when launched via ShellExecuteW runas
+        self._stdout_lines: list[str] = []
         self._stderr_lines: list[str] = []
 
     @property
@@ -183,10 +184,11 @@ class LHMSidecar:
                 self._process = subprocess.Popen(
                     cmd + parent_flag,
                     stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
                 )
+                threading.Thread(target=self._drain_stdout, daemon=True).start()
                 threading.Thread(target=self._drain_stderr, daemon=True).start()
             else:
                 # Not admin — lhm-server.exe needs admin to install PawnIO on
@@ -215,6 +217,7 @@ class LHMSidecar:
             return False
 
         # Wait for HTTP readiness
+        _pawnio_step_shown = False
         deadline = time.monotonic() + _STARTUP_TIMEOUT
         while time.monotonic() < deadline:
             if _is_lhm_responding():
@@ -223,10 +226,20 @@ class LHMSidecar:
                 action_logger.log_action(
                     "LHM Sidecar", f"Launched (PID {pid_str})", f"Port {LHM_PORT}"
                 )
-                # Surface any PawnIO driver warnings (stderr is captured but
-                # normally only printed on failure/timeout — PawnIO errors are
-                # non-fatal so the server keeps running without ring-0 access).
-                time.sleep(0.3)  # brief flush window for stderr drain thread
+                time.sleep(0.3)  # brief flush window for drain threads
+                # Log PawnIO install outcome from lhm-server stdout
+                for line in self._stdout_lines:
+                    if "pawnio installed and running" in line.lower():
+                        action_logger.log_action(
+                            "PawnIO", "Driver installed via Driver Store", outcome="PASS"
+                        )
+                        break
+                    if "pawnio installed but service did not start" in line.lower():
+                        action_logger.log_action(
+                            "PawnIO", "Driver installed but service failed", outcome="FAIL"
+                        )
+                        break
+                # Surface any PawnIO warnings from stderr
                 for line in self._stderr_lines:
                     if "pawnio" in line.lower():
                         print_warning(f"[lhm-server] {line}")
@@ -236,6 +249,18 @@ class LHMSidecar:
                             line.strip(),
                         )
                 return True
+
+            # Surface PawnIO install progress so the user sees activity during
+            # the Driver Store install (can take 10-30s with no other output).
+            if not _pawnio_step_shown:
+                for line in self._stdout_lines + self._stderr_lines:
+                    if "installing pawnio" in line.lower():
+                        print()  # end the open "Launching sidecar" step line
+                        print_step("Installing PawnIO kernel driver")
+                        action_logger.log_action("PawnIO", "Driver Store installation started")
+                        _pawnio_step_shown = True
+                        break
+
             # Early exit if subprocess already died
             if self._process is not None and self._process.poll() is not None:
                 rc = self._process.returncode
@@ -276,12 +301,63 @@ class LHMSidecar:
         except (ValueError, OSError):
             pass  # pipe closed on normal shutdown
 
+    def _drain_stdout(self) -> None:
+        """Read stdout from subprocess into _stdout_lines (daemon thread)."""
+        proc = self._process
+        if proc is None or proc.stdout is None:
+            return
+        try:
+            for raw_line in proc.stdout:
+                line = raw_line.decode("utf-8", errors="replace").rstrip()
+                if line:
+                    self._stdout_lines.append(line)
+        except (ValueError, OSError):
+            pass
+
     def stop(self) -> None:
         """Tear down the LHM sidecar if we launched it."""
         if self._already_running:
             # We didn't start it — don't kill it
             return
+        if self._request_graceful_shutdown():
+            action_logger.log_action("LHM Sidecar", "Stopped (graceful)")
+            self._elevated = False
+            self._process = None
+            return
         self._kill_process()
+
+    def _request_graceful_shutdown(self) -> bool:
+        """Ask lhm-server to drain via /shutdown and wait for the process to exit.
+
+        Cleanup must block on this so the OS releases the PawnIO driver handle
+        (via Computer.Close() in lhm-server's CTS-cancellation path) before
+        _uninstall_pawnio() runs.  Otherwise the SCM cannot remove the service
+        entry without a reboot.
+        """
+        try:
+            req = urllib.request.Request(
+                f"http://localhost:{LHM_PORT}/shutdown", method="POST"
+            )
+            urllib.request.urlopen(req, timeout=2).close()
+        except Exception:
+            return False
+
+        if self._process is not None:
+            try:
+                self._process.wait(timeout=10)
+            except Exception:
+                return False
+            return True
+
+        if self._elevated:
+            deadline = time.monotonic() + 10.0
+            while time.monotonic() < deadline:
+                if _find_elevated_pid("lhm-server.exe") is None:
+                    return True
+                time.sleep(0.5)
+            return False
+
+        return True
 
     def _kill_process(self) -> None:
         if self._elevated:
@@ -298,6 +374,14 @@ class LHMSidecar:
                     )
                 except Exception:
                     pass
+                # taskkill /F is fire-and-forget — wait for the process to
+                # actually disappear so the PawnIO driver handle is released
+                # before downstream cleanup attempts to delete the service.
+                deadline = time.monotonic() + 5.0
+                while time.monotonic() < deadline:
+                    if _find_elevated_pid("lhm-server.exe") is None:
+                        break
+                    time.sleep(0.5)
             action_logger.log_action("LHM Sidecar", "Stopped (elevated)")
             self._elevated = False
             return

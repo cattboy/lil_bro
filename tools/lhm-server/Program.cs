@@ -81,8 +81,8 @@ static SensorNode HardwareToNode(IHardware hw)
 // The driver MUST go through the Driver Store (pnputil + INF + CAT), and the
 // Root\PawnIO device node must exist for LHM to open the ring-0 interface.
 //
-// Solution: run pawnio_setup.exe /S (NSIS silent install), which handles the
-// full Driver Store + device node setup correctly.  pawnio_setup.exe is
+ // Solution: run pawnio_setup.exe -install -silent, which handles the
+// full Driver Store + device node setup correctly. pawnio_setup.exe is
 // embedded as a resource and extracted to a temp dir at runtime.
 
 static bool EnsurePawnIoInstalled()
@@ -334,7 +334,7 @@ var serveTask = Task.Run(async () =>
         catch (HttpListenerException) { break; }
         catch (ObjectDisposedException) { break; }
 
-        _ = Task.Run(() => HandleRequest(ctx, computer), cts.Token);
+        _ = Task.Run(() => HandleRequest(ctx, computer, cts), cts.Token);
     }
 }, cts.Token);
 
@@ -343,10 +343,32 @@ await cts.Token.WhenCancelled();
 listener.Stop();
 computer.Close();
 
-static void HandleRequest(HttpListenerContext ctx, IComputer computer)
+static void HandleRequest(HttpListenerContext ctx, IComputer computer, CancellationTokenSource cts)
 {
     var req  = ctx.Request;
     var resp = ctx.Response;
+
+    // Graceful-shutdown endpoint: lil_bro POSTs/GETs /shutdown so computer.Close()
+    // runs (releasing the PawnIO driver handle) before the SCM service is removed.
+    // Ack first so the client sees 200 before the listener tears down.
+    if (req.Url?.AbsolutePath == "/shutdown")
+    {
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes("shutting down");
+            resp.ContentType     = "text/plain";
+            resp.ContentLength64 = bytes.Length;
+            resp.StatusCode      = 200;
+            resp.OutputStream.Write(bytes);
+        }
+        catch { /* best effort — cancel even if response failed */ }
+        finally
+        {
+            try { resp.Close(); } catch { /* ignore */ }
+        }
+        cts.Cancel();
+        return;
+    }
 
     if (req.Url?.AbsolutePath != "/data.json")
     {

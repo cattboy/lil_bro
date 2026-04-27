@@ -1,17 +1,15 @@
-"""
+﻿"""
 Post-run cleanup -- removes all runtime artifacts from the operating system.
 
 Ensures lil_bro leaves no trace after exit:
   - Stops the LHM sidecar process
   - Stops and uninstalls the PawnIO kernel driver service
-  - Removes PawnIO.sys from System32\\drivers
   - Removes the ./lil_bro/ temp folder created in the CWD during this run
 
-The GGUF model (%APPDATA%\\lil_bro\\models\\) is preserved -- it was
+The GGUF model (%APPDATA%/lil_bro/models/) is preserved -- it was
 downloaded with explicit user consent and is expensive to re-fetch.
 """
 
-import ctypes
 import os
 import shutil
 import subprocess
@@ -26,8 +24,6 @@ from src.utils.debug_logger import get_debug_logger
 from src.utils.platform import is_admin
 
 _PAWNIO_SERVICE = "PawnIO"
-_PAWNIO_UNINSTALL_KEY = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO"
-_MOVEFILE_DELAY_UNTIL_REBOOT = 4
 
 
 def _pawnio_service_exists() -> bool:
@@ -50,8 +46,11 @@ def _run_sc(*args: str) -> bool:
             ["sc", *args],
             capture_output=True, timeout=10, text=True,
         )
-        # 0 = success, 1060 = service does not exist, 1062 = service not started
-        return result.returncode in (0, 1060, 1062)
+        # 0    = success
+        # 1060 = service does not exist
+        # 1062 = service not started
+        # 1072 = service marked for deletion (will finish at next reboot)
+        return result.returncode in (0, 1060, 1062, 1072)
     except Exception:
         return False
 
@@ -109,8 +108,25 @@ def _run_pnputil(*args: str) -> bool:
         return False
 
 
+def _find_pawnio_setup_exe() -> "str | None":
+    """Locate pawnio_setup.exe — bundled with lil_bro or in the dev tree."""
+    import sys as _sys
+    candidates = [
+        # PyInstaller frozen bundle
+        os.path.join(getattr(_sys, "_MEIPASS", ""), "tools", "pawnio_setup.exe"),
+        # Next to the running executable (portable deployment)
+        os.path.join(os.path.dirname(_sys.executable), "tools", "pawnio_setup.exe"),
+        # Dev tree
+        os.path.join(os.path.dirname(__file__), "..", "..", "tools", "PawnIO", "dist", "pawnio_setup.exe"),
+    ]
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate):
+            return os.path.abspath(candidate)
+    return None
+
+
 def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
-    """Stop and remove the PawnIO kernel driver and its System32 file.
+    """Stop and remove the PawnIO kernel driver via its official uninstaller.
 
     Requires admin privileges -- skips silently if not elevated, since PawnIO
     would not have been installed without admin in the first place.
@@ -118,66 +134,86 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
     If was_preinstalled is True the driver was present before lil_bro launched
     (i.e. the user installed it via pawnio_setup.exe) and must not be touched.
     """
+    from src.utils.formatting import print_step, print_step_done
+
     if not is_admin():
         return
     if was_preinstalled:
         return
 
     pawnio_exists = _pawnio_service_exists()
-    sys_root = os.environ.get("SystemRoot", r"C:\Windows")
-    driver_path = os.path.join(sys_root, "System32", "drivers", "PawnIO.sys")
-    driver_on_disk = os.path.isfile(driver_path)
     oem_inf = _find_pawnio_oem_inf()
 
-    if not pawnio_exists and not driver_on_disk and not oem_inf:
+    if not pawnio_exists and not oem_inf:
         return  # nothing to clean
 
-    # 1. Stop the running driver, then poll until kernel releases the lock
+    print_step("Removing PawnIO kernel driver")
+    action_logger.log_action("PawnIO", "Uninstalling kernel driver")
+
+    # 1. Stop the running service so the kernel releases the driver lock before
+    #    the uninstaller attempts to remove it.
     if pawnio_exists:
         _run_sc("stop", _PAWNIO_SERVICE)
         _wait_for_driver_stopped()
 
-    # 2. Driver Store path (pawnio_setup.exe install): pnputil removes the
-    #    device node, service registration, and Driver Store entry in one shot.
-    if oem_inf:
+    # 2. Primary: run pawnio_setup.exe -uninstall — mirrors the install path
+    #    and correctly removes the device node, Driver Store entry, and service.
+    setup_exe = _find_pawnio_setup_exe()
+    pawnio_setup_uninstalled = False
+    if setup_exe:
+        try:
+            result = subprocess.run(
+                [setup_exe, "-uninstall", "-silent"],
+                capture_output=True, timeout=60, text=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if result.returncode == 0:
+                action_logger.log_action("Cleanup", "PawnIO removed via pawnio_setup.exe -uninstall")
+                pawnio_setup_uninstalled = True
+            else:
+                action_logger.log_action(
+                    "Cleanup",
+                    f"pawnio_setup.exe -uninstall exited {result.returncode} — falling back to pnputil",
+                )
+        except Exception as e:
+            action_logger.log_action(
+                "Cleanup", f"pawnio_setup.exe -uninstall failed ({e}) — falling back to pnputil"
+            )
+
+    # 3. Fallback: pnputil /delete-driver if pawnio_setup.exe unavailable or failed.
+    if not pawnio_setup_uninstalled and oem_inf:
         if _run_pnputil("/delete-driver", oem_inf, "/uninstall"):
             action_logger.log_action("Cleanup", f"PawnIO removed from Driver Store ({oem_inf})")
         else:
-            action_logger.log_action("Cleanup", f"pnputil /delete-driver {oem_inf} failed — falling back to sc delete")
+            action_logger.log_action("Cleanup", f"pnputil /delete-driver {oem_inf} failed")
 
-    # 3. Legacy sc create fallback — handles installs that bypassed Driver Store.
-    #    Re-check service existence: pnputil may have removed it already.
-    if _pawnio_service_exists():
-        if _run_sc("delete", _PAWNIO_SERVICE):
-            action_logger.log_action("Cleanup", "PawnIO service removed (legacy)")
-
-    # 4. Remove the .sys file from System32\drivers (legacy sc create path only;
-    #    Driver Store installs keep the file in the Driver Store, not here).
-    #    If the kernel still holds the file lock, schedule deletion on next reboot.
-    if driver_on_disk:
-        try:
-            os.remove(driver_path)
-            action_logger.log_action("Cleanup", f"Removed {driver_path}")
-        except PermissionError:
-            scheduled = ctypes.windll.kernel32.MoveFileExW(
-                driver_path, None, _MOVEFILE_DELAY_UNTIL_REBOOT
-            )
-            if scheduled:
-                action_logger.log_action(
-                    "Cleanup", f"Scheduled {driver_path} for deletion on next reboot"
-                )
-                print_warning("PawnIO.sys is still locked by the kernel — will be removed on next reboot.")
-            else:
-                print_warning(f"Could not remove {driver_path}: driver locked by kernel")
-        except OSError as e:
-            print_warning(f"Could not remove {driver_path}: {e}")
-
-    # 5. Remove the Uninstall sentinel key written by old lhm-server sc create installs
+    # 4. Explicit sc delete — guarantees the SCM entry is removed.  If a driver
+    #    handle is still open (rare once the LHM sidecar has shut down
+    #    gracefully) the service is marked for deletion and finishes at the
+    #    next reboot — surface that so the user knows.
     try:
-        import winreg
-        winreg.DeleteKey(winreg.HKEY_LOCAL_MACHINE, _PAWNIO_UNINSTALL_KEY)
-    except (FileNotFoundError, OSError):
-        pass
+        delete_result = subprocess.run(
+            ["sc", "delete", _PAWNIO_SERVICE],
+            capture_output=True, timeout=10, text=True,
+        )
+        if delete_result.returncode == 0:
+            action_logger.log_action("Cleanup", "PawnIO service entry removed (sc delete)")
+        elif delete_result.returncode == 1060:
+            pass  # Service already gone — no-op.
+        elif delete_result.returncode == 1072:
+            action_logger.log_action(
+                "Cleanup",
+                "PawnIO marked for deletion — will complete at next reboot",
+            )
+        else:
+            action_logger.log_action(
+                "Cleanup", f"sc delete PawnIO exited {delete_result.returncode}"
+            )
+    except Exception as e:
+        action_logger.log_action("Cleanup", f"sc delete PawnIO failed ({e})")
+
+    print_step_done(True)
+    action_logger.log_action("PawnIO", "Kernel driver removed", outcome="PASS")
 
 
 def _cleanup_cwd_tempdir() -> None:
@@ -233,7 +269,7 @@ def post_run_cleanup(lhm: Optional[LHMSidecar], pawnio_was_preinstalled: bool = 
         except Exception:
             get_debug_logger().warning("LHM sidecar stop failed during cleanup", exc_info=True)
 
-    # 2. Uninstall PawnIO kernel driver + service + registry
+    # 2. Uninstall PawnIO kernel driver + service
     try:
         _uninstall_pawnio(was_preinstalled=pawnio_was_preinstalled)
     except Exception:
