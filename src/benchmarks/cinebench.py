@@ -89,12 +89,13 @@ def _benchmark_progress_printer(abort_event: threading.Event, start_time: float)
 
 
 def _minimize_cinebench_window(timeout: float, abort_event: threading.Event) -> None:
-    """Minimize the Cinebench GUI on launch and refocus the lil_bro console.
+    """Minimize the Cinebench GUI once after launch, then leave the user alone.
 
-    Runs only for the initial ``timeout`` window — long enough to catch
-    Cinebench's startup focus-grab — then exits and leaves the user alone.
-    Skips refocus when Cinebench is already minimized so alt-tabbing within
-    the window isn't repeatedly stolen back.
+    Polls every second for up to ``timeout`` (long enough for slow systems to
+    finish launching Cinebench). On the first non-minimized Cinebench window
+    seen, minimizes it and returns. After that, the user can alt-tab freely
+    and we never touch focus again — when Cinebench minimizes, the OS pops
+    whatever was behind it (typically lil_bro) to the foreground naturally.
 
     Excludes the lil_bro console window from the title match — subprocess.Popen
     attaches cmd.exe to the parent console and Windows updates the console title
@@ -126,15 +127,11 @@ def _minimize_cinebench_window(timeout: float, abort_event: threading.Event) -> 
     while not abort_event.is_set() and time.monotonic() < deadline:
         found.clear()
         user32.EnumWindows(callback, 0)
-        # Only act on Cinebench windows that aren't already minimized — keeps
-        # us from stealing focus repeatedly once the initial minimize is done.
         active = [hwnd for hwnd in found if not user32.IsIconic(hwnd)]
         if active:
             for hwnd in active:
                 user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
-            if console_hwnd:
-                user32.ShowWindow(console_hwnd, 9)  # SW_RESTORE
-                user32.SetForegroundWindow(console_hwnd)
+            return  # one-shot — never meddle with the user's session again
         time.sleep(1)
 
 
@@ -259,8 +256,8 @@ class BenchmarkRunner:
         try:
             proc = subprocess.Popen(["cmd.exe", "/C", str(batch_file)])
 
-            # Catch Cinebench's startup focus-grab for the first 60 s, then back off
-            # so the user can alt-tab freely for the rest of the run.
+            # One-shot minimize of the Cinebench GUI on launch. 60 s grace window
+            # so slow systems still have time to finish launching it.
             threading.Thread(
                 target=_minimize_cinebench_window,
                 args=(60.0, abort_event),
