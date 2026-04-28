@@ -88,38 +88,59 @@ def _benchmark_progress_printer(abort_event: threading.Event, start_time: float)
         print_info(f"Still running... [{mins}m {secs:02d}s elapsed]  Press Q or Enter to abort.")
 
 
-def _minimize_cinebench_window(timeout: float, abort_event: threading.Event) -> None:
+def _minimize_cinebench_window(cb_exe: str, timeout: float, abort_event: threading.Event) -> None:
     """Minimize the Cinebench GUI once after launch, then leave the user alone.
 
-    Polls every second for up to ``timeout`` (long enough for slow systems to
-    finish launching Cinebench). On the first non-minimized Cinebench window
-    seen, minimizes it and returns. After that, the user can alt-tab freely
-    and we never touch focus again — when Cinebench minimizes, the OS pops
-    whatever was behind it (typically lil_bro) to the foreground naturally.
+    Identifies windows by their owning process executable name (e.g.
+    ``Cinebench.exe``) rather than by window title. Cinebench 2026 spends
+    the first ~100 s with title ``SplashScreen`` (no 'cinebench' substring),
+    so title matching misses the splash and only catches the main window
+    much later. Process matching catches both within seconds of launch.
 
-    Excludes the lil_bro console window from the title match — subprocess.Popen
-    attaches cmd.exe to the parent console and Windows updates the console title
-    to include the running batch path (which contains 'cinebench'), so a pure
-    title match would otherwise minimize lil_bro itself.
+    Polls every second for up to ``timeout`` to tolerate slow systems. On
+    the first match, minimizes the windows and returns — never touches
+    focus again. The OS pops whatever was behind Cinebench (typically
+    lil_bro) to the foreground naturally when its windows minimize.
     """
     import ctypes
+
     user32 = ctypes.windll.user32
     kernel32 = ctypes.windll.kernel32
 
-    console_hwnd = kernel32.GetConsoleWindow()
+    # OpenProcess returns HANDLE (pointer). Without restype set, ctypes
+    # defaults to c_int, and a high-bit-set handle would read as a negative
+    # int that the `if not h` nullity check would mistake for a valid handle.
+    kernel32.OpenProcess.restype = ctypes.c_void_p
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    cb_exe_lower = cb_exe.lower()
+    own_pid = kernel32.GetCurrentProcessId()
     found = []
+
+    def _belongs_to_cinebench(hwnd):
+        pid = ctypes.c_ulong()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value == 0 or pid.value == own_pid:
+            return False
+        h = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+        if not h:
+            return False
+        try:
+            buf = ctypes.create_unicode_buffer(260)
+            size = ctypes.c_ulong(260)
+            if not kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
+                return False
+            return os.path.basename(buf.value).lower() == cb_exe_lower
+        finally:
+            kernel32.CloseHandle(h)
 
     WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_size_t, ctypes.c_size_t)
 
     def _callback(hwnd, _):
-        if hwnd == console_hwnd:
-            return True  # never minimize lil_bro's own console
-        length = user32.GetWindowTextLengthW(hwnd)
-        if length > 0:
-            buf = ctypes.create_unicode_buffer(length + 1)
-            user32.GetWindowTextW(hwnd, buf, length + 1)
-            if "cinebench" in buf.value.lower():
-                found.append(hwnd)
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        if _belongs_to_cinebench(hwnd):
+            found.append(hwnd)
         return True
 
     callback = WNDENUMPROC(_callback)
@@ -127,9 +148,8 @@ def _minimize_cinebench_window(timeout: float, abort_event: threading.Event) -> 
     while not abort_event.is_set() and time.monotonic() < deadline:
         found.clear()
         user32.EnumWindows(callback, 0)
-        active = [hwnd for hwnd in found if not user32.IsIconic(hwnd)]
-        if active:
-            for hwnd in active:
+        if found:
+            for hwnd in found:
                 user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
             return  # one-shot — never meddle with the user's session again
         time.sleep(1)
@@ -257,10 +277,12 @@ class BenchmarkRunner:
             proc = subprocess.Popen(["cmd.exe", "/C", str(batch_file)])
 
             # One-shot minimize of the Cinebench GUI on launch. 60 s grace window
-            # so slow systems still have time to finish launching it.
+            # so slow systems still have time to finish launching it. Matched by
+            # process executable, not title — the splash screen has no 'cinebench'
+            # in its title for the first ~100 s of the run.
             threading.Thread(
                 target=_minimize_cinebench_window,
-                args=(60.0, abort_event),
+                args=(cb_exe, 60.0, abort_event),
                 daemon=True,
             ).start()
 
