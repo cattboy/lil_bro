@@ -89,14 +89,30 @@ def _benchmark_progress_printer(abort_event: threading.Event, start_time: float)
 
 
 def _minimize_cinebench_window(timeout: float, abort_event: threading.Event) -> None:
-    """Poll for the Cinebench GUI window and minimize it as soon as it appears."""
+    """Minimize the Cinebench GUI on launch and refocus the lil_bro console.
+
+    Runs only for the initial ``timeout`` window — long enough to catch
+    Cinebench's startup focus-grab — then exits and leaves the user alone.
+    Skips refocus when Cinebench is already minimized so alt-tabbing within
+    the window isn't repeatedly stolen back.
+
+    Excludes the lil_bro console window from the title match — subprocess.Popen
+    attaches cmd.exe to the parent console and Windows updates the console title
+    to include the running batch path (which contains 'cinebench'), so a pure
+    title match would otherwise minimize lil_bro itself.
+    """
     import ctypes
     user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+
+    console_hwnd = kernel32.GetConsoleWindow()
     found = []
 
     WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_size_t, ctypes.c_size_t)
 
     def _callback(hwnd, _):
+        if hwnd == console_hwnd:
+            return True  # never minimize lil_bro's own console
         length = user32.GetWindowTextLengthW(hwnd)
         if length > 0:
             buf = ctypes.create_unicode_buffer(length + 1)
@@ -110,10 +126,15 @@ def _minimize_cinebench_window(timeout: float, abort_event: threading.Event) -> 
     while not abort_event.is_set() and time.monotonic() < deadline:
         found.clear()
         user32.EnumWindows(callback, 0)
-        if found:
-            for hwnd in found:
+        # Only act on Cinebench windows that aren't already minimized — keeps
+        # us from stealing focus repeatedly once the initial minimize is done.
+        active = [hwnd for hwnd in found if not user32.IsIconic(hwnd)]
+        if active:
+            for hwnd in active:
                 user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
-            return
+            if console_hwnd:
+                user32.ShowWindow(console_hwnd, 9)  # SW_RESTORE
+                user32.SetForegroundWindow(console_hwnd)
         time.sleep(1)
 
 
@@ -197,6 +218,7 @@ class BenchmarkRunner:
 
         # Build CLI args per docs/vendor-supplied/cinebench.md
         cb_flag = "g_CinebenchAllTests=true" if full_suite else "g_CinebenchCpu1Test=true"
+        cb_exe = os.path.basename(self.cinebench_path)  # for image-name kill on abort/timeout
 
         # Output file — receives the full Cinebench console log
         output_file = get_temp_dir() / "cinebench_output.txt"
@@ -237,9 +259,12 @@ class BenchmarkRunner:
         try:
             proc = subprocess.Popen(["cmd.exe", "/C", str(batch_file)])
 
-            # Minimize the Cinebench GUI as soon as it appears so it doesn't cover lil_bro
+            # Catch Cinebench's startup focus-grab for the first 60 s, then back off
+            # so the user can alt-tab freely for the rest of the run.
             threading.Thread(
-                target=_minimize_cinebench_window, args=(60.0, abort_event), daemon=True
+                target=_minimize_cinebench_window,
+                args=(60.0, abort_event),
+                daemon=True,
             ).start()
 
             start = time.monotonic()
@@ -247,8 +272,14 @@ class BenchmarkRunner:
                 while proc.poll() is None:
                     if abort_event.is_set():
                         proc.kill()
+                        # /T kills the batch cmd.exe tree; /IM kills Cinebench itself
+                        # which is detached from proc's tree by 'start /b /wait'.
                         subprocess.run(
                             ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                            capture_output=True,
+                        )
+                        subprocess.run(
+                            ["taskkill", "/F", "/IM", cb_exe],
                             capture_output=True,
                         )
                         proc.communicate()
@@ -274,6 +305,10 @@ class BenchmarkRunner:
                         proc.kill()
                         subprocess.run(
                             ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                            capture_output=True,
+                        )
+                        subprocess.run(
+                            ["taskkill", "/F", "/IM", cb_exe],
                             capture_output=True,
                         )
                         proc.communicate()
