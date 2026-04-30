@@ -267,7 +267,7 @@ class TestRevertFix:
 
         entry = {"fix": "nvidia_profile", "before_backup": str(nip)}
 
-        with patch("src.collectors.sub.nvidia_profile_dumper.find_npi_exe", return_value="npi.exe"), \
+        with patch("src.utils.nvidia_npi.find_npi_exe", return_value="npi.exe"), \
              patch("src.agent_tools.nvidia_profile_setter.apply_nvidia_profile", return_value=(True, "ok")) as mock_apply:
 
             ok, err = revert_fix(entry)

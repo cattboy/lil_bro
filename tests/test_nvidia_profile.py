@@ -93,14 +93,14 @@ def _nvidia_specs(
 
 class TestFindNpiExe:
     def test_returns_none_when_not_found(self):
-        from src.collectors.sub.nvidia_profile_dumper import find_npi_exe
-        import src.collectors.sub.nvidia_profile_dumper as mod
+        from src.utils.nvidia_npi import find_npi_exe
+        import src.utils.nvidia_npi as mod
         with patch.object(mod, "_NPI_SEARCH_PATHS", ["/nonexistent/npi.exe"]):
             assert find_npi_exe() is None
 
     def test_returns_first_existing_path(self, tmp_path):
-        from src.collectors.sub.nvidia_profile_dumper import find_npi_exe
-        import src.collectors.sub.nvidia_profile_dumper as mod
+        from src.utils.nvidia_npi import find_npi_exe
+        import src.utils.nvidia_npi as mod
         exe = tmp_path / "nvidiaProfileInspector.exe"
         exe.write_bytes(b"fake")
         with patch.object(mod, "_NPI_SEARCH_PATHS", [str(exe), "/other/path.exe"]):
@@ -111,7 +111,7 @@ class TestFindNpiExe:
 
 class TestParseNip:
     def test_parses_utf16_xml(self, tmp_path):
-        from src.collectors.sub.nvidia_profile_dumper import parse_nip
+        from src.utils.nip_io import parse_nip
         nip = tmp_path / "test.nip"
         _write_nip(str(nip), _SAMPLE_NIP)
         result = parse_nip(str(nip))
@@ -120,7 +120,7 @@ class TestParseNip:
         assert result[278196567] == 0
 
     def test_empty_settings(self, tmp_path):
-        from src.collectors.sub.nvidia_profile_dumper import parse_nip
+        from src.utils.nip_io import parse_nip
         xml = """\
 <?xml version="1.0" encoding="utf-16"?>
 <ArrayOfProfile>
@@ -134,7 +134,7 @@ class TestParseNip:
         assert parse_nip(str(nip)) == {}
 
     def test_skips_non_numeric_values(self, tmp_path):
-        from src.collectors.sub.nvidia_profile_dumper import parse_nip
+        from src.utils.nip_io import parse_nip
         xml = """\
 <?xml version="1.0" encoding="utf-16"?>
 <ArrayOfProfile>
@@ -229,13 +229,6 @@ class TestCalculateFpsCap:
         from src.agent_tools.nvidia_profile import calculate_fps_cap
         assert calculate_fps_cap(hz) == expected
 
-    def test_single_canonical_definition(self):
-        """calculate_fps_cap has one canonical definition in nvidia_profile_dumper."""
-        from src.collectors.sub.nvidia_profile_dumper import calculate_fps_cap as d_cap
-        from src.agent_tools.nvidia_profile import calculate_fps_cap as a_cap
-        for hz in (60, 120, 144, 165, 240, 360, 480):
-            assert a_cap(hz) == d_cap(hz)
-
 
 # ── 5. GPU generation detection ──────────────────────────────────────────────
 
@@ -303,7 +296,7 @@ class TestAnalyzeNvidiaProfile:
 
     def test_ok_when_all_settings_optimal(self):
         from src.agent_tools.nvidia_profile import analyze_nvidia_profile
-        from src.collectors.sub.nvidia_profile_dumper import SETTING_IDS, TARGET_VALUES
+        from src.utils.nvidia_npi import SETTING_IDS, TARGET_VALUES
 
         # Build optimal raw_settings: all target values present
         raw = {sid: TARGET_VALUES[key] for key, sid in SETTING_IDS.items()
@@ -327,6 +320,33 @@ class TestAnalyzeNvidiaProfile:
         r = analyze_nvidia_profile(specs)
         assert r["status"] == "OK"
         assert r["can_auto_fix"] is False
+
+    def test_handles_json_round_tripped_raw_settings(self):
+        """Specs reloaded from full_specs.json have str-keyed raw_settings; the checker must normalize keys."""
+        import json
+        from src.agent_tools.nvidia_profile import analyze_nvidia_profile
+        from src.utils.nvidia_npi import SETTING_IDS, TARGET_VALUES
+
+        raw = {sid: TARGET_VALUES[key] for key, sid in SETTING_IDS.items()
+               if key in TARGET_VALUES}
+        raw[SETTING_IDS["fps_limiter_v3"]] = 226
+        raw[SETTING_IDS["dlss_preset_letter"]] = 0x0C
+
+        npi_data = {
+            "available": True,
+            "gsync_enabled": True,
+            "vsync_mode": "force_on",
+            "fps_cap": 226,
+            "rebar_driver": True,
+            "dlss_preset": "L",
+            "power_mgmt": "max_performance",
+            "raw_settings": raw,
+        }
+        specs = _nvidia_specs(npi_data=npi_data, rebar=True, refresh_hz=240)
+        # Round-trip through JSON: int keys in raw_settings become strings.
+        specs = json.loads(json.dumps(specs, default=str))
+        r = analyze_nvidia_profile(specs)
+        assert r["status"] == "OK", r
 
     def test_rebar_driver_skipped_when_bios_rebar_off(self):
         from src.agent_tools.nvidia_profile import analyze_nvidia_profile
@@ -378,7 +398,7 @@ class TestBuildOptimizedNip:
         out_path = build_optimized_nip(src_nip, target)
 
         try:
-            from src.collectors.sub.nvidia_profile_dumper import parse_nip
+            from src.utils.nip_io import parse_nip
             result = parse_nip(out_path)
             assert result[277041154] == 226
         finally:
@@ -389,12 +409,12 @@ class TestBuildOptimizedNip:
         src_nip = str(tmp_path / "source.nip")
         _write_nip(src_nip, _SAMPLE_NIP)
 
-        new_sid = 983226  # rebar_enable — not in SAMPLE_NIP
+        new_sid = 983226  # rebar_enable -- not in SAMPLE_NIP
         target = {new_sid: 1}
         out_path = build_optimized_nip(src_nip, target)
 
         try:
-            from src.collectors.sub.nvidia_profile_dumper import parse_nip
+            from src.utils.nip_io import parse_nip
             result = parse_nip(out_path)
             assert result[new_sid] == 1
         finally:
@@ -405,12 +425,12 @@ class TestBuildOptimizedNip:
         src_nip = str(tmp_path / "source.nip")
         _write_nip(src_nip, _SAMPLE_NIP)
 
-        # Only change VSync — fps limiter should stay 225
+        # Only change VSync -- fps limiter should stay 225
         target = {11041231: 0x47814940}
         out_path = build_optimized_nip(src_nip, target)
 
         try:
-            from src.collectors.sub.nvidia_profile_dumper import parse_nip
+            from src.utils.nip_io import parse_nip
             result = parse_nip(out_path)
             assert result[277041154] == 225   # unchanged
             assert result[11041231] == 0x47814940  # changed
@@ -455,10 +475,10 @@ class TestFixNvidiaProfile:
     @patch("src.agent_tools.nvidia_profile_setter.apply_nvidia_profile", return_value=(True, "OK"))
     @patch("src.agent_tools.nvidia_profile_setter.build_optimized_nip")
     @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="/backup/nv.nip")
-    @patch("src.agent_tools.nvidia_profile_setter._export_current_profile")
+    @patch("src.agent_tools.nvidia_profile_setter.export_current_profile")
     @patch("src.agent_tools.nvidia_profile_setter.find_npi_exe", return_value="npi.exe")
     def test_success(self, mock_find, mock_export, mock_backup, mock_build, mock_apply, tmp_path):
-        mock_export.return_value = str(tmp_path / "profile.nip")
+        mock_export.return_value = (str(tmp_path / "profile.nip"), {})
         mock_build.return_value = str(tmp_path / "modified.nip")
         # Create the modified nip so unlink works
         Path(str(tmp_path / "modified.nip")).write_bytes(b"x")
@@ -477,10 +497,10 @@ class TestFixNvidiaProfile:
     @patch("src.agent_tools.nvidia_profile_setter.apply_nvidia_profile", return_value=(False, "NPI failed"))
     @patch("src.agent_tools.nvidia_profile_setter.build_optimized_nip")
     @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="/backup/nv.nip")
-    @patch("src.agent_tools.nvidia_profile_setter._export_current_profile")
+    @patch("src.agent_tools.nvidia_profile_setter.export_current_profile")
     @patch("src.agent_tools.nvidia_profile_setter.find_npi_exe", return_value="npi.exe")
     def test_raises_on_import_failure(self, mock_find, mock_export, mock_backup, mock_build, mock_apply, tmp_path):
-        mock_export.return_value = str(tmp_path / "profile.nip")
+        mock_export.return_value = (str(tmp_path / "profile.nip"), {})
         mock_build.return_value = str(tmp_path / "modified.nip")
         Path(str(tmp_path / "modified.nip")).write_bytes(b"x")
 
@@ -504,7 +524,7 @@ class TestFixDispatchNvidiaProfile:
         assert set(FIX_REGISTRY.keys()) == expected
 
     @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="/backup.nip")
-    @patch("src.collectors.sub.nvidia_profile_dumper.find_npi_exe", return_value="npi.exe")
+    @patch("src.utils.nvidia_npi.find_npi_exe", return_value="npi.exe")
     @patch("src.agent_tools.nvidia_profile_setter.fix_nvidia_profile", return_value=True)
     def test_dispatch_success(self, mock_fix, mock_find, mock_backup):
         from src.pipeline.fix_dispatch import execute_fix
@@ -524,7 +544,7 @@ class TestFixDispatchNvidiaProfile:
 
     @patch("src.utils.revert.append_fix_to_manifest")
     @patch("src.agent_tools.nvidia_profile_setter.fix_nvidia_profile", return_value=True)
-    @patch("src.collectors.sub.nvidia_profile_dumper.find_npi_exe", return_value="npi.exe")
+    @patch("src.utils.nvidia_npi.find_npi_exe", return_value="npi.exe")
     @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="/backup.nip")
     def test_dispatch_manifest_entry_captured(self, mock_backup, mock_find, mock_fix, mock_append):
         """Manifest entry written with backup path after successful dispatch."""
@@ -677,9 +697,7 @@ class TestParseNipRetry:
                 raise UnicodeDecodeError("utf-16-le", b"", 0, 1, "truncated data")
             return {42: 100}
 
-        monkeypatch.setattr(
-            "src.collectors.sub.nvidia_profile_dumper.parse_nip", flaky
-        )
+        monkeypatch.setattr("src.utils.nip_io.parse_nip", flaky)
         monkeypatch.setattr(nip_io.time, "sleep", lambda *_: None)
         result = nip_io.parse_nip_with_retry("ignored", attempts=3, delay=0.01)
         assert result == {42: 100}
@@ -691,9 +709,7 @@ class TestParseNipRetry:
         def always_bad(path):
             raise UnicodeDecodeError("utf-16-le", b"", 0, 1, "truncated data")
 
-        monkeypatch.setattr(
-            "src.collectors.sub.nvidia_profile_dumper.parse_nip", always_bad
-        )
+        monkeypatch.setattr("src.utils.nip_io.parse_nip", always_bad)
         monkeypatch.setattr(nip_io.time, "sleep", lambda *_: None)
         with pytest.raises(UnicodeDecodeError):
             nip_io.parse_nip_with_retry("ignored", attempts=2, delay=0.01)

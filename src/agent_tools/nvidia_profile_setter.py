@@ -8,70 +8,23 @@ settings, and imports it via NPI's -silentImport CLI flag.
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
-from ..collectors.sub.nvidia_profile_dumper import (
-    SETTING_IDS, TARGET_VALUES, find_npi_exe, calculate_fps_cap,
-)
-from ..utils.errors import SetterError
-from ..utils.paths import get_temp_dir
 from ..utils.action_logger import action_logger
-
-
-from ..utils.nip_io import wait_for_nip_ready
-
-
-def get_backups_dir():
-    """Return ./lil_bro_backups/ (CWD-root). Delegates to utils.paths."""
-    from ..utils.paths import get_backups_dir as _gbdir
-    return _gbdir()
-
-
-def _export_current_profile(npi_exe: str, dest_dir: str) -> str:
-    """Run NPI -exportCustomized and return path to the .nip in dest_dir.
-
-    NPI must run from its own directory (it loads adjacent DLLs via relative
-    paths). The .nip is written there too, so we move it into dest_dir after
-    completion so the caller's TemporaryDirectory handles cleanup.
-    """
-    npi_dir = Path(npi_exe).parent
-
-    result = subprocess.run(
-        [npi_exe, "-exportCustomized"],
-        cwd=str(npi_dir),
-        capture_output=True,
-        timeout=30,
-    )
-    if result.returncode != 0:
-        stderr = result.stderr.decode(errors="replace").strip()
-        raise SetterError(f"NPI export failed (rc={result.returncode}): {stderr}")
-
-    nip_files = list(npi_dir.glob("*.nip"))
-    action_logger.log_action(
-        "NPI Setter", "Glob",
-        f"dir={npi_dir} count={len(nip_files)} names={[p.name for p in nip_files]}",
-    )
-    if not nip_files:
-        try:
-            listing = [p.name for p in npi_dir.iterdir()]
-        except OSError as e:
-            listing = f"<iterdir failed: {e}>"
-        raise SetterError(f"NPI export produced no .nip file (dir contents: {listing})")
-
-    # Wait for NPI's child writer to finish in-place BEFORE moving. Moving a
-    # file with an open writer handle can orphan bytes on Windows.
-    original = nip_files[0]
-    wait_for_nip_ready(str(original))
-
-    target = Path(dest_dir) / original.name
-    shutil.move(str(original), str(target))
-
-    return str(target)
+from ..utils.errors import SetterError
+from ..utils.nvidia_npi import (
+    DLSS_PRESETS,
+    SETTING_IDS,
+    TARGET_VALUES,
+    calculate_fps_cap,
+    export_current_profile,
+    find_npi_exe,
+)
+from ..utils.paths import get_backups_dir, get_temp_dir
+from .nvidia_profile import _get_gpu_generation, _get_primary_refresh_hz
 
 
 def backup_nvidia_profile(npi_exe: str) -> str:
@@ -82,7 +35,7 @@ def backup_nvidia_profile(npi_exe: str) -> str:
     backup_path = backup_dir / backup_name
 
     with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as tmpdir:
-        exported = _export_current_profile(npi_exe, tmpdir)
+        exported, _ = export_current_profile(npi_exe, tmpdir)
         shutil.copy2(exported, str(backup_path))
 
     action_logger.log_action("NPI Backup", "Created", str(backup_path))
@@ -94,7 +47,7 @@ def build_optimized_nip(source_nip_path: str, target_settings: dict[int, int]) -
 
     Args:
         source_nip_path: Path to the exported .nip file.
-        target_settings: Maps SettingID (decimal int) → new SettingValue (int).
+        target_settings: Maps SettingID (decimal int) to new SettingValue (int).
             If a SettingID doesn't exist in the source, it's appended to the
             Base Profile.
 
@@ -105,7 +58,6 @@ def build_optimized_nip(source_nip_path: str, target_settings: dict[int, int]) -
     text = raw.decode("utf-16")
     root = ET.fromstring(text)
 
-    # Find the Base Profile (or first profile if no Base Profile exists)
     base_profile = None
     for profile in root.findall("Profile"):
         name = profile.findtext("ProfileName", "")
@@ -122,7 +74,6 @@ def build_optimized_nip(source_nip_path: str, target_settings: dict[int, int]) -
     if settings_elem is None:
         settings_elem = ET.SubElement(base_profile, "Settings")
 
-    # Build lookup of existing settings by SettingID
     existing: dict[int, ET.Element] = {}
     for ps in settings_elem.findall("ProfileSetting"):
         sid_text = ps.findtext("SettingID")
@@ -132,21 +83,18 @@ def build_optimized_nip(source_nip_path: str, target_settings: dict[int, int]) -
             except ValueError:
                 continue
 
-    # Apply target settings
     for sid, new_val in target_settings.items():
         if sid in existing:
             val_elem = existing[sid].find("SettingValue")
             if val_elem is not None:
                 val_elem.text = str(new_val)
         else:
-            # Append new ProfileSetting element
             ps = ET.SubElement(settings_elem, "ProfileSetting")
             ET.SubElement(ps, "SettingNameInfo").text = " "
             ET.SubElement(ps, "SettingID").text = str(sid)
             ET.SubElement(ps, "SettingValue").text = str(new_val)
             ET.SubElement(ps, "ValueType").text = "Dword"
 
-    # Write modified XML to temp file, preserving UTF-16 encoding
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=".nip", dir=str(get_temp_dir()))
     os.close(tmp_fd)
 
@@ -199,27 +147,21 @@ def fix_nvidia_profile(
 
     Returns True on success.
     """
-    from .nvidia_profile import _get_primary_refresh_hz, _get_gpu_generation, DLSS_PRESETS
-
     npi_exe = find_npi_exe()
     if npi_exe is None:
         raise FileNotFoundError("NVIDIA Profile Inspector binary not found")
 
-    # 1. Backup (skip if caller already made one)
     if pre_backup_path is not None:
         backup_path = pre_backup_path
     else:
         backup_path = backup_nvidia_profile(npi_exe)
         action_logger.log_action("NPI Fix", "Backup created", backup_path)
 
-    # 2. Export fresh .nip for modification
     with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as tmpdir:
-        source_nip = _export_current_profile(npi_exe, tmpdir)
+        source_nip, _ = export_current_profile(npi_exe, tmpdir)
 
-        # 3. Calculate target settings
         target: dict[int, int] = {}
 
-        # G-Sync (7 settings)
         for key in [
             "gsync_global_feature", "gsync_global_mode", "gsync_app_mode",
             "gsync_app_state", "gsync_app_requested",
@@ -227,11 +169,9 @@ def fix_nvidia_profile(
         ]:
             target[SETTING_IDS[key]] = TARGET_VALUES[key]
 
-        # VSync (3 settings)
         for key in ["vsync", "vsync_tear_control", "vsync_smooth_afr"]:
             target[SETTING_IDS[key]] = TARGET_VALUES[key]
 
-        # FPS cap
         if refresh_hz is None:
             refresh_hz = _get_primary_refresh_hz(specs)
         cap: int | None = None
@@ -240,13 +180,11 @@ def fix_nvidia_profile(
             target[SETTING_IDS["fps_limiter_v3"]] = cap
             action_logger.log_action("NPI Fix", f"FPS cap: {cap}", f"{refresh_hz}Hz monitor")
 
-        # ReBar driver toggle — only if BIOS ReBar is ON
         nvidia = specs.get("NVIDIA", [])
         bios_rebar = nvidia[0].get("ReBAR") if isinstance(nvidia, list) and nvidia else None
         if bios_rebar is True:
             target[SETTING_IDS["rebar_enable"]] = TARGET_VALUES["rebar_enable"]
 
-        # DLSS preset
         if gpu_generation is None:
             gpu_name = nvidia[0].get("GPU", "") if isinstance(nvidia, list) and nvidia else ""
             gpu_generation = _get_gpu_generation(gpu_name)
@@ -255,17 +193,13 @@ def fix_nvidia_profile(
             target[SETTING_IDS["dlss_preset_profile"]] = TARGET_VALUES["dlss_preset_profile"]
             target[SETTING_IDS["dlss_preset_letter"]] = dlss_hex
 
-        # Power management
         target[SETTING_IDS["power_mgmt"]] = TARGET_VALUES["power_mgmt"]
 
-        # 4. Build modified .nip
         modified_nip = build_optimized_nip(source_nip, target)
 
-    # 5. Import
     try:
         ok, msg = apply_nvidia_profile(npi_exe, modified_nip)
     finally:
-        # Clean up temp modified .nip
         try:
             os.unlink(modified_nip)
         except OSError:
@@ -284,4 +218,4 @@ def fix_nvidia_profile(
         return True
 
     action_logger.log_action("NPI Fix", "FAILED", msg)
-    raise SetterError(f"Profile import failed — original profile preserved at {backup_path}. Error: {msg}")
+    raise SetterError(f"Profile import failed -- original profile preserved at {backup_path}. Error: {msg}")

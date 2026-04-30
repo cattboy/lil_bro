@@ -21,6 +21,9 @@ import xml.etree.ElementTree as ET
 from .action_logger import action_logger
 from .errors import SetterError
 
+from pathlib import Path
+
+
 _UTF16_LE_BOM = b"\xff\xfe"
 _CLOSING_TAG = "</ArrayOfProfile>"
 _TAIL_BYTES = 128  # enough to capture `</ArrayOfProfile>` + trailing whitespace
@@ -113,6 +116,30 @@ def wait_for_nip_ready(
     )
 
 
+def parse_nip(nip_path: str) -> dict[int, int]:
+    """Parse a .nip XML file and return ``{SettingID: SettingValue}``.
+
+    The .nip format is UTF-16 encoded XML with structure:
+      <ArrayOfProfile> / <Profile> / <Settings> / <ProfileSetting>
+    Each ProfileSetting has <SettingID> (decimal int) and <SettingValue> (decimal int).
+    """
+    raw = Path(nip_path).read_bytes()
+    text = raw.decode("utf-16")
+    root = ET.fromstring(text)
+
+    settings: dict[int, int] = {}
+    for profile in root.findall("Profile"):
+        for ps in profile.findall("Settings/ProfileSetting"):
+            sid_text = ps.findtext("SettingID")
+            val_text = ps.findtext("SettingValue")
+            if sid_text is not None and val_text is not None:
+                try:
+                    settings[int(sid_text)] = int(val_text)
+                except ValueError:
+                    continue
+    return settings
+
+
 def parse_nip_with_retry(
     path: str,
     attempts: int = 3,
@@ -124,10 +151,6 @@ def parse_nip_with_retry(
     — the exception types ``parse_nip`` can raise from a truncated/corrupt file.
     Re-raises the last exception after attempts are exhausted.
     """
-    # Local import avoids a circular dependency: nvidia_profile_dumper imports
-    # from utils, and we need parse_nip from the dumper.
-    from ..collectors.sub.nvidia_profile_dumper import parse_nip
-
     last_exc: Exception | None = None
     for i in range(attempts):
         try:

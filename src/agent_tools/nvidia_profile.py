@@ -3,26 +3,23 @@ NVIDIA Profile Inspector analyzer.
 
 Checks driver-level settings (G-Sync, VSync, FPS cap, ReBar driver toggle,
 DLSS preset, power management) against gaming best practices. Returns a single
-finding dict — all settings are fixed atomically via one .nip import.
+finding dict -- all settings are fixed atomically via one .nip import.
 """
 
 import re
 from typing import Any
 
-from ..collectors.sub.nvidia_profile_dumper import SETTING_IDS, TARGET_VALUES, DLSS_LETTER_MAP, calculate_fps_cap
-
-
-# GPU generation → recommended DLSS preset letter + hex value
-DLSS_PRESETS: dict[str, tuple[str, int]] = {
-    "50": ("L", 0x0C),   # RTX 50-series — Transformer Gen 2
-    "40": ("L", 0x0C),   # RTX 40-series — Transformer Gen 2
-    "30": ("K", 0x0B),   # RTX 30-series — Transformer Gen 1
-    "20": ("K", 0x0B),   # RTX 20-series — Transformer Gen 1
-}
+from ..utils.nvidia_npi import (
+    DLSS_LETTER_MAP,
+    DLSS_PRESETS,
+    SETTING_IDS,
+    TARGET_VALUES,
+    calculate_fps_cap,
+)
 
 
 def _get_gpu_generation(gpu_name: str) -> str | None:
-    """Extract RTX generation from GPU name (e.g. 'NVIDIA GeForce RTX 4090' → '40')."""
+    """Extract RTX generation from GPU name (e.g. 'NVIDIA GeForce RTX 4090' -> '40')."""
     m = re.search(r"RTX\s*(\d)0", gpu_name, re.IGNORECASE)
     if m:
         return m.group(1) + "0"
@@ -94,7 +91,7 @@ def _check_fps_cap(npi: dict, raw: dict[int, int], refresh_hz: int | None) -> di
         return {
             "name": "FPS Cap",
             "ok": True,
-            "message": "Could not determine monitor refresh rate — FPS cap not checked",
+            "message": "Could not determine monitor refresh rate -- FPS cap not checked",
             "skipped": True,
         }
 
@@ -123,7 +120,7 @@ def _check_rebar_driver(npi: dict, raw: dict[int, int], bios_rebar: bool | None)
         return {
             "name": "ReBar Driver",
             "ok": True,
-            "message": "BIOS-level ReBar not enabled — driver toggle not applicable",
+            "message": "BIOS-level ReBar not enabled -- driver toggle not applicable",
             "skipped": True,
         }
 
@@ -146,7 +143,7 @@ def _check_dlss(npi: dict, raw: dict[int, int], gpu_name: str) -> dict[str, Any]
         return {
             "name": "DLSS Preset",
             "ok": True,
-            "message": "Could not detect RTX generation — DLSS preset not checked",
+            "message": "Could not detect RTX generation -- DLSS preset not checked",
             "skipped": True,
         }
 
@@ -161,7 +158,6 @@ def _check_dlss(npi: dict, raw: dict[int, int], gpu_name: str) -> dict[str, Any]
 
     expected_letter, expected_hex = preset_info
 
-    # Check both the profile mode (must be Custom=2) and the preset letter
     profile_val = raw.get(SETTING_IDS["dlss_preset_profile"])
     letter_val = raw.get(SETTING_IDS["dlss_preset_letter"])
     current_letter = DLSS_LETTER_MAP.get(letter_val, "unknown") if letter_val is not None else "not set"
@@ -204,20 +200,19 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
     """
     nvidia = specs.get("NVIDIA", "")
 
-    # AMD guard — skip if no NVIDIA GPU
     if not (isinstance(nvidia, list) and nvidia):
         amd = specs.get("AMD", "")
         if isinstance(amd, list) and amd:
             return {
                 "check": "nvidia_profile",
                 "status": "SKIPPED",
-                "message": "AMD GPU detected — NVIDIA profile optimization not applicable.",
+                "message": "AMD GPU detected -- NVIDIA profile optimization not applicable.",
                 "can_auto_fix": False,
             }
         return {
             "check": "nvidia_profile",
             "status": "SKIPPED",
-            "message": "No NVIDIA GPU detected — NPI features require an NVIDIA GPU.",
+            "message": "No NVIDIA GPU detected -- NPI features require an NVIDIA GPU.",
             "can_auto_fix": False,
         }
 
@@ -243,12 +238,14 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
             "can_auto_fix": False,
         }
 
-    raw_settings = npi.get("raw_settings", {})
+    # JSON serialisation forces dict keys to strings, so raw_settings reloaded
+    # from full_specs.json arrives with str keys. SETTING_IDS values are ints,
+    # so normalise here before the sub-checkers do `raw.get(int_sid)`.
+    raw_settings = {int(k): v for k, v in npi.get("raw_settings", {}).items()}
     refresh_hz = _get_primary_refresh_hz(specs)
 
-    # Run all sub-checks
     sub_findings = [
-        _check_gsync(npi, raw_settings, ),
+        _check_gsync(npi, raw_settings),
         _check_vsync(npi, raw_settings),
         _check_fps_cap(npi, raw_settings, refresh_hz),
         _check_rebar_driver(npi, raw_settings, bios_rebar),
@@ -268,11 +265,9 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
             "sub_findings": sub_findings,
         }
 
-    # Build summary of what's wrong
     names = [f["name"] for f in failed]
     summary = ", ".join(names)
 
-    # Build current/expected for the finding
     expected_fps = calculate_fps_cap(refresh_hz) if refresh_hz else None
     gpu_gen = _get_gpu_generation(gpu_name)
     dlss_info = DLSS_PRESETS.get(gpu_gen) if gpu_gen else None

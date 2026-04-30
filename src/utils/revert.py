@@ -198,7 +198,7 @@ def _revert_game_mode(entry: dict) -> tuple[bool, str]:
 
 def _revert_nvidia_profile(entry: dict) -> tuple[bool, str]:
     from src.agent_tools.nvidia_profile_setter import apply_nvidia_profile
-    from src.collectors.sub.nvidia_profile_dumper import find_npi_exe
+    from src.utils.nvidia_npi import find_npi_exe
 
     backup_path = entry.get("before_backup")
     if not backup_path:
