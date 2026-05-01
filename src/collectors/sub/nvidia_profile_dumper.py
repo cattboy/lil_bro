@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 from typing import Any
 
 from ...utils.action_logger import action_logger
-from ...utils.errors import SetterError
+from ...utils.errors import NvapiInitError, SetterError
 from ...utils.nvidia_npi import (
     DLSS_LETTER_MAP,
     SETTING_IDS,
@@ -97,15 +97,14 @@ def get_nvidia_profile() -> dict[str, Any]:
         except FileNotFoundError:
             action_logger.log_action("NPI Collector", "Skipped", "binary not found at runtime", outcome="SKIP")
             return {"available": False, "reason": "NPI binary not found"}
+        except NvapiInitError:
+            action_logger.log_action(
+                "NPI Collector", "Skipped",
+                "no NVIDIA GPU detected -- NVAPI failed to initialize", outcome="SKIP",
+            )
+            return {"available": False, "reason": "No NVIDIA GPU detected"}
         except SetterError as e:
             msg = str(e)
-            # rc 3221225477 (0xC0000005) + DrsSession NullRef = NVAPI failed to init (no NVIDIA GPU)
-            if "rc=3221225477" in msg and "DrsSession" in msg:
-                action_logger.log_action(
-                    "NPI Collector", "Skipped",
-                    "no NVIDIA GPU detected -- NVAPI failed to initialize", outcome="SKIP",
-                )
-                return {"available": False, "reason": "No NVIDIA GPU detected"}
             action_logger.log_action("NPI Collector", "Failed", msg, outcome="FAIL")
             return {"available": True, "error": msg}
         except (ET.ParseError, UnicodeDecodeError, ValueError) as e:

@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 from .action_logger import action_logger
-from .errors import SetterError
+from .errors import NvapiInitError, SetterError
 from .nip_io import parse_nip_with_retry, wait_for_nip_ready
 from .paths import get_lil_bro_dir
 
@@ -111,8 +111,10 @@ def export_current_profile(npi_exe: str, dest_dir: str) -> tuple[str, dict[int, 
     paths). The .nip is written there, waited on for write completion, then
     moved into ``dest_dir`` so the caller's TemporaryDirectory handles cleanup.
 
-    Raises ``SetterError`` on subprocess failure, missing .nip, or readiness
-    timeout. Parse failures propagate from ``parse_nip_with_retry``.
+    Raises ``NvapiInitError`` when NVAPI fails to initialize (rc 3221225477 +
+    DrsSession in stderr -- the AMD-only-system signature). Other subprocess
+    failures, missing .nip, and readiness timeouts raise ``SetterError``.
+    Parse failures propagate from ``parse_nip_with_retry``.
     """
     npi_dir = Path(npi_exe).parent
 
@@ -124,7 +126,11 @@ def export_current_profile(npi_exe: str, dest_dir: str) -> tuple[str, dict[int, 
     )
     if result.returncode != 0:
         stderr = result.stderr.decode(errors="replace").strip()
-        raise SetterError(f"NPI export failed (rc={result.returncode}): {stderr}")
+        msg = f"NPI export failed (rc={result.returncode}): {stderr}"
+        # rc 3221225477 (0xC0000005) + DrsSession NullRef = NVAPI failed to init (no NVIDIA GPU)
+        if result.returncode == 3221225477 and "DrsSession" in stderr:
+            raise NvapiInitError(msg)
+        raise SetterError(msg)
 
     nip_files = list(npi_dir.glob("*.nip"))
     action_logger.log_action(
