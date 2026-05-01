@@ -100,7 +100,7 @@ _DEFAULT_CONFIG_TEMPLATE = """\
 
     "benchmark": {
         // Maximum seconds to wait for a Cinebench run before aborting.
-        "cinebench_timeout": 600,
+        "cinebench_timeout": 6000,
 
         // Duration (seconds) for the CPU stress-test fallback
         // (used when Cinebench is unavailable).
