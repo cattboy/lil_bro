@@ -16,11 +16,12 @@ Priority 1 scope (9 files), Priority 2-A scope (7 files + 2 new test files), and
 - `tests/test_phase_final.py` — 3 new tests (runner=None, thermal gate, happy path)
 
 ### Issue 2.1 — calculate_fps_cap duplicated in nvidia_profile.py and nvidia_profile_setter.py
-**Fix**: Single canonical definition in `nvidia_profile_dumper.py`; both callers import from there.
-- `src/collectors/sub/nvidia_profile_dumper.py` — authoritative `calculate_fps_cap()` added
-- `src/agent_tools/nvidia_profile.py` — local definition removed, import updated
-- `src/agent_tools/nvidia_profile_setter.py` — local definition removed, import updated
-- `tests/test_nvidia_profile.py` — `test_setter_matches_analyzer` → `test_single_canonical_definition`
+**Fix**: Single canonical definition in `src/utils/nvidia_npi.py` (consolidated 2026-05); both callers import from there.
+- `src/utils/nvidia_npi.py` — authoritative `calculate_fps_cap()` lives here alongside `SETTING_IDS`, `TARGET_VALUES`, `find_npi_exe`, `export_current_profile`
+- `src/agent_tools/nvidia_profile.py` — local definition removed, imports from `src.utils.nvidia_npi`
+- `src/agent_tools/nvidia_profile_setter.py` — local definition removed, imports from `src.utils.nvidia_npi`
+- `src/collectors/sub/nvidia_profile_dumper.py` — also imports from `src.utils.nvidia_npi`
+- `tests/test_nvidia_profile.py` — `test_setter_matches_analyzer` → `test_single_canonical_definition` (later removed as vacuous after consolidation)
 
 ### Issue 2.3 — RuntimeError raised from setter code with no typed hierarchy
 **Fix**: `SetterError(LilBroError)` added to errors.py; 3 raise sites in nvidia_profile_setter.py updated.
