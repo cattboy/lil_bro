@@ -29,7 +29,7 @@ src/
     spec_dumper.py       — Aggregates all system data into unified JSON
     sub/                 — Individual collectors (WMI, dxdiag, nvidia-smi, EDID, monitor, NVIDIA Profile)
       lhm_sidecar.py     — LibreHardwareMonitor process lifecycle management
-      nvidia_profile_dumper.py — NVIDIA Profile Inspector profile extraction + setting ID lookups
+      nvidia_profile_dumper.py — NVIDIA Profile collector (uses utils/nvidia_npi.py for the shared export + setting-ID surface)
   agent_tools/           — Modular system checks (one file per check)
     display.py           — Monitor refresh rate analysis
     display_setter.py    — Applies refresh rate changes via Win32 ChangeDisplaySettingsEx
@@ -52,7 +52,9 @@ src/
     action_logger.py     — Singleton logger → ./lil_bro_actions.log (CWD root, survives cleanup; echoes to terminal). v2: outcome-tagged entries ([PASS]/[FAIL]/[APPROVED]/[SKIPPED]); log_fix_dispatch/log_fix_result/log_approval_decision helpers; session start/end anchored at app launch in main.py
     debug_logger.py      — Persistent stdlib debug logger → ./lil_bro_debug.log; disabled by default, enabled via --debug flag
     dump_parser.py       — Extracts slim hardware summary from full_specs.json for LLM
-    errors.py            — LilBroError, AdminRequiredError, ScannerError, RestorePointError
+    errors.py            — Typed exception hierarchy: LilBroError, AdminRequiredError, ScannerError, RestorePointError, SetterError, NvapiInitError (subclass of SetterError, signals AMD-only-system case)
+    nvidia_npi.py        — Single source of truth for NVIDIA Profile Inspector helpers: SETTING_IDS, TARGET_VALUES, DLSS_LETTER_MAP, DLSS_PRESETS, find_npi_exe, calculate_fps_cap, export_current_profile (used by the dumper, the agent_tool, fix_dispatch, and revert)
+    nip_io.py            — .nip XML parsing (parse_nip, parse_nip_with_retry) + Windows file-handle readiness wait (wait_for_nip_ready)
     formatting.py        — Colorama terminal UI helpers (print_step, print_success, etc.)
     integrity.py         — SHA-256 exe hash verification (frozen builds only)
     paths.py             — Centralized CWD-relative path helper (lil_bro/ runtime dir, persistent log paths)
