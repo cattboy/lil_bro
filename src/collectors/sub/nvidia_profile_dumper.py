@@ -105,7 +105,8 @@ def get_nvidia_profile() -> dict[str, Any]:
             return {"available": False, "reason": "No NVIDIA GPU detected"}
         except SetterError as e:
             msg = str(e)
-            action_logger.log_action("NPI Collector", "Failed", msg, outcome="FAIL")
+            action = "NotReady" if "NPI .nip not ready after" in msg else "Failed"
+            action_logger.log_action("NPI Collector", action, msg, outcome="FAIL")
             return {"available": True, "error": msg}
         except (ET.ParseError, UnicodeDecodeError, ValueError) as e:
             action_logger.log_action("NPI Collector", "ParseError", str(e), outcome="FAIL")

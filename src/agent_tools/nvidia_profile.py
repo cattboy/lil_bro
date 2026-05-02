@@ -241,7 +241,10 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
     # JSON serialisation forces dict keys to strings, so raw_settings reloaded
     # from full_specs.json arrives with str keys. SETTING_IDS values are ints,
     # so normalise here before the sub-checkers do `raw.get(int_sid)`.
-    raw_settings = {int(k): v for k, v in npi.get("raw_settings", {}).items()}
+    try:
+        raw_settings = {int(k): v for k, v in npi.get("raw_settings", {}).items()}
+    except (ValueError, TypeError):
+        raw_settings = {}
     refresh_hz = _get_primary_refresh_hz(specs)
 
     sub_findings = [

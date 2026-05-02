@@ -18,8 +18,6 @@ class SetterError(LilBroError):
     """Raised when a fix/setter operation fails to apply a system change."""
     pass
 
-
-
 class NvapiInitError(SetterError):
     """Raised when NPI fails to initialize NVAPI -- typically no NVIDIA GPU present.
 

@@ -170,7 +170,7 @@ class TestGetNvidiaProfile:
         from src.collectors.sub.nvidia_profile_dumper import get_nvidia_profile
         import src.collectors.sub.nvidia_profile_dumper as mod
         with patch.object(mod, "find_npi_exe", return_value="npi.exe"):
-            with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("npi.exe", 15)):
+            with patch("src.utils.nvidia_npi.subprocess.run", side_effect=subprocess.TimeoutExpired("npi.exe", 15)):
                 r = get_nvidia_profile()
         assert r["available"] is True
         assert "timed out" in r["error"]
@@ -180,7 +180,7 @@ class TestGetNvidiaProfile:
         import src.collectors.sub.nvidia_profile_dumper as mod
         mock_result = MagicMock(returncode=1, stderr=b"error msg")
         with patch.object(mod, "find_npi_exe", return_value="npi.exe"):
-            with patch("subprocess.run", return_value=mock_result):
+            with patch("src.utils.nvidia_npi.subprocess.run", return_value=mock_result):
                 r = get_nvidia_profile()
         assert "NPI export failed" in r["error"]
 
@@ -189,7 +189,7 @@ class TestGetNvidiaProfile:
         import src.collectors.sub.nvidia_profile_dumper as mod
         mock_result = MagicMock(returncode=0)
         with patch.object(mod, "find_npi_exe", return_value="npi.exe"):
-            with patch("subprocess.run", return_value=mock_result):
+            with patch("src.utils.nvidia_npi.subprocess.run", return_value=mock_result):
                 # no .nip files written to tmpdir
                 r = get_nvidia_profile()
         assert "no .nip file" in r["error"]
@@ -203,7 +203,7 @@ class TestGetNvidiaProfile:
             return MagicMock(returncode=0)
 
         with patch.object(mod, "find_npi_exe", return_value="npi.exe"):
-            with patch("subprocess.run", side_effect=fake_run):
+            with patch("src.utils.nvidia_npi.subprocess.run", side_effect=fake_run):
                 r = get_nvidia_profile()
 
         assert r["available"] is True
@@ -227,7 +227,7 @@ class TestGetNvidiaProfile:
             stderr=b"NullReferenceException at DrsSession.set_DRSSettings\n",
         )
         with patch.object(mod, "find_npi_exe", return_value="npi.exe"):
-            with patch("subprocess.run", return_value=mock_result):
+            with patch("src.utils.nvidia_npi.subprocess.run", return_value=mock_result):
                 r = get_nvidia_profile()
         assert r == {"available": False, "reason": "No NVIDIA GPU detected"}
 
@@ -245,7 +245,7 @@ class TestGetNvidiaProfile:
             stderr=b"some other native crash\n",
         )
         with patch.object(mod, "find_npi_exe", return_value="npi.exe"):
-            with patch("subprocess.run", return_value=mock_result):
+            with patch("src.utils.nvidia_npi.subprocess.run", return_value=mock_result):
                 r = get_nvidia_profile()
         assert r["available"] is True
         assert "NPI export failed" in r["error"]
@@ -282,7 +282,7 @@ class TestNvapiInitError:
             returncode=3221225477,
             stderr=b"NullReferenceException at DrsSession.set_DRSSettings\n",
         )
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("src.utils.nvidia_npi.subprocess.run", return_value=mock_result):
             with pytest.raises(NvapiInitError, match="NPI export failed"):
                 export_current_profile("npi.exe", str(tmp_path))
 
@@ -291,7 +291,7 @@ class TestNvapiInitError:
         from src.utils.nvidia_npi import export_current_profile
         from src.utils.errors import NvapiInitError, SetterError
         mock_result = MagicMock(returncode=1, stderr=b"some other failure")
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("src.utils.nvidia_npi.subprocess.run", return_value=mock_result):
             with pytest.raises(SetterError) as excinfo:
                 export_current_profile("npi.exe", str(tmp_path))
         assert not isinstance(excinfo.value, NvapiInitError)
@@ -795,3 +795,4 @@ class TestParseNipRetry:
         monkeypatch.setattr(nip_io.time, "sleep", lambda *_: None)
         with pytest.raises(UnicodeDecodeError):
             nip_io.parse_nip_with_retry("ignored", attempts=2, delay=0.01)
+

@@ -147,7 +147,11 @@ def export_current_profile(npi_exe: str, dest_dir: str) -> tuple[str, dict[int, 
     # Wait for NPI's child writer to finish in-place BEFORE moving. Moving a
     # file with an open writer handle can orphan bytes on Windows.
     original = nip_files[0]
-    wait_for_nip_ready(str(original))
+    try:
+        wait_for_nip_ready(str(original))
+    except SetterError:
+        original.unlink(missing_ok=True)
+        raise
 
     target = Path(dest_dir) / original.name
     shutil.move(str(original), str(target))

@@ -15,14 +15,12 @@ the rare case where readiness passes but decode still hiccups.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import time
 import xml.etree.ElementTree as ET
 
 from .action_logger import action_logger
 from .errors import SetterError
-
-from pathlib import Path
-
 
 _UTF16_LE_BOM = b"\xff\xfe"
 _CLOSING_TAG = "</ArrayOfProfile>"
