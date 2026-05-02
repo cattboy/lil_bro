@@ -365,11 +365,11 @@ class BenchmarkRunner:
 
         except subprocess.TimeoutExpired:
             print_step_done(False)
-            print_error("Cinebench timed out after 10 minutes.")
+            print_error("Cinebench timed out, timeout can be increased in lil_bro_config.json -> cinebench_timeout")
             action_logger.log_action(
                 "Cinebench",
                 "Benchmark timed out",
-                details="Cinebench did not complete within 10 minutes.",
+                details="Cinebench did not complete within timeperiod, update lil_bro_config.json -> cinebench_timeout",
                 outcome="FAIL",
             )
             return {"status": "error", "benchmark": "cinebench", "message": "Timed out"}
