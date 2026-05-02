@@ -185,3 +185,117 @@ def test_run_benchmark_no_cinebench_skipped(mock_find):
     assert result["status"] == "skipped"
     assert result["benchmark"] == "cinebench"
     assert "Cinebench.exe" in result["message"]
+
+
+
+# ── abort/timeout taskkill paths ──────────────────────────────────────────────
+
+
+def _make_first_event_preset_factory():
+    """Returns a side_effect that yields a pre-set Event on the first call only.
+
+    Patching ``threading.Event`` globally would break ``Thread.start()`` (which
+    creates its own internal Events for ``_started``/``_stopped`` and crashes
+    if those come back already set). We only want to override the FIRST Event
+    created inside ``_run_cinebench`` -- the abort_event -- so subsequent
+    Event() calls (Thread internals, watchdog, etc.) get real Events.
+    """
+    import threading
+    real_event_cls = threading.Event
+    preset = real_event_cls()
+    preset.set()
+    call_count = [0]
+
+    def factory():
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return preset
+        return real_event_cls()
+
+    return factory
+
+
+@patch("src.benchmarks.cinebench.prompt_approval", return_value=True)
+@patch("src.benchmarks.cinebench.Path.read_text", return_value="")
+@patch("src.benchmarks.cinebench.Path.write_text")
+@patch("src.benchmarks.cinebench.Path.exists", return_value=True)
+@patch("src.benchmarks.cinebench.subprocess.run")
+@patch("src.benchmarks.cinebench.subprocess.Popen")
+@patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
+def test_run_cinebench_user_abort_taskkills_cb_image_name(
+    mock_isfile, mock_popen, mock_run, mock_exists, mock_write, mock_read, mock_approve,
+):
+    """User abort path must taskkill /IM Cinebench.exe -- it's detached from proc.pid via 'start /b'."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    mock_proc.pid = 4242
+    mock_popen.return_value = mock_proc
+
+    factory = _make_first_event_preset_factory()
+    with patch("src.benchmarks.cinebench.threading.Event", side_effect=factory):
+        runner = BenchmarkRunner(cinebench_path=r"C:\CB\Cinebench.exe")
+        result = runner.run_benchmark(full_suite=False)
+
+    assert result["status"] == "aborted"
+    assert result["benchmark"] == "cinebench"
+
+    # Both taskkills must fire on abort: /T to kill the cmd.exe tree, /IM to
+    # kill Cinebench.exe (which 'start /b /wait' detached from proc's tree).
+    taskkill_calls = [c.args[0] for c in mock_run.call_args_list]
+    assert ["taskkill", "/F", "/T", "/PID", "4242"] in taskkill_calls
+    assert ["taskkill", "/F", "/IM", "Cinebench.exe"] in taskkill_calls
+    mock_proc.kill.assert_called_once()
+
+
+@patch("src.benchmarks.cinebench._CINEBENCH_TIMEOUT", 0)
+@patch("src.benchmarks.cinebench._keyboard_abort_watcher")
+@patch("src.benchmarks.cinebench.prompt_approval", return_value=True)
+@patch("src.benchmarks.cinebench.Path.read_text", return_value="")
+@patch("src.benchmarks.cinebench.Path.write_text")
+@patch("src.benchmarks.cinebench.Path.exists", return_value=True)
+@patch("src.benchmarks.cinebench.subprocess.run")
+@patch("src.benchmarks.cinebench.subprocess.Popen")
+@patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
+def test_run_cinebench_timeout_taskkills_cb_image_name(
+    mock_isfile, mock_popen, mock_run, mock_exists, mock_write, mock_read,
+    mock_approve, mock_watcher,
+):
+    """Watchdog timeout path must also taskkill /IM Cinebench.exe, mirroring the abort path."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = None
+    mock_proc.pid = 7373
+    mock_popen.return_value = mock_proc
+
+    runner = BenchmarkRunner(cinebench_path=r"C:\CB\Cinebench.exe")
+    result = runner.run_benchmark(full_suite=False)
+
+    # Timeout raises subprocess.TimeoutExpired internally, caught and reported as error.
+    assert result["status"] == "error"
+    assert result["benchmark"] == "cinebench"
+    assert result["message"] == "Timed out"
+
+    taskkill_calls = [c.args[0] for c in mock_run.call_args_list]
+    assert ["taskkill", "/F", "/T", "/PID", "7373"] in taskkill_calls
+    assert ["taskkill", "/F", "/IM", "Cinebench.exe"] in taskkill_calls
+
+
+def test_minimize_cinebench_window_returns_when_abort_set():
+    """Pre-set abort_event short-circuits the polling loop without touching Win32 APIs.
+
+    This pins the contract that the helper checks ``abort_event`` BEFORE its
+    first EnumWindows call -- so the parent run loop can shut the helper down
+    cleanly when the benchmark aborts/finishes.
+    """
+    import threading
+    import time
+    from src.benchmarks.cinebench import _minimize_cinebench_window
+
+    abort_event = threading.Event()
+    abort_event.set()
+
+    start = time.monotonic()
+    _minimize_cinebench_window("Cinebench.exe", 60.0, abort_event)
+    elapsed = time.monotonic() - start
+
+    # Should be near-instant; if the loop ran even once it would sleep 1 s.
+    assert elapsed < 0.5, f"helper did not short-circuit on pre-set abort_event ({elapsed:.3f}s)"

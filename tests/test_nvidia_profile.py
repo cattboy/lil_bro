@@ -212,8 +212,90 @@ class TestGetNvidiaProfile:
         assert r["vsync_mode"] == "off"
         assert r["gsync_enabled"] is False
 
+    def test_returns_no_gpu_when_nvapi_init_fails(self):
+        """rc=3221225477 + DrsSession in stderr is the AMD-only-system signature.
+
+        NPI exits with access-violation (0xC0000005) when NVAPI fails to initialize,
+        which happens on systems with no NVIDIA GPU. The collector must detect this
+        case via NvapiInitError and report ``available=False`` with a clean reason
+        rather than surfacing a raw subprocess error.
+        """
+        from src.collectors.sub.nvidia_profile_dumper import get_nvidia_profile
+        import src.collectors.sub.nvidia_profile_dumper as mod
+        mock_result = MagicMock(
+            returncode=3221225477,
+            stderr=b"NullReferenceException at DrsSession.set_DRSSettings\n",
+        )
+        with patch.object(mod, "find_npi_exe", return_value="npi.exe"):
+            with patch("subprocess.run", return_value=mock_result):
+                r = get_nvidia_profile()
+        assert r == {"available": False, "reason": "No NVIDIA GPU detected"}
+
+    def test_other_access_violations_still_surface_as_setter_error(self):
+        """rc=3221225477 without DrsSession in stderr is NOT the no-NVIDIA case.
+
+        Only the (rc, stderr) pair that matches the canonical NVAPI-init signature
+        should trigger NvapiInitError. A bare access violation from any other source
+        must still surface as a generic NPI export failure.
+        """
+        from src.collectors.sub.nvidia_profile_dumper import get_nvidia_profile
+        import src.collectors.sub.nvidia_profile_dumper as mod
+        mock_result = MagicMock(
+            returncode=3221225477,
+            stderr=b"some other native crash\n",
+        )
+        with patch.object(mod, "find_npi_exe", return_value="npi.exe"):
+            with patch("subprocess.run", return_value=mock_result):
+                r = get_nvidia_profile()
+        assert r["available"] is True
+        assert "NPI export failed" in r["error"]
+
 
 # ── 4. FPS cap formula ───────────────────────────────────────────────────────
+
+class TestNvapiInitError:
+    """NvapiInitError subclass + export_current_profile raise-site coverage.
+
+    The whole reason this subclass exists: callers can detect the AMD-only-system
+    case (rc=3221225477 + DrsSession in stderr) without string-matching the
+    formatted error message. These tests pin that contract.
+    """
+
+    def test_is_setter_error_subclass(self):
+        """NvapiInitError must inherit from SetterError so existing handlers match it.
+
+        get_nvidia_profile catches NvapiInitError BEFORE its except SetterError block
+        on purpose -- but if anything regresses the inheritance, code that catches
+        SetterError as a fallback would silently miss the no-GPU case.
+        """
+        from src.utils.errors import NvapiInitError, SetterError
+        assert issubclass(NvapiInitError, SetterError)
+        err = NvapiInitError("nvapi failed")
+        assert isinstance(err, SetterError)
+        assert str(err) == "nvapi failed"
+
+    def test_export_raises_nvapi_init_error_on_amd_signature(self, tmp_path):
+        """export_current_profile distinguishes the AMD-only signature from generic failures."""
+        from src.utils.nvidia_npi import export_current_profile
+        from src.utils.errors import NvapiInitError
+        mock_result = MagicMock(
+            returncode=3221225477,
+            stderr=b"NullReferenceException at DrsSession.set_DRSSettings\n",
+        )
+        with patch("subprocess.run", return_value=mock_result):
+            with pytest.raises(NvapiInitError, match="NPI export failed"):
+                export_current_profile("npi.exe", str(tmp_path))
+
+    def test_export_raises_setter_error_on_other_failures(self, tmp_path):
+        """Non-NVAPI failures (rc=1, etc.) must raise plain SetterError, not the subclass."""
+        from src.utils.nvidia_npi import export_current_profile
+        from src.utils.errors import NvapiInitError, SetterError
+        mock_result = MagicMock(returncode=1, stderr=b"some other failure")
+        with patch("subprocess.run", return_value=mock_result):
+            with pytest.raises(SetterError) as excinfo:
+                export_current_profile("npi.exe", str(tmp_path))
+        assert not isinstance(excinfo.value, NvapiInitError)
+
 
 class TestCalculateFpsCap:
     @pytest.mark.parametrize("hz,expected", [
