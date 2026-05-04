@@ -2,6 +2,28 @@
 
 All notable changes to lil_bro are documented here.
 
+## [0.1.1.0] - 2026-05-03
+
+### Fixed
+- **NVIDIA settings no longer falsely report as "misconfigured" after a saved-specs reload.** When `full_specs.json` was round-tripped through JSON, integer setting keys came back as strings, so every sub-checker silently read `None` and flagged the setting as wrong. Now the analyzer normalizes keys back to ints before comparing.
+- **Cinebench actually shuts down when you abort it.** `start /b /wait` detaches Cinebench from the parent `cmd.exe` tree, so the previous `taskkill /T /PID` left a zombie `Cinebench.exe` running. Both the user-abort (Q/Enter) and watchdog-timeout paths now also issue `taskkill /IM Cinebench.exe`.
+- **Cinebench window minimizes promptly even with the splash screen up.** Previously the title-based matcher missed the first ~100 s of the run because Cinebench 2026's splash window has no "cinebench" substring in its title. Now the helper matches by owning-process executable name and catches the splash within a couple of seconds of launch.
+- **AMD-only systems get a clean "No NVIDIA GPU detected" message** instead of a raw subprocess error. NPI exits with `rc=3221225477` + a `DrsSession` NullRef in stderr when NVAPI fails to initialize; the collector now surfaces that as a structured error rather than reporting it as a generic NPI failure.
+
+### Changed
+- **NPI helpers consolidated into a single module.** `SETTING_IDS`, `TARGET_VALUES`, `DLSS_LETTER_MAP`, `DLSS_PRESETS`, `find_npi_exe`, `calculate_fps_cap`, and the new shared `export_current_profile` all live in `src/utils/nvidia_npi.py`. Net deletion of ~80 lines despite the new file: `nvidia_profile_dumper.py` shrinks 269→124, `nvidia_profile_setter.py` shrinks 287→221.
+- `parse_nip` moved into `src/utils/nip_io.py`, killing the function-scope `from ..collectors.sub.nvidia_profile_dumper import parse_nip` workaround that papered over a circular import.
+- `cinebench_timeout` default bumped from 600 s → 6000 s to support full-suite runs on thermally-throttled systems without false watchdog kills (single-test mode usually finishes in 10–30 minutes; full suite + slow hardware can run an hour-plus).
+- `NvapiInitError(SetterError)` typed exception added to `src/utils/errors.py` so callers detect AMD-only systems by class match rather than string-matching the formatted error message.
+
+### For contributors
+- 450 tests total, all passing (was 442). 8 new tests cover the NvapiInitError raise/catch path, NvapiInitError subclass relationship, Cinebench user-abort taskkill, watchdog-timeout taskkill, and `_minimize_cinebench_window` abort short-circuit.
+- `docs/DONE.md` (Issue 2.1) and Serena memory files updated to point at `src/utils/nvidia_npi.py` as the canonical home for the consolidated helpers.
+- `CLAUDE.md` SETTING_IDS reference now points at the new module.
+- `dist/lil_bro.exe` rebuilt against this branch.
+
+---
+
 ## [0.1.0.0] - 2026-04-16
 
 ### Added

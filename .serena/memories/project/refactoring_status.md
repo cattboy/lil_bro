@@ -32,7 +32,7 @@ These were deliberately rejected or deferred in engineering review:
 - Issue 1.2: `_SKIP_RESULT_HOT` constant; ctx fields moved inside guard in `phase_baseline.py`
 - Issue 1.3: LLM type annotations in `_state.py`, `phases.py`, `action_proposer.py`
 - Issue 1.4: `run_thermal_guard()` combinator in `thermal_gate.py`; `phase_final.py` uses it
-- Issue 2.1: `calculate_fps_cap()` canonical in `nvidia_profile_dumper.py`
+- Issue 2.1: `calculate_fps_cap()` canonical in `src/utils/nvidia_npi.py` (consolidated 2026-05; alongside `SETTING_IDS`, `TARGET_VALUES`, `find_npi_exe`, `export_current_profile`)
 - Issue 2.3: `SetterError` added to `errors.py`; `RuntimeError` → `SetterError` in `nvidia_profile_setter.py`
 - Issue 3.2: `src/config.py` with `BenchmarkConfig`, `ThermalConfig`, `AppConfig` + JSON override
 - T-003: `DEVMODE` + `enum_raw_modes()` canonical in `display_utils.py`

@@ -49,7 +49,8 @@
       "mcp__serena__search_for_pattern",
       "mcp__serena__write_memory",
       "Bash(uv venv:*)",
-      "Bash(uv pip:*)"
+      "Bash(uv pip:*)",
+      "Bash(grep -n \"_refocus_console_window\" src/benchmarks/cinebench.py)"
     ]
   },
   "enabledMcpjsonServers": [
@@ -76,7 +77,8 @@
     "claude-md-management@claude-plugins-official": true,
     "claude-code-setup@claude-plugins-official": true,
     "serena@claude-plugins-official": false,
-    "claude-hud@claude-hud": true
+    "claude-hud@claude-hud": true,
+    "code-review@claude-plugins-official": true
   },
   "prefersReducedMotion": false
 }

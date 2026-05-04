@@ -45,7 +45,7 @@ class TestFinalBenchPhaseRunnerGuard:
         """Phase 5 calls run_benchmark when runner exists and thermals are safe."""
         mock_runner = MagicMock()
         mock_runner.run_benchmark.return_value = {"status": "success", "scores": {"single": 100}}
-        ctx = _make_ctx(runner=mock_runner, lhm_available=True)
+        ctx = _make_ctx(runner=mock_runner, lhm_available=True, baseline_result={"status": "success"})
         ctx.thermal = MagicMock()
         phase = FinalBenchPhase()
         result = phase.run(ctx)

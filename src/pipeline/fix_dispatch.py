@@ -220,7 +220,7 @@ def _fix_game_mode(specs: dict) -> bool:
 def _fix_nvidia_profile(specs: dict) -> bool:
     """Applies optimized NVIDIA driver profile via NPI."""
     from src.agent_tools.nvidia_profile_setter import backup_nvidia_profile, fix_nvidia_profile
-    from src.collectors.sub.nvidia_profile_dumper import find_npi_exe
+    from src.utils.nvidia_npi import find_npi_exe
 
     npi_exe = find_npi_exe()
     backup_path: str | None = None

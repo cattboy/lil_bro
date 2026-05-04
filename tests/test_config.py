@@ -10,7 +10,7 @@ class TestConfigDefaults:
     def test_benchmark_defaults(self):
         from src.config import BenchmarkConfig
         b = BenchmarkConfig()
-        assert b.cinebench_timeout == 600
+        assert b.cinebench_timeout == 6000
         assert b.stress_test_duration == 30
 
     def test_thermal_defaults(self):
@@ -53,7 +53,7 @@ class TestConfigFileLoading:
         config_file.write_text("{ this is not valid json }", encoding="utf-8")
         from src.config import _load_config
         result = _load_config()
-        assert result.benchmark.cinebench_timeout == 600
+        assert result.benchmark.cinebench_timeout == 6000
         assert result.thermal.watchdog_threshold == 95.0
 
     def test_partial_override_leaves_other_defaults_intact(self, tmp_path, monkeypatch):
@@ -75,7 +75,7 @@ class TestConfigFileLoading:
         config_file.write_text("{}", encoding="utf-8")
         from src.config import _load_config
         result = _load_config()
-        assert result.benchmark.cinebench_timeout == 600
+        assert result.benchmark.cinebench_timeout == 6000
 
     def test_jsonc_comments_ignored_during_load(self, tmp_path, monkeypatch):
         """JSONC comment lines in config file are silently stripped."""
@@ -149,7 +149,7 @@ class TestSaveDefaultConfig:
         from src.config import save_default_config, _load_config
         save_default_config()
         result = _load_config()
-        assert result.benchmark.cinebench_timeout == 600
+        assert result.benchmark.cinebench_timeout == 6000
         assert result.benchmark.stress_test_duration == 30
         assert result.thermal.watchdog_threshold == 95.0
         assert result.thermal.poll_interval == 1.0

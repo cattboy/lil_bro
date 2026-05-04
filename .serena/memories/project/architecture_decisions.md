@@ -5,7 +5,7 @@ Plan: `docs/REFACTORING_PLAN.md` | Progress: `docs/DONE.md`
 
 ## Completed (Priority 1 + 2-A)
 - Issue 1.1: Phase 5 null guard for ctx.runner
-- Issue 2.1: calculate_fps_cap() canonical in nvidia_profile_dumper.py
+- Issue 2.1: calculate_fps_cap() canonical in src/utils/nvidia_npi.py (consolidated 2026-05; alongside SETTING_IDS, TARGET_VALUES, find_npi_exe, export_current_profile)
 - Issue 2.3: SetterError added to errors.py; RuntimeError → SetterError in nvidia_profile_setter.py
 - Issue 3.2: src/config.py with BenchmarkConfig, ThermalConfig, AppConfig + JSON override
 - T-004: PipelineContext.llm typed as Optional[Llama] in base.py

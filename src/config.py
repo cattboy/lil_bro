@@ -39,7 +39,7 @@ def _strip_jsonc(text: str) -> str:
 
 @dataclass
 class BenchmarkConfig:
-    cinebench_timeout: int = 6000      # seconds before Cinebench run is aborted
+    cinebench_timeout: int = 6000      # ~100min; accommodates full-suite mode on slow / thermal-limited systems
     stress_test_duration: int = 30    # seconds for CPU stress fallback
 
 
@@ -100,7 +100,8 @@ _DEFAULT_CONFIG_TEMPLATE = """\
 
     "benchmark": {
         // Maximum seconds to wait for a Cinebench run before aborting.
-        "cinebench_timeout": 600,
+        // 6000s (~100min) accommodates full-suite mode on slow / thermal-limited systems.
+        "cinebench_timeout": 6000,
 
         // Duration (seconds) for the CPU stress-test fallback
         // (used when Cinebench is unavailable).
