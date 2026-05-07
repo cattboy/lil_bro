@@ -39,17 +39,37 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Revert the last lil_bro session without running the full pipeline.",
     )
+    parser.add_argument(
+        "--terminal",
+        action="store_true",
+        help=(
+            "Run the legacy terminal CLI in the calling console. Without "
+            "this flag, lil_bro launches the windowed GUI."
+        ),
+    )
     return parser.parse_args()
 
 
 def main():
     multiprocessing.freeze_support()
+    args = _parse_args()
+
+    if not args.terminal:
+        # Default launch (no flag, double-click, shortcut) → windowed GUI.
+        from src.gui.app import run as run_gui
+        sys.exit(run_gui())
+
+    # --terminal mode: bind stdio to the calling console (or pop a fresh
+    # one) before any print() happens, then fall through to the legacy
+    # CLI flow byte-equivalent to today's build.
+    from src import console_attach
+    console_attach.attach()
+
     # Harden stdout against UnicodeEncodeError on CP437 terminals (Windows CMD).
     import io
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(errors="replace")
     action_logger._echo_fn = print_dim
-    args = _parse_args()
 
     if args.debug:
         from src.utils.debug_logger import enable_debug_logging, get_debug_logger
