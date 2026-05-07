@@ -22,6 +22,29 @@ from src.utils.formatting import _ASCII_FALLBACK
 _FPS = 10  # animation redraws per second
 
 
+# --- Progress sink registry ----------------------------------------------
+# CLI mode: ``_PROGRESS_SINK`` is None → the threaded ANSI plasma-sweep
+# animation runs as before. GUI mode: bridge.install() registers a
+# ``Callable[[int, str], None]`` that the per-phase QProgressBar widget
+# reads — the animation thread is not started, so no \r carriage returns
+# leak into the output panel during fix execution.
+_PROGRESS_SINK: "Callable[[int, str], None] | None" = None
+
+
+def set_progress_sink(sink) -> None:
+    """Install (or clear) the GUI progress sink.
+
+    Sink signature: ``sink(percent: int, label: str) -> None``. When set,
+    AnimatedProgressBar emits via the sink instead of running the ANSI
+    animation thread. Pass ``None`` to restore CLI behavior.
+    """
+    global _PROGRESS_SINK
+    _PROGRESS_SINK = sink
+
+
+from collections.abc import Callable  # noqa: E402  (deferred import for type ref above)
+
+
 class AnimatedProgressBar:
     """
     Terminal progress bar with a traveling glow animation.
@@ -63,6 +86,9 @@ class AnimatedProgressBar:
     # ── Public API ────────────────────────────────────────────────────────────
 
     def start(self) -> None:
+        if _PROGRESS_SINK is not None:
+            _PROGRESS_SINK(0, self._message or self.label)
+            return
         self._running = True
         self._thread = threading.Thread(target=self._animate, daemon=True)
         self._thread.start()
@@ -71,8 +97,14 @@ class AnimatedProgressBar:
         with self._lock:
             self._current = step
             self._message = message
+        if _PROGRESS_SINK is not None:
+            pct = int((step / self.total) * 100)
+            _PROGRESS_SINK(pct, message)
 
     def finish(self) -> None:
+        if _PROGRESS_SINK is not None:
+            _PROGRESS_SINK(100, self._message or "Complete")
+            return
         self._running = False
         if self._thread is not None:
             self._thread.join(timeout=1.0)
