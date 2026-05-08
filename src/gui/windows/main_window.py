@@ -26,6 +26,12 @@ from PySide6.QtWidgets import (
 )
 
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.gui.settings import Settings
+
+
 _PHASE_NAMES = (
     "1. Bootstrap",
     "2. Scan",
@@ -42,7 +48,7 @@ class MainWindow(QMainWindow):
     OUTPUT_INDEX = 1
 
     def __init__(self, parent: QWidget | None = None,
-                 settings: "Settings | None" = None) -> None:
+                 settings: Settings | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("lil_bro")
         self.setMinimumSize(1024, 720)

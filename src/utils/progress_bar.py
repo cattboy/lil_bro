@@ -42,8 +42,6 @@ def set_progress_sink(sink) -> None:
     _PROGRESS_SINK = sink
 
 
-from collections.abc import Callable  # noqa: E402  (deferred import for type ref above)
-
 
 class AnimatedProgressBar:
     """

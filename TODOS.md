@@ -38,6 +38,16 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
+### T-008 — Wire `--debug` flag through to GUI + add structured GUI debug logger
+**Priority:** P2
+**Effort:** M human / S with CC
+**Why:** `--debug` is parsed in `src/main.py` but only used on the `--terminal` branch (`enable_debug_logging()` / `get_debug_logger()` are called after the `if not args.terminal` early return). In windowed mode (`console=False` after step 12) stdout/stderr are routed to a null sink, so any unhandled exception in the Qt event loop dies silently — the lil_bro.exe "splash hangs at Ready" bug was hard to diagnose for exactly this reason. A real GUI debug pathway (file-backed log, exception hook on the main thread, optional verbose tracebacks) would have surfaced the root cause immediately.
+**Fix:** (1) Have `src/gui/app.run()` accept the parsed args (or read `sys.argv`) and call `enable_debug_logging()` before any Qt setup when `--debug` is set. (2) Install a `sys.excepthook` and `threading.excepthook` in GUI mode that route to the debug logger, so exceptions in QThread workers and queued slots aren't swallowed by the windowed-mode null stderr. (3) Optionally add a "Help → Open Debug Log" menu action in `MainWindow` so users can hand a log to support.
+**Blocked by:** Nothing. Target after the windowed-freeze fix lands (the `[GUI Startup]` action_logger breadcrumbs in `src/gui/app.py` are a stop-gap; this T-008 is the proper replacement).
+**Added:** 2026-05-08 (uncovered while diagnosing windowed-exe splash freeze)
+
+---
+
 ## Completed
 
 ### T-003 — Deduplicate DEVMODE struct + mode enumeration

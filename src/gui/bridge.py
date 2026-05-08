@@ -57,6 +57,8 @@ class GuiBridge(QObject):
         formatting.set_default_sink(self._emit_output)
         formatting.set_approval_handler(self._handle_approval)
         formatting.set_confirm_handler(self._handle_confirm)
+        formatting.set_pause_handler(self._handle_pause)
+        formatting.set_batch_selection_handler(self._handle_batch_selection)
         progress_bar.set_progress_sink(self._emit_progress)
         self._installed = True
 
@@ -64,6 +66,8 @@ class GuiBridge(QObject):
         formatting.set_default_sink(None)
         formatting.set_approval_handler(None)
         formatting.set_confirm_handler(None)
+        formatting.set_pause_handler(None)
+        formatting.set_batch_selection_handler(None)
         progress_bar.set_progress_sink(None)
         self._installed = False
 
@@ -102,8 +106,39 @@ class GuiBridge(QObject):
         self._answer_callback = None
         return result["value"]
 
-    def deliver_answer(self, value: bool) -> None:
-        """Called by the main thread (dialog accept/reject slot) to unblock the worker."""
+    def deliver_answer(self, value) -> None:
+        """Called by the main thread (dialog accept/reject slot) to unblock the worker.
+
+        ``value`` is bool for approval/confirm dialogs, list[int] for batch
+        selection. The worker-thread callback set up in ``_await_*_answer``
+        is responsible for typing it correctly.
+        """
         cb = self._answer_callback
         if cb is not None:
             cb(value)
+
+
+    # ── Pause + batch-selection handlers ───────────────────────────────
+
+    def _handle_pause(self, message: str) -> None:
+        """Auto-continue in GUI mode. CLI ``Press Enter`` prompts are no-ops here."""
+        return
+
+    def _handle_batch_selection(self, proposals: list, total: int) -> list[int]:
+        """Show ``BatchSelectionDialog`` (via signal) and wait for the selection."""
+        return self._await_list_answer(self.signals.batch_selection_requested, proposals)
+
+    def _await_list_answer(self, signal, payload) -> list:
+        loop = QEventLoop()
+        result: dict = {"value": []}
+
+        def _on_answer(answer) -> None:
+            result["value"] = list(answer or [])
+            loop.quit()
+
+        self._answer_callback = _on_answer
+        signal.emit(payload)
+        QTimer.singleShot(_DIALOG_TIMEOUT_MS, loop.quit)
+        loop.exec()
+        self._answer_callback = None
+        return result["value"]

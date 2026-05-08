@@ -23,6 +23,10 @@ from collections.abc import Callable
 _DEFAULT_SINK: Callable[[str], None] | None = None
 _APPROVAL_HANDLER: Callable[[str], bool] | None = None
 _CONFIRM_HANDLER: Callable[[str], bool] | None = None
+_PAUSE_HANDLER: Callable[[str], None] | None = None
+_BATCH_SELECTION_HANDLER: Callable[[list, int], list[int]] | None = None
+_PAUSE_HANDLER: Callable[[str], None] | None = None
+_BATCH_SELECTION_HANDLER: Callable[[list, int], list[int]] | None = None
 
 
 def set_default_sink(sink: Callable[[str], None] | None) -> None:
@@ -41,6 +45,25 @@ def set_confirm_handler(handler: Callable[[str], bool] | None) -> None:
     """Install (or clear) the confirm handler. ``None`` restores CLI input()."""
     global _CONFIRM_HANDLER
     _CONFIRM_HANDLER = handler
+
+
+def set_pause_handler(handler: Callable[[str], None] | None) -> None:
+    """Install (or clear) the pause handler. ``None`` restores CLI input()."""
+    global _PAUSE_HANDLER
+    _PAUSE_HANDLER = handler
+
+
+def set_batch_selection_handler(
+    handler: Callable[[list, int], list[int]] | None,
+) -> None:
+    """Install (or clear) the batch-selection handler. ``None`` restores CLI."""
+    global _BATCH_SELECTION_HANDLER
+    _BATCH_SELECTION_HANDLER = handler
+
+
+def get_batch_selection_handler() -> Callable[[list, int], list[int]] | None:
+    """Read the current batch-selection handler (None outside GUI mode)."""
+    return _BATCH_SELECTION_HANDLER
 
 
 def _emit(text: str, sink: Callable[[str], None] | None = None, end: str = "\n") -> None:
@@ -182,12 +205,32 @@ def prompt_approval(action_description: str) -> bool:
         return handler(action_description)
     print(f"\n{Fore.MAGENTA}{Style.BRIGHT}? Requires Approval:{Style.RESET_ALL} {action_description}")
     while True:
-        response = input(f"Proceed? [y/n]: ").strip().lower()
+        response = input("Proceed? [y/n]: ").strip().lower()
         if response in ['y', 'yes']:
             return True
         if response in ['n', 'no', '']:
             return False
         print(f"{Fore.RED}Invalid input. Please enter 'y' or 'n'.{Style.RESET_ALL}")
+
+
+def prompt_pause(message: str = "") -> None:
+    """Pause until the user acknowledges; auto-continues in GUI mode.
+
+    Late-lookup: reads ``_PAUSE_HANDLER`` at call time so a GUI bridge swap
+    reaches every caller. CLI fallback prints ``message`` (if any) via
+    ``print_prompt`` and then blocks on ``input()``. The GUI bridge handler
+    is a no-op so windowed mode never tries to read from a missing stdin.
+    """
+    handler = _PAUSE_HANDLER
+    if handler is not None:
+        handler(message)
+        return
+    if message:
+        print_prompt(message)
+    try:
+        input()
+    except (EOFError, RuntimeError, OSError):
+        pass  # no stdin available — skip silently
 
 
 def resize_console_window() -> None:
