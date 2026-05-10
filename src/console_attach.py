@@ -50,6 +50,18 @@ def attach() -> None:
 
     _rebind_stdio()
 
+    # Re-initialize colorama against the freshly-attached console stdout.
+    # ``src.utils.formatting`` calls ``colorama.init(autoreset=True)`` at
+    # import time, but in windowed PyInstaller mode that init runs against
+    # the bootloader's null stdio sink — the one we just replaced via
+    # _rebind_stdio() above. Without re-initialization, every print()
+    # downstream of attach() emits raw ESC[..m sequences.
+    try:
+        from colorama import init
+        init(autoreset=True)
+    except Exception:
+        pass
+
 
 def _rebind_stdio() -> None:
     """Point sys.stdin/stdout/stderr at the freshly-attached console."""

@@ -30,12 +30,30 @@ from src.utils.action_logger import action_logger
 
 def run() -> int:
     """Boot the GUI. Returns the QApplication exit code."""
+    import re
+
+    from PySide6.QtCore import QTimer
+
+    from src.agent_tools.thermal_guidance import derive_cpu_temp, derive_gpu_temp
+    from src.benchmarks.thermal_monitor import fetch_snapshot
     from src.gui.widgets.approval_dialog import ApprovalDialog
     from src.gui.widgets.batch_selection_dialog import BatchSelectionDialog
     from src.gui.widgets.confirm_dialog import ConfirmDialog
     from src.gui.worker import PipelineWorker
+    from src.utils.pawnio_check import is_pawnio_installed
+
+    ansi_re = re.compile(r"\x1b\[[0-9;]*m")
 
     action_logger.log_action("GUI Startup", "app.run() entry")
+
+    # Capture PawnIO state BEFORE the worker thread launches the LHM
+    # sidecar (which may install PawnIO). The CLI does the same in
+    # src/main.py so post_run_cleanup leaves the user's pre-existing
+    # PawnIO install in place.
+    try:
+        pawnio_was_preinstalled = is_pawnio_installed()
+    except Exception:
+        pawnio_was_preinstalled = False
 
     QApplication.setApplicationName("lil_bro")
     QApplication.setOrganizationName("lil_bro")
@@ -48,12 +66,6 @@ def run() -> int:
     settings = Settings()
     main = MainWindow(settings=settings)
 
-    # Iteration 4: show main synchronously, BEFORE the worker thread starts.
-    # Earlier iterations tried to call main.show()/splash.close()/splash.finish()
-    # from inside the queued _on_finished slot — every variant deadlocked the
-    # main thread on the first heavyweight Qt widget operation. Showing main
-    # upfront sidesteps that pattern entirely. Status updates from the worker
-    # thread land in main.statusBar() instead of a splash.
     action_logger.log_action("GUI Startup", "main.show before")
     main.show()
     action_logger.log_action("GUI Startup", "main.show after")
@@ -67,7 +79,6 @@ def run() -> int:
     thread.started.connect(orchestrator.run)
     orchestrator.finished.connect(thread.quit)
 
-    # Holder keeps long-lived QObjects alive across the run() scope.
     runtime: dict[str, object] = {
         "lhm": None,
         "bridge": bridge,
@@ -75,7 +86,6 @@ def run() -> int:
         "pipeline_worker": None,
     }
 
-    # Disable Run until the startup orchestrator has finished and LHM is ready.
     main._run_button.setEnabled(False)
     main.action_run_pipeline.setEnabled(False)
 
@@ -99,10 +109,18 @@ def run() -> int:
     def _on_finished(startup_lhm) -> None:
         action_logger.log_action("GUI Startup", "_on_finished entry")
         runtime["lhm"] = startup_lhm
+        # Re-enable the Run button OUTSIDE the chart try-block so any
+        # later chart/state failure can't strand it disabled.
         try:
-            main.statusBar().showMessage("Ready")
             main._run_button.setEnabled(True)
             main.action_run_pipeline.setEnabled(True)
+        except Exception:
+            pass
+        try:
+            main.statusBar().showMessage("Ready")
+            chart = getattr(main, "thermal_chart", None)
+            if chart is not None and startup_lhm is None:
+                chart.set_offline("Thermal monitor unavailable")
         except Exception as exc:
             action_logger.log_action(
                 "GUI Startup", "_on_finished EXC",
@@ -115,7 +133,7 @@ def run() -> int:
 
     def _show_approval_dialog(action_text: str) -> None:
         dialog = ApprovalDialog(action_text, parent=main)
-        approved = bool(dialog.exec())  # Accepted → True, Rejected → False
+        approved = bool(dialog.exec())
         bridge.deliver_answer(approved)
 
     def _show_confirm_dialog(question: str) -> None:
@@ -125,13 +143,12 @@ def run() -> int:
 
     def _show_batch_dialog(proposals: list) -> None:
         dialog = BatchSelectionDialog(proposals, parent=main)
-        dialog.exec()  # Accept/Reject — selected_indices() reflects the choice
+        dialog.exec()
         bridge.deliver_answer(dialog.selected_indices())
 
     def _on_pipeline_output(text: str) -> None:
-        # Last line wins on the status bar — minimal viable surfacing.
-        for line in text.splitlines():
-            line = line.strip()
+        for raw in text.splitlines():
+            line = ansi_re.sub("", raw).strip()
             if line:
                 main.statusBar().showMessage(line)
 
@@ -141,7 +158,6 @@ def run() -> int:
     bridge.signals.output_emitted.connect(_on_pipeline_output)
 
     def _start_pipeline() -> None:
-        # Guard against double-clicks while a pipeline is running.
         if runtime.get("pipeline_thread") is not None:
             return
         action_logger.log_action("Pipeline", "start requested")
@@ -191,10 +207,46 @@ def run() -> int:
     main._run_button.clicked.connect(_start_pipeline)
     main.action_run_pipeline.triggered.connect(_start_pipeline)
 
+    # Thermal polling — uses the real working API (fetch_snapshot from
+    # benchmarks.thermal_monitor + derive_*_temp from
+    # agent_tools.thermal_guidance). LHMSidecar.read_latest() does not
+    # exist; quick_status._read_temp's call to it always falls into
+    # except (note the # type: ignore at that call site).
+    # Timer starts unconditionally and no-ops until ``runtime["lhm"]``
+    # is populated by ``_on_finished``.
+    thermal_timer = QTimer(app)
+    thermal_timer.setInterval(2000)
+
+    def _poll_thermal() -> None:
+        chart = getattr(main, "thermal_chart", None)
+        if chart is None or runtime.get("lhm") is None:
+            return
+        try:
+            snap = fetch_snapshot()
+            cpu_c = derive_cpu_temp(snap) if snap else None
+            gpu_c = derive_gpu_temp(snap) if snap else None
+        except Exception:
+            chart.set_offline("Thermal read failed")
+            return
+        if cpu_c is None and gpu_c is None:
+            chart.set_offline("No sensor data")
+            return
+        chart.append_sample(cpu_c, gpu_c)
+
+    thermal_timer.timeout.connect(_poll_thermal)
+    thermal_timer.start()
+
     def _on_about_to_quit() -> None:
         try:
+            thermal_timer.stop()
+        except Exception:
+            pass
+        try:
             from src.pipeline.post_run_cleanup import post_run_cleanup
-            post_run_cleanup(runtime["lhm"])
+            post_run_cleanup(
+                runtime["lhm"],
+                pawnio_was_preinstalled=pawnio_was_preinstalled,
+            )
         except Exception:
             pass
         try:

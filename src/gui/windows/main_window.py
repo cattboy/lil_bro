@@ -79,6 +79,8 @@ class MainWindow(QMainWindow):
     # ── Sidebar ────────────────────────────────────────────────────────
 
     def _build_sidebar(self) -> QFrame:
+        from src.gui.widgets.thermal_chart import ThermalChart
+
         frame = QFrame()
         frame.setObjectName("sidebar")
         frame.setFixedWidth(280)
@@ -102,11 +104,11 @@ class MainWindow(QMainWindow):
 
         col.addStretch(1)
 
-        chart_placeholder = QLabel("Thermal monitor not started")
-        chart_placeholder.setObjectName("statusBar")
-        chart_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        chart_placeholder.setAccessibleName("Thermal chart placeholder")
-        col.addWidget(chart_placeholder)
+        # Live CPU + GPU thermal chart. Starts in offline mode; ``app.run()``
+        # flips it to live samples once the LHM sidecar reports ready.
+        self.thermal_chart = ThermalChart()
+        self.thermal_chart.set_offline("Thermal monitor not started")
+        col.addWidget(self.thermal_chart)
         return frame
 
     # ── Content ────────────────────────────────────────────────────────
