@@ -57,7 +57,7 @@ def main():
     if not args.terminal:
         # Default launch (no flag, double-click, shortcut) → windowed GUI.
         from src.gui.app import run as run_gui
-        sys.exit(run_gui())
+        sys.exit(run_gui(debug=args.debug))
 
     # --terminal mode: bind stdio to the calling console (or pop a fresh
     # one) before any print() happens, then fall through to the legacy

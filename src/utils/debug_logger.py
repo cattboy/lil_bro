@@ -22,13 +22,18 @@ import logging
 from .paths import get_debug_log_path
 
 _debug_enabled: bool = False
+_debug_level: int = logging.DEBUG
 _logger: logging.Logger | None = None
 
 
-def enable_debug_logging() -> None:
-    """Activate debug logging. Must be called before get_debug_logger() is first used."""
-    global _debug_enabled
+def enable_debug_logging(level: int = logging.DEBUG) -> None:
+    """Activate debug logging. Must be called before get_debug_logger() is first used.
+
+    Defaults to DEBUG; pass logging.INFO for always-on GUI mode.
+    """
+    global _debug_enabled, _debug_level
     _debug_enabled = True
+    _debug_level = level
 
 
 def get_debug_logger() -> logging.Logger:
@@ -51,10 +56,10 @@ def get_debug_logger() -> logging.Logger:
         return _logger
 
     # Debug mode: write to persistent log file at CWD root
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(_debug_level)
     log_path = get_debug_log_path()
     handler = logging.FileHandler(log_path, encoding="utf-8")
-    handler.setLevel(logging.DEBUG)
+    handler.setLevel(_debug_level)
     handler.setFormatter(
         logging.Formatter(
             fmt="%(asctime)s [%(levelname)-8s] %(name)s: %(message)s",

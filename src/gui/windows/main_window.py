@@ -11,13 +11,14 @@ panel (Step 6), the dashboard (Step 10), and the thermal chart (Step
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QAction, QDesktopServices
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QStatusBar,
@@ -165,6 +166,11 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(self.action_exit)
 
+        help_menu = bar.addMenu("&Help")
+        action_open_log = QAction("Open Debug Log", self)
+        action_open_log.triggered.connect(self._open_debug_log)
+        help_menu.addAction(action_open_log)
+
     # ── View toggle ────────────────────────────────────────────────────
 
     def show_dashboard(self) -> None:
@@ -172,6 +178,18 @@ class MainWindow(QMainWindow):
 
     def show_output(self) -> None:
         self._content.setCurrentIndex(self.OUTPUT_INDEX)
+
+    def _open_debug_log(self) -> None:
+        from src.utils.paths import get_debug_log_path
+        path = get_debug_log_path()
+        if path.exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+        else:
+            QMessageBox.information(
+                self,
+                "Debug Log",
+                "No debug log found.\n\nRun lil_bro at least once (GUI mode always writes a log).",
+            )
 
 
     # ── Lifecycle ──────────────────────────────────────────────────────

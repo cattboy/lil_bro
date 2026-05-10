@@ -66,9 +66,31 @@ class PipelineWorker(QObject):
             from src.pipeline.phases import run_optimization_pipeline
             run_optimization_pipeline(self._lhm, self._llm)
         except Exception as exc:  # pragma: no cover - dispatched to GUI
+            from src.utils.debug_logger import get_debug_logger
+            get_debug_logger().error("PipelineWorker uncaught exception", exc_info=True)
             self.pipeline_failed.emit(type(exc).__name__, str(exc), traceback.format_exc())
             return
         finally:
             _state.set_cancel_check(None)
 
         self.pipeline_finished.emit()
+
+
+class RevertWorker(QObject):
+    """Wraps run_revert_phase for a QThread."""
+
+    revert_started = Signal()
+    revert_finished = Signal()
+    revert_failed = Signal(str, str, str)  # exc_type, message, traceback
+
+    def run(self) -> None:
+        try:
+            self.revert_started.emit()
+            from src.pipeline.phase_revert import run_revert_phase
+            run_revert_phase()
+        except Exception as exc:
+            from src.utils.debug_logger import get_debug_logger
+            get_debug_logger().error("RevertWorker uncaught exception", exc_info=True)
+            self.revert_failed.emit(type(exc).__name__, str(exc), traceback.format_exc())
+            return
+        self.revert_finished.emit()

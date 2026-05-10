@@ -7,7 +7,7 @@ is unavailable or the port is occupied.
 
 PawnIO build prerequisite: lhm-server.exe embeds PawnIO.sys only when
 tools/PawnIO/dist/ exists at build time. That directory requires WDK +
-CMake + test-signing — it is never built in CI. Without PawnIO, lhm-server
+CMake + test-signing -- it is never built in CI. Without PawnIO, lhm-server
 falls back to WMI-only sensors (no ring-0 access). This is expected; do not
 attempt to fix the WDK build chain here.
 """
@@ -25,7 +25,10 @@ from typing import Optional
 
 from ...utils.formatting import print_step, print_step_done, print_warning, print_info, print_dim
 from ...utils.action_logger import action_logger
+from ...utils.debug_logger import get_debug_logger
 from ...utils.platform import is_admin
+
+log = get_debug_logger()
 
 LHM_PORT = 8085
 LHM_URL = f"http://localhost:{LHM_PORT}/data.json"
@@ -38,11 +41,11 @@ _POLL_INTERVAL = 0.5  # seconds between readiness checks
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 _LHM_SEARCH_PATHS = [
-    # 1. PyInstaller frozen bundle — sys._MEIPASS/tools/lhm-server.exe
+    # 1. PyInstaller frozen bundle -- sys._MEIPASS/tools/lhm-server.exe
     os.path.join(getattr(sys, "_MEIPASS", _PROJECT_ROOT), "tools", "lhm-server.exe"),
-    # 2. Next to the running executable — portable deployment (frozen .exe)
+    # 2. Next to the running executable -- portable deployment (frozen .exe)
     os.path.join(os.path.dirname(sys.executable), "tools", "lhm-server.exe"),
-    # 3. Source-tree dev path — tools/lhm-server/dist/lhm-server.exe
+    # 3. Source-tree dev path -- tools/lhm-server/dist/lhm-server.exe
     os.path.join(_PROJECT_ROOT, "tools", "lhm-server", "dist", "lhm-server.exe"),
     # 4. Full LibreHardwareMonitor installation (user-installed)
     os.path.join(_PROJECT_ROOT, "tools", "LibreHardwareMonitor", "LibreHardwareMonitor.exe"),
@@ -135,21 +138,21 @@ class LHMSidecar:
         Launch LHM sidecar. Returns True if LHM is ready on port 8085.
 
         Handles three scenarios:
-        1. LHM already running → attach (don't launch a second instance)
-        2. Port occupied by something else → warn and skip
-        3. LHM not running → launch subprocess and wait for readiness
+        1. LHM already running -> attach (don't launch a second instance)
+        2. Port occupied by something else -> warn and skip
+        3. LHM not running -> launch subprocess and wait for readiness
         """
         # Scenario 1 & 2: check if port is already in use
         if _is_port_in_use(LHM_PORT):
             if _is_lhm_responding():
                 print_info(
-                    "LibreHardwareMonitor already running — attaching to existing instance."
+                    "LibreHardwareMonitor already running -- attaching to existing instance."
                 )
                 self._already_running = True
                 return True
             else:
                 print_warning(
-                    f"Port {LHM_PORT} is in use by another application — "
+                    f"Port {LHM_PORT} is in use by another application -- "
                     "thermal monitoring unavailable."
                 )
                 return False
@@ -171,7 +174,7 @@ class LHMSidecar:
         server_label = "lhm-server" if is_custom else "LibreHardwareMonitor"
         print_step(f"Launching {server_label} sidecar")
 
-        # lhm-server.exe has port hardcoded to 8085 — no CLI flag needed.
+        # lhm-server.exe has port hardcoded to 8085 -- no CLI flag needed.
         # Full LHM requires --http-port to enable its built-in web server.
         # Pass --parent-pid so lhm-server.exe self-exits when lil_bro terminates
         # (works both for direct subprocess and ShellExecuteW-elevated launches).
@@ -180,7 +183,7 @@ class LHMSidecar:
 
         try:
             if is_admin():
-                # Running as admin — subprocess inherits the token directly.
+                # Running as admin -- subprocess inherits the token directly.
                 self._process = subprocess.Popen(
                     cmd + parent_flag,
                     stdin=subprocess.DEVNULL,
@@ -191,13 +194,13 @@ class LHMSidecar:
                 threading.Thread(target=self._drain_stdout, daemon=True).start()
                 threading.Thread(target=self._drain_stderr, daemon=True).start()
             else:
-                # Not admin — lhm-server.exe needs admin to install PawnIO on
+                # Not admin -- lhm-server.exe needs admin to install PawnIO on
                 # first run.  Elevate via ShellExecuteW so the UAC prompt appears
                 # on behalf of lhm-server.exe specifically.
                 extra_args = " ".join(parent_flag)
                 ret = ctypes.windll.shell32.ShellExecuteW(
                     None,        # hwnd
-                    "runas",     # verb — triggers UAC elevation
+                    "runas",     # verb -- triggers UAC elevation
                     exe,
                     extra_args or None,
                     None,        # working directory
@@ -223,9 +226,7 @@ class LHMSidecar:
             if _is_lhm_responding():
                 print_step_done(True)
                 pid_str = str(self._process.pid) if self._process else "elevated"
-                action_logger.log_action(
-                    "LHM Sidecar", f"Launched (PID {pid_str})", f"Port {LHM_PORT}"
-                )
+                log.info("LHM Sidecar: Launched (PID %s) Port %s", pid_str, LHM_PORT)
                 time.sleep(0.3)  # brief flush window for drain threads
                 # Log PawnIO install outcome from lhm-server stdout
                 for line in self._stdout_lines:
@@ -243,11 +244,7 @@ class LHMSidecar:
                 for line in self._stderr_lines:
                     if "pawnio" in line.lower():
                         print_warning(f"[lhm-server] {line}")
-                        action_logger.log_action(
-                            "LHM Sidecar",
-                            "PawnIO driver activity detected",
-                            line.strip(),
-                        )
+                        log.debug("LHM Sidecar: PawnIO activity -- %s", line.strip())
                 return True
 
             # Surface PawnIO install progress so the user sees activity during
@@ -276,7 +273,7 @@ class LHMSidecar:
                 return False
             time.sleep(_POLL_INTERVAL)
 
-        # Timeout — process alive but HTTP never became ready
+        # Timeout -- process alive but HTTP never became ready
         print_step_done(False)
         print_warning(
             f"LibreHardwareMonitor launched but /data.json not reachable after "
@@ -317,10 +314,10 @@ class LHMSidecar:
     def stop(self) -> None:
         """Tear down the LHM sidecar if we launched it."""
         if self._already_running:
-            # We didn't start it — don't kill it
+            # We didn't start it -- don't kill it
             return
         if self._request_graceful_shutdown():
-            action_logger.log_action("LHM Sidecar", "Stopped (graceful)")
+            log.info("LHM Sidecar: Stopped (graceful)")
             self._elevated = False
             self._process = None
             return
@@ -361,7 +358,7 @@ class LHMSidecar:
 
     def _kill_process(self) -> None:
         if self._elevated:
-            # lhm-server.exe was launched elevated via ShellExecuteW — we have
+            # lhm-server.exe was launched elevated via ShellExecuteW -- we have
             # no Popen handle.  It self-exits via --parent-pid monitoring when
             # lil_bro terminates.  Best-effort kill via tasklist PID lookup.
             pid = _find_elevated_pid("lhm-server.exe")
@@ -374,7 +371,7 @@ class LHMSidecar:
                     )
                 except Exception:
                     pass
-                # taskkill /F is fire-and-forget — wait for the process to
+                # taskkill /F is fire-and-forget -- wait for the process to
                 # actually disappear so the PawnIO driver handle is released
                 # before downstream cleanup attempts to delete the service.
                 deadline = time.monotonic() + 5.0
@@ -382,7 +379,7 @@ class LHMSidecar:
                     if _find_elevated_pid("lhm-server.exe") is None:
                         break
                     time.sleep(0.5)
-            action_logger.log_action("LHM Sidecar", "Stopped (elevated)")
+            log.info("LHM Sidecar: Stopped (elevated)")
             self._elevated = False
             return
 
@@ -393,7 +390,7 @@ class LHMSidecar:
             self._process.terminate()
             self._process.wait(timeout=3)
         except Exception:
-            # terminate() timed out or was denied — try kill() then taskkill.
+            # terminate() timed out or was denied -- try kill() then taskkill.
             # On Windows, terminate() and kill() both call TerminateProcess(); if
             # that fails (e.g. access-denied on an elevated process), fall back to
             # `taskkill /F /T` which goes through a separate OS code path and also
@@ -411,7 +408,7 @@ class LHMSidecar:
             except Exception:
                 pass
         finally:
-            action_logger.log_action("LHM Sidecar", "Stopped")
+            log.info("LHM Sidecar: Stopped")
             self._process = None
 
     def fetch_data(self) -> Optional[dict]:

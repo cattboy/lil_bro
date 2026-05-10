@@ -25,7 +25,9 @@ All processing happens locally. The only external calls are optional driver vers
 
 ## Status
 
-🟢 **v0.9.1 — Sprint: revert-last-session** — Session-level revert system: `revert.py` manifest I/O (JSON schema v1, per-session archiving); `phase_revert.py` interactive revert flow with reverse-order dispatch; per-fix revert handlers for power plan, game mode, NVIDIA profile, and display; Windows System Restore fallback via `rstrui.exe`; `display_utils.py` DEVMODE struct + mode enumeration. Accessible via menu option 4 or `--revert` CLI flag.
+🟢 **v0.9.1 — Sprint: logging-v2** — Logging system v2: action_logger restricted to system-modification audit only; debug_logger always-on in GUI mode (INFO level minimum, DEBUG with --debug); sys.excepthook + threading.excepthook installed; --debug flag wired through GUI mode; Help → Open Debug Log menu added.
+
+Previous: **Sprint: revert-last-session** — Session-level revert system: `revert.py` manifest I/O (JSON schema v1, per-session archiving); `phase_revert.py` interactive revert flow with reverse-order dispatch; per-fix revert handlers for power plan, game mode, NVIDIA profile, and display; Windows System Restore fallback via `rstrui.exe`; `display_utils.py` DEVMODE struct + mode enumeration. Accessible via menu option 4 or `--revert` CLI flag.
 
 Previous: **Sprint: nvidia-profile-inspector** — 882 tests passing. Bundled NVIDIA Profile Inspector tool (C# WPF) with Python integration: nvidia_profile_dumper.py extracts GPU profiles; nvidia_profile.py detects misconfigs; nvidia_profile_setter.py applies fixes. Pipeline refactored into Phase classes (base.py + 5 phase modules) with PipelineContext state bag. Setting ID validation against NPI_CustomSettingNames.xml canonical reference.
 
@@ -36,3 +38,21 @@ Previous: Action logger v2 with outcome tags (`[PASS]`/`[FAIL]`/`[APPROVED]`/`[S
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for dev environment setup, test commands, and how to build the `.exe`.
 
 See `docs/office-hours-design-20260323.md` for the full product design and roadmap.
+
+## Debugging
+
+**GUI mode** always writes `lil_bro_debug.log` (INFO level) to the working directory. Use **Help → Open Debug Log** in the menu bar to open it directly.
+
+**Terminal mode** with `--debug` activates full DEBUG-level logging:
+```
+lil_bro.exe --terminal --debug
+```
+
+**Windowed mode** with `--debug` activates DEBUG-level logging to file (no console):
+```
+lil_bro.exe --debug
+```
+
+Both log files are preserved after each run:
+- `lil_bro_actions.log` — audit trail of every system modification lil_bro made
+- `lil_bro_debug.log` — process lifecycle, GUI startup, pipeline flow, and exception traces

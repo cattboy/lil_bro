@@ -12,7 +12,6 @@ uses that signal to swap the splash for the main window.
 
 from __future__ import annotations
 
-import traceback
 
 from PySide6.QtCore import QObject, QThread, Signal
 
@@ -41,7 +40,8 @@ class StartupOrchestrator(QObject):
 
             self.init_step.emit("Ready", "ok")
         except Exception:
-            traceback.print_exc()
+            from src.utils.debug_logger import get_debug_logger
+            get_debug_logger().error("StartupOrchestrator unhandled exception", exc_info=True)
         finally:
             self.finished.emit(startup_lhm)
 
