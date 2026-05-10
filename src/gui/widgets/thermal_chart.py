@@ -122,15 +122,31 @@ class ThermalChart(QWidget):
     def _paint_legend(self, painter: QPainter) -> None:
         font = QFont("JetBrains Mono", 9)
         painter.setFont(font)
-        legend = QRect(8, 8, 120, 18)
-        painter.setPen(QColor("#00E5CC"))
-        painter.drawText(legend, Qt.AlignmentFlag.AlignLeft, "CPU")
-        legend.translate(0, 16)
-        painter.setPen(QColor("#D183E8"))
-        painter.drawText(legend, Qt.AlignmentFlag.AlignLeft, "GPU")
+        w = self.width()
+        rows = [
+            ("CPU", QColor("#00E5CC"), self.latest_cpu),
+            ("GPU", QColor("#D183E8"), self.latest_gpu),
+        ]
+        for i, (label, series_color, val) in enumerate(rows):
+            y = 8 + i * 16
+            row_rect = QRect(8, y, w - 16, 14)
+            painter.setPen(series_color)
+            painter.drawText(row_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, label)
+            digit = f"{val:.0f}°C" if val is not None else "---"
+            painter.setPen(self._temp_color(val, series_color))
+            painter.drawText(row_rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, digit)
 
     def _y_for(self, value: float, ymin: float, ymax: float) -> int:
         h = self.height()
         span = max(1.0, ymax - ymin)
         normalized = (value - ymin) / span
         return int(h - (normalized * (h - 8)) - 4)
+
+    def _temp_color(self, val: float | None, series_color: QColor) -> QColor:
+        if val is None:
+            return QColor("#6B6A70")
+        if val >= _CRIT_C:
+            return QColor("#FF6B6B")
+        if val >= _WARN_C:
+            return QColor("#FFB547")
+        return series_color
