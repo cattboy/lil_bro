@@ -22,6 +22,8 @@ from src.pipeline.approval import run_approval_flow
 
 class ConfigPhase:
     def run(self, ctx: PipelineContext) -> PhaseResult:
+        from src.utils.formatting import prompt_pause
+
         log = get_debug_logger()
         log.info("Phase 4: Apply Optimization Configurations")
         print_header("Phase 4: Apply Optimization Configurations")
@@ -53,8 +55,7 @@ class ConfigPhase:
 
             print()
             print_accent("Alright, wiggle your mouse for 2 seconds -- we'll measure the polling rate.")
-            print_prompt("Press Enter when you're ready... ")
-            input()
+            prompt_pause("Press Enter when you're ready... ")
             mouse_result = check_polling_rate()
             if mouse_result.get("status") == "WARNING":
                 findings.append({

@@ -26,12 +26,21 @@ _PHASES: list[Phase] = [
 
 
 def run_optimization_pipeline(lhm: LHMSidecar, llm: Optional[Llama] = None) -> None:
-    """Top-level pipeline entry. LHM lifecycle is owned by the caller (main.py)."""
+    """Top-level pipeline entry. LHM lifecycle is owned by the caller (main.py).
+
+    Cooperative cancel: between phases we poll ``_state.is_cancelled()``;
+    if the GUI worker has flipped the flag, we exit the loop cleanly so
+    no half-applied state leaks. Cancel mid-Cinebench is not supported.
+    """
+    from src.pipeline import _state
     with ThermalMonitor() as thermal:
         ctx = PipelineContext(lhm=lhm, thermal=thermal, llm=llm)
         log = get_debug_logger()
         try:
             for phase in _PHASES:
+                if _state.is_cancelled():
+                    log.info("Pipeline cancelled before phase %s", type(phase).__name__)
+                    break
                 result: PhaseResult = phase.run(ctx)
                 if result.status != "completed":
                     log.info("Phase %s: %s — %s", type(phase).__name__, result.status, result.message)

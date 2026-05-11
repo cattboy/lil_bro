@@ -1,5 +1,5 @@
 """
-Benchmark orchestration — Cinebench 2024/2026.
+Benchmark orchestration -- Cinebench 2024/2026.
 
 Detects installed Cinebench across common paths, launches it via CLI, and
 parses results.  When Cinebench is unavailable, both benchmark phases are
@@ -18,7 +18,7 @@ from typing import Optional
 from .thermal_monitor import ThermalWatchdog
 
 from ..config import config as _cfg
-from ..utils.action_logger import action_logger
+from ..utils.debug_logger import get_debug_logger
 from ..utils.formatting import (
     print_step,
     print_step_done,
@@ -29,7 +29,9 @@ from ..utils.formatting import (
 )
 from ..utils.paths import get_lil_bro_dir, get_temp_dir
 
-# ── Cinebench discovery ──────────────────────────────────────────────────────
+log = get_debug_logger()
+
+# -- Cinebench discovery ------------------------------------------------------
 
 _REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
 
@@ -63,7 +65,7 @@ _CINEBENCH_TIMEOUT = _cfg.benchmark.cinebench_timeout  # max seconds for a singl
 
 def _keyboard_abort_watcher(abort_event: threading.Event) -> None:
     """
-    Background thread — sets abort_event when Q, q, or Enter is pressed.
+    Background thread -- sets abort_event when Q, q, or Enter is pressed.
 
     Uses ``msvcrt.kbhit()`` (Windows, no Enter required for Q).  Polls every
     50 ms so it stays responsive without busy-spinning.
@@ -98,7 +100,7 @@ def _minimize_cinebench_window(cb_exe: str, timeout: float, abort_event: threadi
     much later. Process matching catches both within seconds of launch.
 
     Polls every second for up to ``timeout`` to tolerate slow systems. On
-    the first match, minimizes the windows and returns — never touches
+    the first match, minimizes the windows and returns -- never touches
     focus again. The OS pops whatever was behind Cinebench (typically
     lil_bro) to the foreground naturally when its windows minimize.
     """
@@ -151,7 +153,7 @@ def _minimize_cinebench_window(cb_exe: str, timeout: float, abort_event: threadi
         if found:
             for hwnd in found:
                 user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
-            return  # one-shot — never meddle with the user's session again
+            return  # one-shot -- never meddle with the user's session again
         time.sleep(1)
 
 
@@ -171,12 +173,12 @@ def find_cinebench() -> Optional[str]:
 
 
 
-# ── Benchmark runner ─────────────────────────────────────────────────────────
+# -- Benchmark runner ---------------------------------------------------------
 
 
 class BenchmarkRunner:
     """
-    Orchestrates benchmark runs — Cinebench if available, CPU fallback otherwise.
+    Orchestrates benchmark runs -- Cinebench if available, CPU fallback otherwise.
 
     Usage::
 
@@ -203,7 +205,7 @@ class BenchmarkRunner:
             dict with ``status``, ``benchmark``, ``scores``, and extra metadata.
         """
         if not self.has_cinebench:
-            print_warning("Cinebench not found — benchmark phases will be skipped.")
+            print_warning("Cinebench not found -- benchmark phases will be skipped.")
             print_info("Cinebench is required to produce before/after scores.")
             print_info("  1. Download Cinebench from https://www.maxon.net/cinebench")
             print_info("  2. Place Cinebench.exe in the same folder as lil_bro.exe")
@@ -211,7 +213,7 @@ class BenchmarkRunner:
             return {
                 "status": "skipped",
                 "benchmark": "cinebench",
-                "message": "Cinebench not installed — place Cinebench.exe next to lil_bro.exe and re-run.",
+                "message": "Cinebench not installed -- place Cinebench.exe next to lil_bro.exe and re-run.",
             }
 
         mode = "All Tests" if full_suite else "CPU Single-Core"
@@ -220,7 +222,7 @@ class BenchmarkRunner:
 
         return self._run_cinebench(full_suite, lhm_available)
 
-    # ── Cinebench ─────────────────────────────────────────────────────────
+    # -- Cinebench ------------------------------------------------------------
 
     def _run_cinebench(self, full_suite: bool, lhm_available: bool = False) -> dict:
         """Launch Cinebench via CLI and capture results."""
@@ -237,7 +239,7 @@ class BenchmarkRunner:
         cb_flag = "g_CinebenchAllTests=true" if full_suite else "g_CinebenchCpu1Test=true"
         cb_exe = os.path.basename(self.cinebench_path)  # for image-name kill on abort/timeout
 
-        # Output file — receives the full Cinebench console log
+        # Output file -- receives the full Cinebench console log
         output_file = get_temp_dir() / "cinebench_output.txt"
 
         # Batch file wraps the invocation so we get the Windows console log.
@@ -252,13 +254,13 @@ class BenchmarkRunner:
 
         abort_event = threading.Event()
 
-        # Keyboard watcher — active for the full duration of the run
+        # Keyboard watcher -- active for the full duration of the run
         kb_thread = threading.Thread(
             target=_keyboard_abort_watcher, args=(abort_event,), daemon=True
         )
         kb_thread.start()
 
-        # Progress printer — reminds the user how to abort every 30 s
+        # Progress printer -- reminds the user how to abort every 30 s
         bench_start = time.monotonic()
         progress_thread = threading.Thread(
             target=_benchmark_progress_printer,
@@ -267,7 +269,7 @@ class BenchmarkRunner:
         )
         progress_thread.start()
 
-        # Thermal watchdog — only when LHM sensor data is available
+        # Thermal watchdog -- only when LHM sensor data is available
         watchdog: Optional[ThermalWatchdog] = None
         if lhm_available:
             watchdog = ThermalWatchdog(abort_event)
@@ -278,7 +280,7 @@ class BenchmarkRunner:
 
             # One-shot minimize of the Cinebench GUI on launch. 60 s grace window
             # so slow systems still have time to finish launching it. Matched by
-            # process executable, not title — the splash screen has no 'cinebench'
+            # process executable, not title -- the splash screen has no 'cinebench'
             # in its title for the first ~100 s of the run.
             threading.Thread(
                 target=_minimize_cinebench_window,
@@ -309,12 +311,7 @@ class BenchmarkRunner:
                         )
                         print_step_done(False)
                         print_warning(f"Benchmark aborted: {reason}")
-                        action_logger.log_action(
-                            "Cinebench",
-                            "Benchmark aborted",
-                            details=reason,
-                            outcome="FAIL",
-                        )
+                        log.warning("Cinebench: Benchmark aborted -- %s", reason)
                         return {
                             "status": "aborted",
                             "benchmark": "cinebench",
@@ -366,23 +363,16 @@ class BenchmarkRunner:
         except subprocess.TimeoutExpired:
             print_step_done(False)
             print_error("Cinebench timed out, timeout can be increased in lil_bro_config.json -> cinebench_timeout")
-            action_logger.log_action(
-                "Cinebench",
-                "Benchmark timed out",
-                details="Cinebench did not complete within timeperiod, update lil_bro_config.json -> cinebench_timeout",
-                outcome="FAIL",
+            log.warning(
+                "Cinebench: Benchmark timed out -- Cinebench did not complete within timeperiod, "
+                "update lil_bro_config.json -> cinebench_timeout"
             )
             return {"status": "error", "benchmark": "cinebench", "message": "Timed out"}
 
         except Exception as e:
             print_step_done(False)
             print_error(f"Cinebench failed: {e}")
-            action_logger.log_action(
-                "Cinebench",
-                "Benchmark failed",
-                details=str(e),
-                outcome="FAIL",
-            )
+            log.error("Cinebench: Benchmark failed -- %s", e)
             return {"status": "error", "benchmark": "cinebench", "message": str(e)}
 
     @staticmethod

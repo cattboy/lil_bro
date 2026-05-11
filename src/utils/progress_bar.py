@@ -22,6 +22,27 @@ from src.utils.formatting import _ASCII_FALLBACK
 _FPS = 10  # animation redraws per second
 
 
+# --- Progress sink registry ----------------------------------------------
+# CLI mode: ``_PROGRESS_SINK`` is None → the threaded ANSI plasma-sweep
+# animation runs as before. GUI mode: bridge.install() registers a
+# ``Callable[[int, str], None]`` that the per-phase QProgressBar widget
+# reads — the animation thread is not started, so no \r carriage returns
+# leak into the output panel during fix execution.
+_PROGRESS_SINK: "Callable[[int, str], None] | None" = None
+
+
+def set_progress_sink(sink) -> None:
+    """Install (or clear) the GUI progress sink.
+
+    Sink signature: ``sink(percent: int, label: str) -> None``. When set,
+    AnimatedProgressBar emits via the sink instead of running the ANSI
+    animation thread. Pass ``None`` to restore CLI behavior.
+    """
+    global _PROGRESS_SINK
+    _PROGRESS_SINK = sink
+
+
+
 class AnimatedProgressBar:
     """
     Terminal progress bar with a traveling glow animation.
@@ -42,7 +63,7 @@ class AnimatedProgressBar:
         self._lock = threading.Lock()
 
         # Compute bar width once at construction
-        if sys.stdout.isatty():
+        if sys.stdout is not None and sys.stdout.isatty():
             cols = shutil.get_terminal_size(fallback=(80, 24)).columns
             self._bar_width = max(20, min(cols - 40, 50))
         else:
@@ -55,14 +76,17 @@ class AnimatedProgressBar:
             self._empty_char = "."
             self._bolt = ">"
         else:
-            self._fill_char = "\u2588"
-            self._glow_chars = ["\u2593", "\u2592", "\u2591"]
-            self._empty_char = "\u2591"
-            self._bolt = "\u26a1"
+            self._fill_char = "█"
+            self._glow_chars = ["▓", "▒", "░"]
+            self._empty_char = "░"
+            self._bolt = "⚡"
 
     # ── Public API ────────────────────────────────────────────────────────────
 
     def start(self) -> None:
+        if _PROGRESS_SINK is not None:
+            _PROGRESS_SINK(0, self._message or self.label)
+            return
         self._running = True
         self._thread = threading.Thread(target=self._animate, daemon=True)
         self._thread.start()
@@ -71,8 +95,14 @@ class AnimatedProgressBar:
         with self._lock:
             self._current = step
             self._message = message
+        if _PROGRESS_SINK is not None:
+            pct = int((step / self.total) * 100)
+            _PROGRESS_SINK(pct, message)
 
     def finish(self) -> None:
+        if _PROGRESS_SINK is not None:
+            _PROGRESS_SINK(100, self._message or "Complete")
+            return
         self._running = False
         if self._thread is not None:
             self._thread.join(timeout=1.0)

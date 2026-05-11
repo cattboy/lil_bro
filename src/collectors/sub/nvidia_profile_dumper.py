@@ -11,7 +11,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from typing import Any
 
-from ...utils.action_logger import action_logger
+from ...utils.debug_logger import get_debug_logger
 from ...utils.errors import NvapiInitError, SetterError
 from ...utils.nvidia_npi import (
     DLSS_LETTER_MAP,
@@ -20,6 +20,8 @@ from ...utils.nvidia_npi import (
     find_npi_exe,
 )
 from ...utils.paths import get_temp_dir
+
+log = get_debug_logger()
 
 
 def _interpret_gsync(raw: dict[int, int]) -> bool | None:
@@ -83,33 +85,30 @@ def get_nvidia_profile() -> dict[str, Any]:
     """
     npi_exe = find_npi_exe()
     if npi_exe is None:
-        action_logger.log_action("NPI Collector", "Skipped", "binary not found", outcome="SKIP")
+        log.info("NPI Collector: Skipped -- binary not found")
         return {"available": False, "reason": "NPI binary not found"}
 
-    action_logger.log_action("NPI Collector", "Invoked", npi_exe)
+    log.info("NPI Collector: Invoked %s", npi_exe)
 
     with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as tmpdir:
         try:
             _, raw_settings = export_current_profile(npi_exe, tmpdir)
         except subprocess.TimeoutExpired:
-            action_logger.log_action("NPI Collector", "Timeout", "export timed out after 30s", outcome="FAIL")
+            log.warning("NPI Collector: Timeout -- export timed out after 30s")
             return {"available": True, "error": "NPI export timed out"}
         except FileNotFoundError:
-            action_logger.log_action("NPI Collector", "Skipped", "binary not found at runtime", outcome="SKIP")
+            log.info("NPI Collector: Skipped -- binary not found at runtime")
             return {"available": False, "reason": "NPI binary not found"}
         except NvapiInitError:
-            action_logger.log_action(
-                "NPI Collector", "Skipped",
-                "no NVIDIA GPU detected -- NVAPI failed to initialize", outcome="SKIP",
-            )
+            log.info("NPI Collector: Skipped -- no NVIDIA GPU detected -- NVAPI failed to initialize")
             return {"available": False, "reason": "No NVIDIA GPU detected"}
         except SetterError as e:
             msg = str(e)
             action = "NotReady" if "NPI .nip not ready after" in msg else "Failed"
-            action_logger.log_action("NPI Collector", action, msg, outcome="FAIL")
+            log.warning("NPI Collector: %s -- %s", action, msg)
             return {"available": True, "error": msg}
         except (ET.ParseError, UnicodeDecodeError, ValueError) as e:
-            action_logger.log_action("NPI Collector", "ParseError", str(e), outcome="FAIL")
+            log.warning("NPI Collector: ParseError -- %s", e)
             return {"available": True, "error": f"Failed to parse .nip XML: {e}"}
 
     return {

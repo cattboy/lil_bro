@@ -61,6 +61,8 @@ def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created:
     Renders the numbered proposal list, collects batch selection,
     and executes approved auto-fixable actions.
     """
+    from src.utils.formatting import get_batch_selection_handler
+
     if not proposals:
         print_success("No configuration issues found -- your setup looks good!")
         return
@@ -76,15 +78,21 @@ def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created:
 
     total = len(proposals)
     print()
-    print_prompt(f"Apply changes? Enter numbers (e.g. \"1 3\"), \"all\", or \"skip\": ")
 
-    while True:
-        raw = input().strip()
-        selection = parse_selection(raw, total)
-        if selection is not None:
-            break
-        print_error("Invalid input.")
-        print_prompt(f"Enter numbers 1\u2013{total}, \"all\", or \"skip\": ")
+    handler = get_batch_selection_handler()
+    if handler is not None:
+        # GUI mode — bridge routes this through BatchSelectionDialog and
+        # returns the user's 1-indexed selection list (empty list = skip).
+        selection = list(handler(proposals, total) or [])
+    else:
+        print_prompt(f"Apply changes? Enter numbers (e.g. \"1 3\"), \"all\", or \"skip\": ")
+        while True:
+            raw = input().strip()
+            selection = parse_selection(raw, total)
+            if selection is not None:
+                break
+            print_error("Invalid input.")
+            print_prompt(f"Enter numbers 1–{total}, \"all\", or \"skip\": ")
 
     if not selection:
         action_logger.log_approval_decision(
