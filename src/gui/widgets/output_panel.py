@@ -157,6 +157,8 @@ class OutputPanel(QWidget):
     def _append_html(self, html: str) -> None:
         cursor = self._text.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
+        if not self._text.document().isEmpty():
+            cursor.insertBlock()
         cursor.insertHtml(html)
         self._text.setTextCursor(cursor)
         self._text.ensureCursorVisible()
