@@ -50,6 +50,11 @@ class DashboardWorker(QObject):
         self._lhm = lhm
 
     def start(self) -> None:
+        try:
+            import psutil
+            psutil.cpu_percent(interval=None)  # prime baseline so first real tick isn't 0%
+        except Exception:
+            pass
         if self._timer is None:
             self._timer = QTimer()
             self._timer.timeout.connect(self._tick)
@@ -86,14 +91,22 @@ class DashboardWorker(QObject):
             snap.setdefault("cpu_usage", "—")
             snap.setdefault("ram_used", "—")
 
-        # Pass raw floats for the thermal chart (prefixed with underscore)
+        # Thermal data from fetch_snapshot — same source the chart uses, so always accurate.
+        # Also overrides cpu_temp/gpu_temp from quick_status_snapshot (which calls
+        # lhm.read_latest(), a method LHMSidecar does not implement).
         try:
             from src.agent_tools.thermal_guidance import derive_cpu_temp, derive_gpu_temp
             from src.benchmarks.thermal_monitor import fetch_snapshot
             therm = fetch_snapshot()
             if therm:
-                snap["_cpu_c"] = derive_cpu_temp(therm)
-                snap["_gpu_c"] = derive_gpu_temp(therm)
+                cpu_c_f = derive_cpu_temp(therm)
+                gpu_c_f = derive_gpu_temp(therm)
+                if cpu_c_f is not None:
+                    snap["_cpu_c"] = cpu_c_f
+                    snap["cpu_temp"] = f"{int(round(cpu_c_f))}°C"
+                if gpu_c_f is not None:
+                    snap["_gpu_c"] = gpu_c_f
+                    snap["gpu_temp"] = f"{int(round(gpu_c_f))}°C"
         except Exception:
             pass
 

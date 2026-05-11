@@ -99,10 +99,6 @@ def run(debug: bool = False) -> int:
     from src.gui.widgets.splash import SplashDialog
     splash = SplashDialog(parent=main)
 
-    log.debug("GUI Startup: main.show before")
-    main.show()
-    log.debug("GUI Startup: main.show after")
-
     bridge = GuiBridge(PipelineSignals(), parent=app)
     bridge.install()
 
@@ -346,7 +342,8 @@ def run(debug: bool = False) -> int:
     orchestrator.finished.connect(_on_finished, Qt.ConnectionType.QueuedConnection)
     thread.start()
 
-    # Show splash after starting the thread so init_step signals land on it
+    # Splash runs first; main window appears only after startup completes
     splash.exec()
+    main.show()
 
     return app.exec()
