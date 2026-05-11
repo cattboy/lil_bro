@@ -45,7 +45,7 @@ _PHASE_NAMES = (
 
 
 class MainWindow(QMainWindow):
-    """The lil_bro GUI shell."""
+    """The lil_bro GUI shell — V2 layout."""
 
     DASHBOARD_INDEX = 0
     OUTPUT_INDEX = 1
@@ -54,7 +54,7 @@ class MainWindow(QMainWindow):
                  settings: Settings | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("lil_bro")
-        self.setMinimumSize(1024, 720)
+        self.setMinimumSize(1280, 800)
         self.setAccessibleName("lil_bro main window")
         self.setAccessibleDescription("Local AI gaming PC optimizer")
 
@@ -75,128 +75,196 @@ class MainWindow(QMainWindow):
 
         self.menuBar().hide()
 
-        status = QStatusBar(self)
-        status.showMessage(_status_text())
-        self.setStatusBar(status)
+        # Hide the default Qt status bar and use our custom widget instead
+        self.statusBar().hide()
+
+        from src.gui.widgets.status_bar_widget import StatusBarWidget
+        self.status_bar_widget = StatusBarWidget()
+        self._inject_status_bar(self.status_bar_widget)
+
+    def _inject_status_bar(self, widget) -> None:
+        """Pin the custom status bar widget to the bottom of the main window."""
+        from PySide6.QtWidgets import QVBoxLayout
+        central = self.centralWidget()
+        outer = QWidget()
+        vbox = QVBoxLayout(outer)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(0)
+        vbox.addWidget(central)
+        vbox.addWidget(widget)
+        self.setCentralWidget(outer)
 
     # ── Sidebar ────────────────────────────────────────────────────────
 
     def _build_sidebar(self) -> QFrame:
-        from src.gui.widgets.thermal_chart import ThermalChart
-        from src.gui.widgets.phase_card import PhaseCard
-
         frame = QFrame()
         frame.setObjectName("sidebar")
-        frame.setFixedWidth(280)
-        frame.setAccessibleName("Sidebar")
+        frame.setFixedWidth(220)
+        frame.setAccessibleName("Sidebar navigation")
 
         col = QVBoxLayout(frame)
-        col.setContentsMargins(24, 24, 24, 24)
-        col.setSpacing(16)
+        col.setContentsMargins(0, 20, 0, 16)
+        col.setSpacing(2)
 
-        header = QLabel("Optimization")
-        header.setObjectName("sectionHeader")
-        col.addWidget(header)
+        # Brand
+        brand = QLabel("lil_bro")
+        brand.setObjectName("sidebarBrand")
+        col.addWidget(brand)
 
-        self._phase_cards: list[PhaseCard] = []
-        for name in _PHASE_NAMES:
-            card = PhaseCard(name)
-            self._phase_cards.append(card)
-            col.addWidget(card)
+        # Primary nav
+        self._run_button = self._nav_btn("▶  Start Optimization", accent=True)
+        self._nav_dashboard = self._nav_btn("◆  Dashboard")
+        col.addWidget(self._nav_dashboard)
+        col.addWidget(self._run_button)
 
         col.addStretch(1)
 
-        self.thermal_chart = ThermalChart()
-        self.thermal_chart.set_offline("Thermal monitor not started")
-        col.addWidget(self.thermal_chart)
+        # Divider
+        divider = QFrame()
+        divider.setObjectName("navDivider")
+        divider.setFixedHeight(1)
+        col.addWidget(divider)
+        col.addSpacing(4)
+
+        # Utility nav
+        self._nav_log = self._nav_btn("📄  View Debug Log", state="muted")
+        self._revert_button = self._nav_btn("↩  Revert Changes", state="warning")
+        self._ai_setup_button = self._nav_btn("⚙  AI Setup", state="muted")
+        self._nav_exit = self._nav_btn("✕  Exit", state="danger")
+
+        col.addWidget(self._nav_log)
+        col.addWidget(self._revert_button)
+        col.addWidget(self._ai_setup_button)
+        col.addWidget(self._nav_exit)
+
+        # Wire built-in nav actions
+        self._nav_dashboard.clicked.connect(self.show_dashboard)
+        self._run_button.clicked.connect(self.show_output)
+        self._nav_log.clicked.connect(self._open_debug_log)
+        self._nav_exit.clicked.connect(self.close)
+
+        # Default active state
+        self._set_nav_active(self._nav_dashboard)
+
         return frame
+
+    def _nav_btn(self, label: str, accent: bool = False,
+                 state: str = "") -> QPushButton:
+        btn = QPushButton(label)
+        btn.setProperty("navRole", "nav")
+        btn.setProperty("navState", state if state else ("active" if accent else ""))
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setFlat(True)
+        btn.setMinimumHeight(36)
+        return btn
+
+    def _set_nav_active(self, active_btn: QPushButton) -> None:
+        for btn in (self._nav_dashboard, self._run_button):
+            state = "active" if btn is active_btn else ""
+            btn.setProperty("navState", state)
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
 
     # ── Content ────────────────────────────────────────────────────────
 
     def _build_content(self) -> QStackedWidget:
+        from src.gui.widgets.dashboard import Dashboard
+        from src.gui.widgets.output_panel import OutputPanel
+        from src.gui.widgets.phase_row import PhaseRow
+
         stack = QStackedWidget()
         stack.setAccessibleName("Content area")
 
-        dashboard = QWidget()
-        dashboard.setObjectName("dashboardView")
-        dlayout = QVBoxLayout(dashboard)
-        dlayout.setContentsMargins(48, 48, 48, 48)
-        dlayout.setSpacing(16)
+        # ── Dashboard view ───────────────────────────────────────────
+        self._dashboard = Dashboard()
+        stack.addWidget(self._dashboard)
 
-        title = QLabel("Controls")
-        title.setObjectName("sectionHeader")
-        dlayout.addWidget(title)
+        # ── Output / Pipeline view ───────────────────────────────────
+        output_page = QWidget()
+        output_page.setObjectName("outputView")
+        output_layout = QVBoxLayout(output_page)
+        output_layout.setContentsMargins(0, 0, 0, 0)
+        output_layout.setSpacing(0)
 
-        self._run_button = QPushButton("Run Optimization")
-        self._run_button.setObjectName("primary")
-        self._run_button.setMinimumHeight(48)
-        self._run_button.setAccessibleName("Run optimization pipeline")
-        dlayout.addWidget(self._run_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        # Header row
+        output_header = QFrame()
+        output_header.setObjectName("outputHeader")
+        hdr_row = QHBoxLayout(output_header)
+        hdr_row.setContentsMargins(20, 12, 20, 12)
 
-        self._revert_button = QPushButton("Revert Last Session")
-        self._revert_button.setObjectName("warning")
-        self._revert_button.setMinimumHeight(48)
-        self._revert_button.setAccessibleName("Revert last optimization session")
-        dlayout.addWidget(self._revert_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        self._output_title = QLabel("Pipeline")
+        self._output_title.setObjectName("outputTitle")
+        hdr_row.addWidget(self._output_title)
+        hdr_row.addStretch()
 
-        self._ai_setup_button = QPushButton("AI Setup")
-        self._ai_setup_button.setObjectName("secondary")
-        self._ai_setup_button.setMinimumHeight(48)
-        self._ai_setup_button.setAccessibleName("AI model setup and download")
-        dlayout.addWidget(self._ai_setup_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        self._phase_pill = QLabel("○ Idle")
+        self._phase_pill.setObjectName("sbLabel")
+        hdr_row.addWidget(self._phase_pill)
 
-        self._open_log_button = QPushButton("Open Debug Log")
-        self._open_log_button.setObjectName("secondary")
-        self._open_log_button.setMinimumHeight(48)
-        self._open_log_button.setAccessibleName("Open debug log file")
-        self._open_log_button.clicked.connect(self._open_debug_log)
-        dlayout.addWidget(self._open_log_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        output_layout.addWidget(output_header)
 
-        self._exit_button = QPushButton("Exit")
-        self._exit_button.setMinimumHeight(40)
-        self._exit_button.setAccessibleName("Exit lil_bro")
-        self._exit_button.clicked.connect(self.close)
-        dlayout.addWidget(self._exit_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        # Phase row
+        self._phase_row = PhaseRow()
+        output_layout.addWidget(self._phase_row)
 
-        # Progress section — hidden until the pipeline emits progress_changed
+        # Progress bar (hidden until pipeline emits progress_changed)
         self._progress_label = QLabel("")
         self._progress_label.setObjectName("progressLabel")
         self._progress_label.setVisible(False)
-        dlayout.addWidget(self._progress_label)
+        self._progress_label.setContentsMargins(20, 4, 20, 0)
+        output_layout.addWidget(self._progress_label)
 
         self._progress_bar = QProgressBar()
         self._progress_bar.setRange(0, 100)
         self._progress_bar.setValue(0)
         self._progress_bar.setTextVisible(False)
-        self._progress_bar.setFixedHeight(8)
-        self._progress_bar.setAccessibleName("Pipeline fix progress")
+        self._progress_bar.setFixedHeight(4)
+        self._progress_bar.setAccessibleName("Pipeline progress")
         self._progress_bar.setVisible(False)
-        dlayout.addWidget(self._progress_bar)
+        self._progress_bar.setContentsMargins(20, 0, 20, 0)
+        output_layout.addWidget(self._progress_bar)
 
-        dlayout.addStretch(1)
-        stack.addWidget(dashboard)
+        # Output panel with toolbar
+        self._output_panel = OutputPanel()
+        output_layout.addWidget(self._output_panel, stretch=1)
 
-        # Output panel placeholder (filled in Step 6).
-        output = QLabel("Output panel placeholder — pipeline log streams here.")
-        output.setObjectName("outputPanelPlaceholder")
-        output.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        output.setAccessibleName("Pipeline output panel")
-        stack.addWidget(output)
-
+        stack.addWidget(output_page)
         stack.setCurrentIndex(self.DASHBOARD_INDEX)
         return stack
-
-    # ── Menu ───────────────────────────────────────────────────────────
-
-    
 
     # ── View toggle ────────────────────────────────────────────────────
 
     def show_dashboard(self) -> None:
         self._content.setCurrentIndex(self.DASHBOARD_INDEX)
+        self._set_nav_active(self._nav_dashboard)
 
     def show_output(self) -> None:
         self._content.setCurrentIndex(self.OUTPUT_INDEX)
+        self._set_nav_active(self._run_button)
+
+    # ── Phase row proxy (wired by app.py via phase_changed signal) ─────
+
+    def update_phase(self, name: str, status: str) -> None:
+        self._phase_row.update_phase(name, status)
+        if status == "active":
+            self._phase_pill.setText(f"● {name}")
+        elif status == "done":
+            self._phase_pill.setText(f"✓ {name}")
+
+    # ── Nav "working" indicator for Run button ─────────────────────────
+
+    def set_running(self, running: bool) -> None:
+        """Toggle the Run nav button between normal and 'working' states."""
+        if running:
+            self._run_button.setText("▣  Working…")
+            self._run_button.setProperty("navState", "active")
+        else:
+            self._run_button.setText("▶  Start Optimization")
+            self._run_button.setProperty("navState", "")
+        self._run_button.style().unpolish(self._run_button)
+        self._run_button.style().polish(self._run_button)
+
+    # ── Debug log ──────────────────────────────────────────────────────
 
     def _open_debug_log(self) -> None:
         from src.utils.paths import get_debug_log_path
@@ -207,9 +275,8 @@ class MainWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 "Debug Log",
-                "No debug log found.\n\nRun lil_bro at least once (GUI mode always writes a log).",
+                "No debug log found.\n\nRun lil_bro at least once to generate a log.",
             )
-
 
     # ── Lifecycle ──────────────────────────────────────────────────────
 

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "session_id": "20260511_195357",
+  "session_date": "2026-05-11T19:53:57.151568",
+  "restore_point_created": false,
+  "fixes": [
+    {
+      "fix": "temp_folders",
+      "revertible": false,
+      "reason": "Deleted temp files cannot be restored",
+      "applied_at": "2026-05-11T19:53:57.426859",
+      "display": "temp files deleted \u2014 files gone"
+    }
+  ]
+}

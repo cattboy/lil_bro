@@ -243,6 +243,445 @@ def build_stylesheet() -> str:
     QSplitter::handle {{
         background-color: {c["border_default"]};
     }}
+
+    /* ================================================================
+       V2 COMPONENTS
+       ================================================================ */
+
+    /* --- Sidebar brand label ----------------------------------------- */
+    QLabel#sidebarBrand {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 16px;
+        font-weight: 800;
+        color: {c["text_primary"]};
+        padding: 0px 12px 16px 12px;
+        letter-spacing: -0.02em;
+    }}
+
+    /* --- Sidebar nav items ------------------------------------------- */
+    QPushButton[navRole="nav"] {{
+        background-color: transparent;
+        color: {c["text_secondary"]};
+        border: none;
+        border-left: 2px solid transparent;
+        border-radius: 0px;
+        padding: 9px 14px;
+        text-align: left;
+        font-size: 13px;
+        font-weight: 400;
+    }}
+    QPushButton[navRole="nav"]:hover {{
+        background-color: {c["hover"]};
+        color: {c["text_primary"]};
+    }}
+    QPushButton[navState="active"] {{
+        background-color: {c["accent_dim"]};
+        color: {c["text_primary"]};
+        border-left: 2px solid {c["accent"]};
+        font-weight: 500;
+    }}
+    QPushButton[navState="active"]:hover {{
+        background-color: {c["accent_dim"]};
+    }}
+    QPushButton[navState="muted"] {{
+        color: {c["text_muted"]};
+        font-size: 12px;
+    }}
+    QPushButton[navState="warning"] {{
+        color: {c["warning"]};
+    }}
+    QPushButton[navState="warning"]:hover {{
+        background-color: rgba(255, 181, 71, 0.08);
+        color: {c["warning"]};
+    }}
+    QPushButton[navState="danger"] {{
+        color: {c["error"]};
+    }}
+    QPushButton[navState="danger"]:hover {{
+        background-color: rgba(255, 107, 107, 0.08);
+        color: {c["error"]};
+    }}
+
+    /* Nav divider */
+    QFrame#navDivider {{
+        background-color: {c["border_default"]};
+        border: none;
+        max-height: 1px;
+        margin: 4px 12px;
+    }}
+
+    /* --- Stat card tone variants ------------------------------------- */
+    QFrame#dashboardCard[statTone="norm"] {{
+        border: 1px solid {c["border_default"]};
+    }}
+    QFrame#dashboardCard[statTone="warn"] {{
+        border: 1px solid rgba(255, 181, 71, 0.5);
+    }}
+    QFrame#dashboardCard[statTone="ok"] {{
+        border: 1px solid rgba(74, 222, 128, 0.5);
+    }}
+    QFrame#dashboardCard[statTone="cyan"] {{
+        border: 1px solid {c["border_accent"]};
+    }}
+    QLabel#cardValue[statTone="warn"] {{
+        color: {c["warning"]};
+    }}
+    QLabel#cardValue[statTone="ok"] {{
+        color: {c["success"]};
+    }}
+    QLabel#cardValue[statTone="cyan"] {{
+        color: {c["accent"]};
+    }}
+
+    /* --- Chart wrap -------------------------------------------------- */
+    QFrame#chartWrap {{
+        background-color: {c["surface"]};
+        border: 1px solid {c["border_default"]};
+        border-radius: 8px;
+        padding: 0px;
+    }}
+    QFrame#chartHeader {{
+        background-color: transparent;
+        border: none;
+        padding: 12px 16px 8px 16px;
+    }}
+    QLabel#chartTitle {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.10em;
+        text-transform: uppercase;
+        color: {c["text_muted"]};
+    }}
+    QLabel#legendCpu {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 11px;
+        color: {c["accent"]};
+    }}
+    QLabel#legendGpu {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 11px;
+        color: #D183E8;
+    }}
+
+    /* --- USB Polling widget ------------------------------------------ */
+    QFrame#pollWidget {{
+        background-color: {c["surface"]};
+        border: 1px solid {c["border_default"]};
+        border-radius: 8px;
+        padding: 16px;
+    }}
+    QLabel#pollLabel {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.10em;
+        color: {c["text_muted"]};
+    }}
+    QLabel#pollValue {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 36px;
+        font-weight: 700;
+        color: {c["text_primary"]};
+    }}
+    QLabel#pollUnit {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 16px;
+        color: {c["text_secondary"]};
+    }}
+    QLabel#pollStatus {{
+        font-size: 12px;
+        color: {c["text_secondary"]};
+    }}
+
+    /* --- Phase row --------------------------------------------------- */
+    QFrame#phaseRow {{
+        background-color: {c["surface"]};
+        border: 1px solid {c["border_default"]};
+        border-radius: 8px;
+        padding: 0px;
+    }}
+
+    /* Phase cards in row are compact (no outer padding) */
+    QFrame#phaseCard {{
+        background-color: transparent;
+        border: none;
+        border-left: 1px solid {c["border_default"]};
+        border-radius: 0px;
+        padding: 12px 16px;
+    }}
+    QFrame#phaseCard:first-child {{
+        border-left: none;
+    }}
+    QFrame#phaseCard[phaseStatus="active"] {{
+        background-color: {c["accent_dim"]};
+        border-left: 2px solid {c["accent"]};
+    }}
+    QFrame#phaseCard[phaseStatus="done"] {{
+        background-color: transparent;
+        border-left: 1px solid {c["border_default"]};
+    }}
+    QLabel#phaseNum {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 10px;
+        color: {c["text_muted"]};
+        letter-spacing: 0.08em;
+    }}
+    QLabel#phaseName {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 12px;
+        font-weight: 600;
+        color: {c["text_primary"]};
+    }}
+    QLabel#phaseStatus {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 10px;
+        color: {c["text_muted"]};
+    }}
+    QLabel#phaseStatus[phaseStatus="active"] {{
+        color: {c["accent"]};
+    }}
+    QLabel#phaseStatus[phaseStatus="done"] {{
+        color: {c["success"]};
+    }}
+    QLabel#phaseStatus[phaseStatus="failed"] {{
+        color: {c["error"]};
+    }}
+
+    /* --- Output view header ------------------------------------------ */
+    QFrame#outputHeader {{
+        background-color: transparent;
+        border: none;
+        border-bottom: 1px solid {c["border_default"]};
+        padding: 12px 20px;
+    }}
+    QLabel#outputTitle {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 16px;
+        font-weight: 700;
+        color: {c["text_primary"]};
+    }}
+
+    /* --- Log toolbar ------------------------------------------------- */
+    QFrame#logToolbar {{
+        background-color: {c["elevated"]};
+        border: none;
+        border-bottom: 1px solid {c["border_default"]};
+        border-radius: 0px;
+        padding: 0px;
+    }}
+    QLabel#logToolbarTitle {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 11px;
+        letter-spacing: 0.10em;
+        color: {c["text_muted"]};
+        padding: 8px 12px;
+    }}
+    QPushButton[logBtn="true"] {{
+        background-color: transparent;
+        color: {c["text_secondary"]};
+        border: 1px solid {c["border_default"]};
+        border-radius: 4px;
+        padding: 4px 10px;
+        font-size: 11px;
+        font-family: "{FONTS["mono"]}";
+    }}
+    QPushButton[logBtn="true"]:hover {{
+        background-color: {c["hover"]};
+        color: {c["text_primary"]};
+    }}
+
+    /* --- Custom status bar widget ------------------------------------ */
+    QWidget#statusBarWidget {{
+        background-color: {c["elevated"]};
+        border-top: 1px solid {c["border_default"]};
+    }}
+    QLabel#sbDot {{
+        font-size: 8px;
+        color: {c["success"]};
+    }}
+    QLabel#sbDot[dotState="run"] {{
+        color: {c["accent"]};
+    }}
+    QLabel#sbLabel {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 11px;
+        color: {c["text_secondary"]};
+    }}
+    QLabel#sbSep {{
+        font-size: 11px;
+        color: {c["border_default"]};
+    }}
+
+    /* --- Approval (batch) dialog ------------------------------------- */
+    QDialog#batchDialog {{
+        background-color: {c["surface"]};
+        border: 1px solid {c["border_default"]};
+        border-radius: 12px;
+    }}
+    QLabel#dlgTitle {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 16px;
+        font-weight: 700;
+        color: {c["text_primary"]};
+    }}
+    QLabel#dlgSubtitle {{
+        font-size: 13px;
+        color: {c["text_secondary"]};
+    }}
+    QFrame#fixItem {{
+        background-color: {c["elevated"]};
+        border: 1px solid {c["border_default"]};
+        border-radius: 8px;
+        padding: 12px;
+    }}
+    QFrame#fixItem[selected="true"] {{
+        border: 1px solid {c["border_accent"]};
+        background-color: rgba(0, 229, 204, 0.05);
+    }}
+    QLabel#fixSev[sev="high"] {{
+        color: {c["error"]};
+        font-family: "{FONTS["mono"]}";
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+    }}
+    QLabel#fixSev[sev="medium"] {{
+        color: {c["warning"]};
+        font-family: "{FONTS["mono"]}";
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+    }}
+    QLabel#fixSev[sev="low"] {{
+        color: {c["success"]};
+        font-family: "{FONTS["mono"]}";
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+    }}
+    QLabel#fixTitle {{
+        font-size: 13px;
+        font-weight: 600;
+        color: {c["text_primary"]};
+    }}
+    QLabel#fixDesc {{
+        font-size: 12px;
+        color: {c["text_secondary"]};
+    }}
+    QLabel#modeBadge[mode="AUTO"] {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 10px;
+        font-weight: 600;
+        color: {c["accent"]};
+        background-color: {c["accent_dim"]};
+        border: 1px solid {c["border_accent"]};
+        border-radius: 4px;
+        padding: 2px 6px;
+    }}
+    QLabel#modeBadge[mode="MANUAL"] {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 10px;
+        font-weight: 600;
+        color: {c["text_secondary"]};
+        background-color: {c["hover"]};
+        border: 1px solid {c["border_default"]};
+        border-radius: 4px;
+        padding: 2px 6px;
+    }}
+    QLabel#checkBox {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 14px;
+        font-weight: 600;
+        color: {c["accent"]};
+        min-width: 20px;
+        min-height: 20px;
+        border: 1px solid {c["border_default"]};
+        border-radius: 4px;
+        padding: 1px 4px;
+    }}
+    QLabel#checkBox[checked="false"] {{
+        color: {c["text_muted"]};
+        border: 1px solid {c["border_default"]};
+    }}
+
+    /* --- Confirm dialog visual update -------------------------------- */
+    QLabel#confirmIcon {{
+        font-size: 28px;
+        color: {c["accent"]};
+    }}
+    QLabel#confirmTitle {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 14px;
+        font-weight: 600;
+        color: {c["text_primary"]};
+    }}
+    QLabel#confirmDesc {{
+        font-size: 12px;
+        color: {c["text_muted"]};
+        line-height: 1.5;
+    }}
+
+    /* --- Splash dialog ----------------------------------------------- */
+    QDialog#splashDialog {{
+        background-color: {c["deep"]};
+    }}
+    QLabel#splashBrand {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 48px;
+        font-weight: 800;
+        color: {c["text_primary"]};
+        letter-spacing: -0.02em;
+    }}
+    QLabel#splashBrandAccent {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 48px;
+        font-weight: 800;
+        color: {c["accent"]};
+        letter-spacing: -0.02em;
+    }}
+    QLabel#splashTagline {{
+        font-size: 14px;
+        color: {c["text_secondary"]};
+    }}
+    QLabel#splashBadge {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 11px;
+        color: {c["text_muted"]};
+        border: 1px solid {c["border_default"]};
+        border-radius: 9999px;
+        padding: 3px 10px;
+    }}
+    QLabel#splashStepIcon {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 13px;
+        min-width: 16px;
+    }}
+    QLabel#splashStepIcon[stepState="done"] {{
+        color: {c["success"]};
+    }}
+    QLabel#splashStepIcon[stepState="run"] {{
+        color: {c["accent"]};
+    }}
+    QLabel#splashStepIcon[stepState="pending"] {{
+        color: {c["text_muted"]};
+    }}
+    QLabel#splashStepLabel {{
+        font-size: 13px;
+        color: {c["text_secondary"]};
+    }}
+    QLabel#splashStepResult {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 11px;
+        color: {c["text_muted"]};
+        min-width: 28px;
+    }}
+    QLabel#splashStepResult[stepState="done"] {{
+        color: {c["success"]};
+    }}
+    QLabel#splashStepResult[stepState="run"] {{
+        color: {c["accent"]};
+    }}
     """
 
 

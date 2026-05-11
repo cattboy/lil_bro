@@ -75,55 +75,101 @@ def ansi_to_html(text: str) -> str:
     return "".join(out)
 
 
-class OutputPanel(QTextEdit):
-    """Live log panel for the pipeline worker.
+from PySide6.QtWidgets import (  # noqa: E402
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
-    Use ``append_line(text)`` from the main thread (after the worker's
-    ``output_emitted`` signal cross-thread hop). Carriage returns trigger
-    last-line replacement; otherwise text is appended verbatim.
-    """
+class OutputPanel(QWidget):
+    """V2 log panel: toolbar (title + Clear/Copy) + streaming QTextEdit below."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("outputPanel")
-        self.setReadOnly(True)
-        self.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
-        self.setAcceptRichText(True)
         self.setAccessibleName("Pipeline output panel")
-        self.setAccessibleDescription("Streaming output from the optimization pipeline.")
+
+        vbox = QVBoxLayout(self)
+        vbox.setContentsMargins(0, 0, 0, 0)
+        vbox.setSpacing(0)
+
+        # ── Log toolbar ──────────────────────────────────────────────
+        toolbar = QFrame()
+        toolbar.setObjectName("logToolbar")
+        tb_row = QHBoxLayout(toolbar)
+        tb_row.setContentsMargins(12, 0, 8, 0)
+        tb_row.setSpacing(6)
+        toolbar.setFixedHeight(36)
+
+        tb_title = QLabel("PIPELINE LOG")
+        tb_title.setObjectName("logToolbarTitle")
+        tb_row.addWidget(tb_title)
+        tb_row.addStretch()
+
+        self._clear_btn = QPushButton("Clear")
+        self._clear_btn.setProperty("logBtn", "true")
+        self._clear_btn.setFixedHeight(24)
+        self._clear_btn.clicked.connect(self.clear_log)
+
+        self._copy_btn = QPushButton("Copy")
+        self._copy_btn.setProperty("logBtn", "true")
+        self._copy_btn.setFixedHeight(24)
+        self._copy_btn.clicked.connect(self._copy_all)
+
+        tb_row.addWidget(self._clear_btn)
+        tb_row.addWidget(self._copy_btn)
+
+        vbox.addWidget(toolbar)
+
+        # ── Log text area ────────────────────────────────────────────
+        self._text = QTextEdit()
+        self._text.setObjectName("outputPanelText")
+        self._text.setReadOnly(True)
+        self._text.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self._text.setAcceptRichText(True)
+        self._text.setAccessibleDescription("Streaming output from the optimization pipeline.")
+
+        vbox.addWidget(self._text, stretch=1)
+
+    # ── Log toolbar actions ────────────────────────────────────────────
+
+    def _copy_all(self) -> None:
+        from PySide6.QtWidgets import QApplication
+        QApplication.clipboard().setText(self._text.toPlainText())
+
+    # ── Public API (same as before) ────────────────────────────────────
 
     def append_line(self, text: str) -> None:
         """Append a text line, honoring \\r as a last-line replace."""
         if not text:
             return
-
-        # Multiple \r segments: keep only the segment after the final \r as
-        # the "current frame" — that's the terminal redraw semantics.
         if "\r" in text:
             head, _, tail = text.rpartition("\r")
             if head:
                 self._append_html(ansi_to_html(head))
             self._replace_last_line(ansi_to_html(tail))
             return
-
         self._append_html(ansi_to_html(text))
 
     def _append_html(self, html: str) -> None:
-        cursor = self.textCursor()
+        cursor = self._text.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.insertHtml(html)
-        self.setTextCursor(cursor)
-        self.ensureCursorVisible()
+        self._text.setTextCursor(cursor)
+        self._text.ensureCursorVisible()
 
     def _replace_last_line(self, html: str) -> None:
-        cursor = self.textCursor()
+        cursor = self._text.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.select(QTextCursor.SelectionType.LineUnderCursor)
         cursor.removeSelectedText()
         cursor.insertHtml(html)
-        self.setTextCursor(cursor)
-        self.ensureCursorVisible()
+        self._text.setTextCursor(cursor)
+        self._text.ensureCursorVisible()
 
     def clear_log(self) -> None:
         """Reset the panel between pipeline runs."""
-        self.clear()
+        self._text.clear()

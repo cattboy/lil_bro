@@ -31,6 +31,7 @@ from src.gui.signals import PipelineSignals
 def run(debug: bool = False) -> int:
     """Boot the GUI. Returns the QApplication exit code."""
     import logging
+    import secrets
     from src.utils.debug_logger import enable_debug_logging, get_debug_logger
 
     level = logging.DEBUG if debug else logging.INFO
@@ -57,10 +58,8 @@ def run(debug: bool = False) -> int:
 
     from PySide6.QtCore import QTimer
 
-    from src.agent_tools.thermal_guidance import derive_cpu_temp, derive_gpu_temp
-    from src.benchmarks.thermal_monitor import fetch_snapshot
-    from src.gui.widgets.approval_dialog import ApprovalDialog
     from src.gui.widgets.batch_selection_dialog import BatchSelectionDialog
+    from src.gui.widgets.approval_dialog import ApprovalDialog
     from src.gui.widgets.confirm_dialog import ConfirmDialog
     from src.gui.worker import PipelineWorker, RevertWorker
     from src.utils.pawnio_check import is_pawnio_installed
@@ -69,10 +68,6 @@ def run(debug: bool = False) -> int:
 
     log.debug("GUI Startup: app.run() entry")
 
-    # Capture PawnIO state BEFORE the worker thread launches the LHM
-    # sidecar (which may install PawnIO). The CLI does the same in
-    # src/main.py so post_run_cleanup leaves the user's pre-existing
-    # PawnIO install in place.
     try:
         pawnio_was_preinstalled = is_pawnio_installed()
     except Exception:
@@ -88,6 +83,21 @@ def run(debug: bool = False) -> int:
     from src.gui.settings import Settings
     settings = Settings()
     main = MainWindow(settings=settings)
+
+    # ── Session identity ───────────────────────────────────────────────
+    session_id = secrets.token_hex(4)
+    main.status_bar_widget.set_session(session_id)
+
+    # Try to pull model name from LLM config
+    try:
+        from src.utils.llm_setup import get_model_display_name
+        main.status_bar_widget.set_model(get_model_display_name())
+    except Exception:
+        main.status_bar_widget.set_model("Qwen2.5-7B")
+
+    # ── Splash dialog ──────────────────────────────────────────────────
+    from src.gui.widgets.splash import SplashDialog
+    splash = SplashDialog(parent=main)
 
     log.debug("GUI Startup: main.show before")
     main.show()
@@ -111,11 +121,12 @@ def run(debug: bool = False) -> int:
         "revert_worker": None,
     }
 
-    # _exit_button and _open_log_button are always enabled; the rest start enabled
+    # Wire init_step to splash steps
+    orchestrator.init_step.connect(
+        splash.on_init_step, Qt.ConnectionType.QueuedConnection
+    )
+
     def _set_flow_controls(enabled: bool) -> None:
-        # Suppress the initial _set_flow_controls(False) call that fires
-        # before startup completes.  Once _on_finished sets startup_done,
-        # pipeline/revert disable calls work normally.
         if not enabled and not runtime.get("startup_done", False):
             return
         main._run_button.setEnabled(enabled)
@@ -132,7 +143,7 @@ def run(debug: bool = False) -> int:
                 if status == "fail"
                 else f"{name}…"
             )
-            main.statusBar().showMessage(label)
+            main.status_bar_widget.set_state("run", label)
         except Exception as exc:
             log.error("_on_step EXC: %s: %r", type(exc).__name__, exc, exc_info=True)
 
@@ -140,17 +151,17 @@ def run(debug: bool = False) -> int:
         log.debug("GUI Startup: _on_finished entry")
         runtime["startup_done"] = True
         runtime["lhm"] = startup_lhm
-        # Re-enable flow controls only when no operation is already running.
-        # The user may have clicked Run/Revert before startup completed.
         try:
             if runtime.get("pipeline_thread") is None and runtime.get("revert_thread") is None:
                 _set_flow_controls(True)
         except Exception:
             pass
         try:
-            main.statusBar().showMessage("Ready")
-            chart = getattr(main, "thermal_chart", None)
-            if chart is not None and startup_lhm is None:
+            main.status_bar_widget.set_state("ok", "Idle")
+            # Start dashboard polling now that LHM is ready
+            main._dashboard.start_polling(lhm=startup_lhm)
+            chart = main._dashboard.thermal_chart
+            if startup_lhm is None:
                 chart.set_offline("Thermal monitor unavailable")
         except Exception as exc:
             log.error("_on_finished EXC: %s: %r", type(exc).__name__, exc, exc_info=True)
@@ -177,7 +188,11 @@ def run(debug: bool = False) -> int:
         for raw in text.splitlines():
             line = ansi_re.sub("", raw).strip()
             if line:
-                main.statusBar().showMessage(line)
+                main.status_bar_widget.set_state("run", line[:80])
+                try:
+                    main._output_panel.append_line(raw)
+                except Exception:
+                    pass
 
     def _on_progress_changed(percent: int, label: str) -> None:
         main._progress_bar.setValue(percent)
@@ -186,31 +201,32 @@ def run(debug: bool = False) -> int:
             main._progress_bar.setVisible(True)
             main._progress_label.setVisible(True)
 
-    bridge.signals.progress_changed.connect(_on_progress_changed)
-
-    def _on_progress_changed(percent: int, label: str) -> None:
-        main._progress_bar.setValue(percent)
-        main._progress_label.setText(label)
-        if not main._progress_bar.isVisible():
-            main._progress_bar.setVisible(True)
-            main._progress_label.setVisible(True)
+    def _on_phase_changed(phase_name: str, status: str) -> None:
+        try:
+            main.update_phase(phase_name, status)
+        except Exception:
+            pass
 
     bridge.signals.progress_changed.connect(_on_progress_changed)
-
     bridge.signals.approval_requested.connect(_show_approval_dialog)
     bridge.signals.confirm_requested.connect(_show_confirm_dialog)
     bridge.signals.batch_selection_requested.connect(_show_batch_dialog)
     bridge.signals.output_emitted.connect(_on_pipeline_output)
+    bridge.signals.phase_changed.connect(_on_phase_changed)
 
     def _start_pipeline() -> None:
         if runtime.get("pipeline_thread") is not None:
             return
         if runtime.get("lhm") is None:
-            main.statusBar().showMessage("Startup still in progress — please wait…")
+            main.status_bar_widget.set_state("ok", "Startup still in progress — please wait…")
             return
         log.info("Pipeline: start requested")
         _set_flow_controls(False)
-        main.statusBar().showMessage("Pipeline starting…")
+        main.show_output()
+        main.set_running(True)
+        main._output_panel.clear_log()
+        main._phase_row.reset()
+        main.status_bar_widget.set_state("run", "Pipeline starting…")
 
         pipeline_thread = QThread()
         pipeline_worker = PipelineWorker(lhm=runtime["lhm"], llm=None)
@@ -219,20 +235,21 @@ def run(debug: bool = False) -> int:
 
         def _on_pipeline_started() -> None:
             log.info("Pipeline: started")
-            main.statusBar().showMessage("Pipeline running…")
+            main.status_bar_widget.set_state("run", "Pipeline running…")
 
         def _on_pipeline_finished() -> None:
             log.info("Pipeline: finished (PASS)")
-            main.statusBar().showMessage("Pipeline finished")
+            main.status_bar_widget.set_state("ok", "Pipeline finished")
             pipeline_thread.quit()
 
         def _on_pipeline_failed(exc_type: str, msg: str, tb: str) -> None:
             log.error("Pipeline: failed -- %s: %s\n%s", exc_type, msg, tb)
-            main.statusBar().showMessage(f"Pipeline failed: {exc_type}: {msg}")
+            main.status_bar_widget.set_state("ok", f"Pipeline failed: {exc_type}")
             pipeline_thread.quit()
 
         def _on_thread_done() -> None:
             _set_flow_controls(True)
+            main.set_running(False)
             runtime["pipeline_thread"] = None
             runtime["pipeline_worker"] = None
             main._progress_bar.setVisible(False)
@@ -256,14 +273,13 @@ def run(debug: bool = False) -> int:
     def _start_revert() -> None:
         if runtime.get("revert_thread") is not None:
             return
-        # Quick pre-check on main thread (file read only -- safe).
         from src.utils.revert import load_manifest
         if load_manifest() is None:
-            main.statusBar().showMessage("No session backup found -- nothing to revert")
+            main.status_bar_widget.set_state("ok", "No session backup found — nothing to revert")
             return
 
         _set_flow_controls(False)
-        main.statusBar().showMessage("Reverting session…")
+        main.status_bar_widget.set_state("run", "Reverting session…")
 
         revert_thread = QThread()
         revert_worker = RevertWorker()
@@ -271,12 +287,12 @@ def run(debug: bool = False) -> int:
         revert_thread.started.connect(revert_worker.run)
 
         def _on_revert_finished() -> None:
-            main.statusBar().showMessage("Revert complete")
+            main.status_bar_widget.set_state("ok", "Revert complete")
             revert_thread.quit()
 
         def _on_revert_failed(exc_type: str, msg: str, tb: str) -> None:
             log.error("Revert: GUI revert failed -- %s: %s\n%s", exc_type, msg, tb)
-            main.statusBar().showMessage(f"Revert failed: {exc_type}: {msg}")
+            main.status_bar_widget.set_state("ok", f"Revert failed: {exc_type}")
             revert_thread.quit()
 
         def _on_revert_thread_done() -> None:
@@ -305,38 +321,11 @@ def run(debug: bool = False) -> int:
 
     main._ai_setup_button.clicked.connect(_open_ai_setup)
 
-    # Thermal polling — uses the real working API (fetch_snapshot from
-    # benchmarks.thermal_monitor + derive_*_temp from
-    # agent_tools.thermal_guidance). LHMSidecar.read_latest() does not
-    # exist; quick_status._read_temp's call to it always falls into
-    # except (note the # type: ignore at that call site).
-    # Timer starts unconditionally and no-ops until ``runtime["lhm"]``
-    # is populated by ``_on_finished``.
-    thermal_timer = QTimer(app)
-    thermal_timer.setInterval(2000)
-
-    def _poll_thermal() -> None:
-        chart = getattr(main, "thermal_chart", None)
-        if chart is None or runtime.get("lhm") is None:
-            return
-        try:
-            snap = fetch_snapshot()
-            cpu_c = derive_cpu_temp(snap) if snap else None
-            gpu_c = derive_gpu_temp(snap) if snap else None
-        except Exception:
-            chart.set_offline("Thermal read failed")
-            return
-        if cpu_c is None and gpu_c is None:
-            chart.set_offline("No sensor data")
-            return
-        chart.append_sample(cpu_c, gpu_c)
-
-    thermal_timer.timeout.connect(_poll_thermal)
-    thermal_timer.start()
+    # -- Cleanup ----------------------------------------------------------
 
     def _on_about_to_quit() -> None:
         try:
-            thermal_timer.stop()
+            main._dashboard.stop_polling()
         except Exception:
             pass
         try:
@@ -356,5 +345,8 @@ def run(debug: bool = False) -> int:
     orchestrator.init_step.connect(_on_step, Qt.ConnectionType.QueuedConnection)
     orchestrator.finished.connect(_on_finished, Qt.ConnectionType.QueuedConnection)
     thread.start()
+
+    # Show splash after starting the thread so init_step signals land on it
+    splash.exec()
 
     return app.exec()
