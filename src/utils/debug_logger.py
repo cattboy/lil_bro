@@ -31,9 +31,14 @@ def enable_debug_logging(level: int = logging.DEBUG) -> None:
 
     Defaults to DEBUG; pass logging.INFO for always-on GUI mode.
     """
-    global _debug_enabled, _debug_level
+    global _debug_enabled, _debug_level, _logger
     _debug_enabled = True
     _debug_level = level
+    _logger = None  # Force re-init: module-level log = get_debug_logger() calls that
+                    # fired before this (e.g. lhm_sidecar at import time) cached a
+                    # NullHandler.  Resetting here lets get_debug_logger() attach the
+                    # FileHandler to the same logger instance, which all existing
+                    # references will immediately see (logging resolves by name).
 
 
 def get_debug_logger() -> logging.Logger:

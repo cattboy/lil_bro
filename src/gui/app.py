@@ -111,9 +111,13 @@ def run(debug: bool = False) -> int:
         "revert_worker": None,
     }
 
-    # All flow controls start disabled until startup completes.
-    # _exit_button and _open_log_button are intentionally excluded — always enabled.
+    # _exit_button and _open_log_button are always enabled; the rest start enabled
     def _set_flow_controls(enabled: bool) -> None:
+        # Suppress the initial _set_flow_controls(False) call that fires
+        # before startup completes.  Once _on_finished sets startup_done,
+        # pipeline/revert disable calls work normally.
+        if not enabled and not runtime.get("startup_done", False):
+            return
         main._run_button.setEnabled(enabled)
         main._revert_button.setEnabled(enabled)
         main._ai_setup_button.setEnabled(enabled)
@@ -134,11 +138,13 @@ def run(debug: bool = False) -> int:
 
     def _on_finished(startup_lhm) -> None:
         log.debug("GUI Startup: _on_finished entry")
+        runtime["startup_done"] = True
         runtime["lhm"] = startup_lhm
-        # Re-enable all flow controls OUTSIDE the chart try-block so any
-        # later chart/state failure can't strand them disabled.
+        # Re-enable flow controls only when no operation is already running.
+        # The user may have clicked Run/Revert before startup completed.
         try:
-            _set_flow_controls(True)
+            if runtime.get("pipeline_thread") is None and runtime.get("revert_thread") is None:
+                _set_flow_controls(True)
         except Exception:
             pass
         try:
