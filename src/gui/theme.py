@@ -230,6 +230,15 @@ def build_stylesheet() -> str:
         background-color: {c["accent"]};
         border-radius: 9999px;
     }}
+    QProgressBar#splashProgress {{
+        background-color: {c["border_default"]};
+        border: none;
+        border-radius: 2px;
+    }}
+    QProgressBar#splashProgress::chunk {{
+        background-color: {c["accent"]};
+        border-radius: 2px;
+    }}
 
     QScrollBar:vertical, QScrollBar:horizontal {{
         background-color: {c["deep"]};

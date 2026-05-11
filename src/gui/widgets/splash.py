@@ -83,19 +83,19 @@ from PySide6.QtWidgets import (  # noqa: E402
     QWidget,
 )
 
-_STEP_NAMES = ("LHM Monitor", "Loading fonts", "Checking system")
+_STEP_NAMES = ("LHM Monitor", "Sensors")
 
 
 class SplashDialog(QDialog):
     """V2 full-screen splash: brand + tagline + 3 auto-advancing init steps."""
 
     def __init__(self, parent=None) -> None:
+        from PySide6.QtWidgets import QProgressBar
         super().__init__(parent)
         self.setObjectName("splashDialog")
         self.setWindowTitle("lil_bro")
         self.setModal(True)
         self.setFixedSize(560, 340)
-        # Remove question mark button from title bar
         self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
 
         self._step_states: list[str] = ["pending"] * len(_STEP_NAMES)
@@ -166,8 +166,18 @@ class SplashDialog(QDialog):
             steps_col.addLayout(row)
 
         vbox.addWidget(steps_frame)
+        vbox.addSpacing(16)
 
-        # Start first step as "running"
+        # Progress bar
+        self._progress = QProgressBar()
+        self._progress.setObjectName("splashProgress")
+        self._progress.setRange(0, len(_STEP_NAMES))
+        self._progress.setValue(0)
+        self._progress.setTextVisible(False)
+        self._progress.setFixedHeight(4)
+        vbox.addWidget(self._progress)
+
+        # Pre-set step 0 as running so it shows active before first signal arrives
         self._set_step_state(0, "run")
 
     def _set_step_state(self, idx: int, state: str) -> None:
@@ -185,16 +195,18 @@ class SplashDialog(QDialog):
         result.style().polish(result)
 
     def on_init_step(self, name: str, status: str) -> None:
-        """Call this slot from StartupOrchestrator.init_step signal."""
-        for i, step_name in enumerate(_STEP_NAMES):
-            if step_name.lower() in name.lower() or name.lower() in step_name.lower():
-                if status in ("done", "fail"):
-                    self._set_step_state(i, "done")
-                    self._step_done_count += 1
-                    # Advance to next step
-                    if i + 1 < len(_STEP_NAMES):
-                        self._set_step_state(i + 1, "run")
-                    # All steps done — close after 600ms
-                    if self._step_done_count >= len(_STEP_NAMES):
-                        QTimer.singleShot(600, self.accept)
-                break
+        """Slot wired to StartupOrchestrator.init_step signal."""
+        try:
+            idx = list(_STEP_NAMES).index(name)
+        except ValueError:
+            return  # unknown step name — ignore
+        if status == "running":
+            self._set_step_state(idx, "run")
+        elif status in ("done", "fail"):
+            self._set_step_state(idx, "done")
+            self._step_done_count += 1
+            self._progress.setValue(self._step_done_count)
+            if idx + 1 < len(_STEP_NAMES):
+                self._set_step_state(idx + 1, "run")
+            if self._step_done_count >= len(_STEP_NAMES):
+                QTimer.singleShot(600, self.accept)
