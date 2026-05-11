@@ -63,7 +63,7 @@ class AnimatedProgressBar:
         self._lock = threading.Lock()
 
         # Compute bar width once at construction
-        if sys.stdout.isatty():
+        if sys.stdout is not None and sys.stdout.isatty():
             cols = shutil.get_terminal_size(fallback=(80, 24)).columns
             self._bar_width = max(20, min(cols - 40, 50))
         else:
@@ -76,10 +76,10 @@ class AnimatedProgressBar:
             self._empty_char = "."
             self._bolt = ">"
         else:
-            self._fill_char = "\u2588"
-            self._glow_chars = ["\u2593", "\u2592", "\u2591"]
-            self._empty_char = "\u2591"
-            self._bolt = "\u26a1"
+            self._fill_char = "█"
+            self._glow_chars = ["▓", "▒", "░"]
+            self._empty_char = "░"
+            self._bolt = "⚡"
 
     # ── Public API ────────────────────────────────────────────────────────────
 

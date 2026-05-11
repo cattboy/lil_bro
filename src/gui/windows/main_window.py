@@ -33,6 +33,8 @@ if TYPE_CHECKING:
     from src.gui.settings import Settings
 
 
+from PySide6.QtWidgets import QProgressBar
+
 _PHASE_NAMES = (
     "1. Bootstrap",
     "2. Scan",
@@ -81,6 +83,7 @@ class MainWindow(QMainWindow):
 
     def _build_sidebar(self) -> QFrame:
         from src.gui.widgets.thermal_chart import ThermalChart
+        from src.gui.widgets.phase_card import PhaseCard
 
         frame = QFrame()
         frame.setObjectName("sidebar")
@@ -95,18 +98,14 @@ class MainWindow(QMainWindow):
         header.setObjectName("sectionHeader")
         col.addWidget(header)
 
+        self._phase_cards: list[PhaseCard] = []
         for name in _PHASE_NAMES:
-            card = QLabel(name)
-            card.setObjectName("phaseCard")
-            card.setFrameShape(QLabel.Shape.StyledPanel)
-            card.setProperty("phaseStatus", "pending")
-            card.setAccessibleName(f"Phase: {name}")
+            card = PhaseCard(name)
+            self._phase_cards.append(card)
             col.addWidget(card)
 
         col.addStretch(1)
 
-        # Live CPU + GPU thermal chart. Starts in offline mode; ``app.run()``
-        # flips it to live samples once the LHM sidecar reports ready.
         self.thermal_chart = ThermalChart()
         self.thermal_chart.set_offline("Thermal monitor not started")
         col.addWidget(self.thermal_chart)
@@ -158,6 +157,21 @@ class MainWindow(QMainWindow):
         self._exit_button.setAccessibleName("Exit lil_bro")
         self._exit_button.clicked.connect(self.close)
         dlayout.addWidget(self._exit_button, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        # Progress section — hidden until the pipeline emits progress_changed
+        self._progress_label = QLabel("")
+        self._progress_label.setObjectName("progressLabel")
+        self._progress_label.setVisible(False)
+        dlayout.addWidget(self._progress_label)
+
+        self._progress_bar = QProgressBar()
+        self._progress_bar.setRange(0, 100)
+        self._progress_bar.setValue(0)
+        self._progress_bar.setTextVisible(False)
+        self._progress_bar.setFixedHeight(8)
+        self._progress_bar.setAccessibleName("Pipeline fix progress")
+        self._progress_bar.setVisible(False)
+        dlayout.addWidget(self._progress_bar)
 
         dlayout.addStretch(1)
         stack.addWidget(dashboard)

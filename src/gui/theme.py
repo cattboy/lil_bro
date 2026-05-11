@@ -201,12 +201,16 @@ def build_stylesheet() -> str:
         font-weight: bold;
     }}
 
-    /* Semantic status labels — used for thermal thresholds, dashboard
-       caution states, error banners, info messages. */
+    /* Semantic status labels */
     QLabel#statusSuccess {{ color: {c["success"]}; }}
     QLabel#statusWarning {{ color: {c["warning"]}; }}
     QLabel#statusError   {{ color: {c["error"]}; }}
     QLabel#statusInfo    {{ color: {c["info"]}; }}
+
+    QLabel#progressLabel {{
+        color: {c["text_secondary"]};
+        font-size: 12px;
+    }}
 
     /* --- Chrome ------------------------------------------------------ */
     QStatusBar {{
@@ -218,13 +222,13 @@ def build_stylesheet() -> str:
     QProgressBar {{
         background-color: {c["surface"]};
         border: 1px solid {c["border_default"]};
-        border-radius: 4px;
+        border-radius: 9999px;
         text-align: center;
         color: {c["text_primary"]};
     }}
     QProgressBar::chunk {{
         background-color: {c["accent"]};
-        border-radius: 3px;
+        border-radius: 9999px;
     }}
 
     QScrollBar:vertical, QScrollBar:horizontal {{

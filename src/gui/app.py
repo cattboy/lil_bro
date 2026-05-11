@@ -179,6 +179,24 @@ def run(debug: bool = False) -> int:
             if line:
                 main.statusBar().showMessage(line)
 
+    def _on_progress_changed(percent: int, label: str) -> None:
+        main._progress_bar.setValue(percent)
+        main._progress_label.setText(label)
+        if not main._progress_bar.isVisible():
+            main._progress_bar.setVisible(True)
+            main._progress_label.setVisible(True)
+
+    bridge.signals.progress_changed.connect(_on_progress_changed)
+
+    def _on_progress_changed(percent: int, label: str) -> None:
+        main._progress_bar.setValue(percent)
+        main._progress_label.setText(label)
+        if not main._progress_bar.isVisible():
+            main._progress_bar.setVisible(True)
+            main._progress_label.setVisible(True)
+
+    bridge.signals.progress_changed.connect(_on_progress_changed)
+
     bridge.signals.approval_requested.connect(_show_approval_dialog)
     bridge.signals.confirm_requested.connect(_show_confirm_dialog)
     bridge.signals.batch_selection_requested.connect(_show_batch_dialog)
@@ -186,6 +204,9 @@ def run(debug: bool = False) -> int:
 
     def _start_pipeline() -> None:
         if runtime.get("pipeline_thread") is not None:
+            return
+        if runtime.get("lhm") is None:
+            main.statusBar().showMessage("Startup still in progress — please wait…")
             return
         log.info("Pipeline: start requested")
         _set_flow_controls(False)
@@ -214,6 +235,8 @@ def run(debug: bool = False) -> int:
             _set_flow_controls(True)
             runtime["pipeline_thread"] = None
             runtime["pipeline_worker"] = None
+            main._progress_bar.setVisible(False)
+            main._progress_label.setVisible(False)
             pipeline_worker.deleteLater()
             pipeline_thread.deleteLater()
 
