@@ -112,10 +112,11 @@ def run(debug: bool = False) -> int:
     }
 
     # All flow controls start disabled until startup completes.
+    # _exit_button and _open_log_button are intentionally excluded — always enabled.
     def _set_flow_controls(enabled: bool) -> None:
         main._run_button.setEnabled(enabled)
-        main.action_run_pipeline.setEnabled(enabled)
-        main.action_revert.setEnabled(enabled)
+        main._revert_button.setEnabled(enabled)
+        main._ai_setup_button.setEnabled(enabled)
 
     _set_flow_controls(False)
 
@@ -220,7 +221,6 @@ def run(debug: bool = False) -> int:
         pipeline_thread.start()
 
     main._run_button.clicked.connect(_start_pipeline)
-    main.action_run_pipeline.triggered.connect(_start_pipeline)
 
     # -- Revert wiring ----------------------------------------------------
 
@@ -265,9 +265,18 @@ def run(debug: bool = False) -> int:
         runtime["revert_worker"] = revert_worker
         revert_thread.start()
 
-    main.action_revert.triggered.connect(_start_revert)
+    main._revert_button.clicked.connect(_start_revert)
 
-    # Thermal polling -- uses the real working API (fetch_snapshot from
+    # -- AI Setup wiring --------------------------------------------------
+
+    def _open_ai_setup() -> None:
+        from src.gui.widgets.ai_setup_dialog import AISetupDialog
+        dialog = AISetupDialog(parent=main)
+        dialog.exec()
+
+    main._ai_setup_button.clicked.connect(_open_ai_setup)
+
+    # Thermal polling — uses the real working API (fetch_snapshot from
     # benchmarks.thermal_monitor + derive_*_temp from
     # agent_tools.thermal_guidance). LHMSidecar.read_latest() does not
     # exist; quick_status._read_temp's call to it always falls into

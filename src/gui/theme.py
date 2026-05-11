@@ -122,6 +122,38 @@ def build_stylesheet() -> str:
         background-color: {c["accent"]};
         border: 1px solid {c["text_primary"]};
     }}
+    QPushButton#warning {{
+        background-color: rgba(255, 181, 71, 0.12);
+        color: {c["warning"]};
+        border: 1px solid rgba(255, 181, 71, 0.35);
+        border-radius: 4px;
+        padding: 8px 16px;
+        font-weight: 600;
+    }}
+    QPushButton#warning:hover {{
+        background-color: rgba(255, 181, 71, 0.22);
+        border-color: {c["warning"]};
+    }}
+    QPushButton#warning:disabled {{
+        color: {c["text_muted"]};
+        border-color: {c["border_default"]};
+        background-color: transparent;
+    }}
+    QPushButton#secondary {{
+        background-color: {c["elevated"]};
+        color: {c["text_primary"]};
+        border: 1px solid {c["border_default"]};
+        border-radius: 4px;
+        padding: 8px 16px;
+        font-weight: 500;
+    }}
+    QPushButton#secondary:hover {{
+        background-color: {c["hover"]};
+        border-color: {c["info"]};
+    }}
+    QPushButton#secondary:disabled {{
+        color: {c["text_muted"]};
+    }}
     QPushButton:focus {{
         border: 2px solid {c["accent"]};
     }}
@@ -181,22 +213,6 @@ def build_stylesheet() -> str:
         background-color: {c["elevated"]};
         color: {c["text_muted"]};
         border-top: 1px solid {c["border_default"]};
-    }}
-    QMenuBar {{
-        background-color: {c["elevated"]};
-        color: {c["text_primary"]};
-        border-bottom: 1px solid {c["border_default"]};
-    }}
-    QMenuBar::item:selected {{
-        background-color: {c["hover"]};
-    }}
-    QMenu {{
-        background-color: {c["surface"]};
-        color: {c["text_primary"]};
-        border: 1px solid {c["border_default"]};
-    }}
-    QMenu::item:selected {{
-        background-color: {c["hover"]};
     }}
 
     QProgressBar {{

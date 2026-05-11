@@ -12,7 +12,7 @@ panel (Step 6), the dashboard (Step 10), and the thermal chart (Step
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QAction, QDesktopServices
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -71,7 +71,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._content, stretch=1)
         self.setCentralWidget(root)
 
-        self._build_menu()
+        self.menuBar().hide()
 
         status = QStatusBar(self)
         status.showMessage(_status_text())
@@ -118,14 +118,13 @@ class MainWindow(QMainWindow):
         stack = QStackedWidget()
         stack.setAccessibleName("Content area")
 
-        # Dashboard placeholder (filled in Step 10).
         dashboard = QWidget()
         dashboard.setObjectName("dashboardView")
         dlayout = QVBoxLayout(dashboard)
         dlayout.setContentsMargins(48, 48, 48, 48)
-        dlayout.setSpacing(24)
+        dlayout.setSpacing(16)
 
-        title = QLabel("Run Optimization")
+        title = QLabel("Controls")
         title.setObjectName("sectionHeader")
         dlayout.addWidget(title)
 
@@ -134,6 +133,31 @@ class MainWindow(QMainWindow):
         self._run_button.setMinimumHeight(48)
         self._run_button.setAccessibleName("Run optimization pipeline")
         dlayout.addWidget(self._run_button, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        self._revert_button = QPushButton("Revert Last Session")
+        self._revert_button.setObjectName("warning")
+        self._revert_button.setMinimumHeight(48)
+        self._revert_button.setAccessibleName("Revert last optimization session")
+        dlayout.addWidget(self._revert_button, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        self._ai_setup_button = QPushButton("AI Setup")
+        self._ai_setup_button.setObjectName("secondary")
+        self._ai_setup_button.setMinimumHeight(48)
+        self._ai_setup_button.setAccessibleName("AI model setup and download")
+        dlayout.addWidget(self._ai_setup_button, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        self._open_log_button = QPushButton("Open Debug Log")
+        self._open_log_button.setObjectName("secondary")
+        self._open_log_button.setMinimumHeight(48)
+        self._open_log_button.setAccessibleName("Open debug log file")
+        self._open_log_button.clicked.connect(self._open_debug_log)
+        dlayout.addWidget(self._open_log_button, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        self._exit_button = QPushButton("Exit")
+        self._exit_button.setMinimumHeight(40)
+        self._exit_button.setAccessibleName("Exit lil_bro")
+        self._exit_button.clicked.connect(self.close)
+        dlayout.addWidget(self._exit_button, alignment=Qt.AlignmentFlag.AlignLeft)
 
         dlayout.addStretch(1)
         stack.addWidget(dashboard)
@@ -150,26 +174,7 @@ class MainWindow(QMainWindow):
 
     # ── Menu ───────────────────────────────────────────────────────────
 
-    def _build_menu(self) -> None:
-        bar = self.menuBar()
-        file_menu = bar.addMenu("&File")
-
-        self.action_run_pipeline = QAction("Run &Optimization", self)
-        self.action_ai_setup = QAction("&AI Setup", self)
-        self.action_revert = QAction("&Revert last session", self)
-        self.action_exit = QAction("E&xit", self)
-        self.action_exit.triggered.connect(self.close)
-
-        file_menu.addAction(self.action_run_pipeline)
-        file_menu.addAction(self.action_ai_setup)
-        file_menu.addAction(self.action_revert)
-        file_menu.addSeparator()
-        file_menu.addAction(self.action_exit)
-
-        help_menu = bar.addMenu("&Help")
-        action_open_log = QAction("Open Debug Log", self)
-        action_open_log.triggered.connect(self._open_debug_log)
-        help_menu.addAction(action_open_log)
+    
 
     # ── View toggle ────────────────────────────────────────────────────
 
