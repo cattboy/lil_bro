@@ -1,0 +1,68 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Sidebar nav</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500&family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);}
+  body { width: 700px; padding: 0; display:flex; }
+  .sb {
+    width: 220px; padding: 14px 0;
+    background: var(--bg-elevated);
+    border-right: 1px solid var(--border);
+    height: 280px; box-sizing: border-box;
+    display:flex; flex-direction: column;
+  }
+  .brand {
+    font-family: var(--font-display); font-size: 17px; font-weight: 800;
+    letter-spacing: -0.01em; color: var(--text-primary);
+    padding: 4px 18px 16px;
+    border-bottom: 1px solid var(--border); margin-bottom: 8px;
+  }
+  .brand span { color: var(--accent); text-shadow: 0 0 16px var(--accent-glow); }
+  .item {
+    font-family: var(--font-body); font-size: 13px; font-weight: 500;
+    padding: 9px 14px; margin: 1px 10px;
+    color: var(--text-secondary);
+    display:flex; align-items:center; gap: 10px;
+    border-radius: 4px;
+    border-left: 2px solid transparent;
+    cursor:pointer; transition: all 150ms ease-out;
+  }
+  .item.active {
+    background: var(--accent-dim); color: var(--accent);
+    border-left-color: var(--accent);
+  }
+  .item:hover:not(.active) { background: var(--bg-hover); color: var(--text-primary); }
+  .icn { width: 14px; text-align:center; font-family: var(--font-mono); font-size: 13px; }
+  .spacer { flex: 1; }
+  .divider { height: 1px; background: var(--border); margin: 6px 18px; }
+  .desc {
+    flex: 1; padding: 26px 28px; background: var(--bg-deep);
+    background-image: var(--scanline);
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+    line-height: 1.7;
+  }
+  .desc strong { color: var(--text-primary); font-weight: 600; }
+  .desc .ac { color: var(--accent); }
+</style>
+</head>
+<body>
+  <div class="sb">
+    <div class="brand">lil<span>_</span>bro</div>
+    <div class="item active"><span class="icn">◆</span> Dashboard</div>
+    <div class="item"><span class="icn">≡</span> Output</div>
+    <div class="spacer"></div>
+    <div class="divider"></div>
+    <div class="item" style="color:var(--text-muted);font-size:12px"><span class="icn">📄</span> Debug Log</div>
+    <div class="item" style="color:var(--warning)"><span class="icn">↩</span> Revert</div>
+    <div class="item" style="color:var(--error)"><span class="icn">✕</span> Exit</div>
+  </div>
+  <div class="desc">
+    <strong>Sidebar nav</strong><br>
+    Elevated bg · 220px<br>
+    <span class="ac">Active</span> = cyan dim<br>
+    + 2px left border<br>
+    Mono icons · 14px slot
+  </div>
+</body></html>

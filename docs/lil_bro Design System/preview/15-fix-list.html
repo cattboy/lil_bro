@@ -1,0 +1,60 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Fix list</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);}
+  body { width: 700px; padding: 22px 26px; background-image: var(--scanline);
+         display:flex; flex-direction:column; gap: 8px; }
+  .item {
+    display:flex; align-items:flex-start; gap: 12px;
+    padding: 11px 13px; background: var(--bg-surface);
+    border: 1px solid var(--border); border-radius: 4px;
+  }
+  .item.sel { border-color: var(--border-accent); background: rgba(0,229,204,0.04); }
+  .cb {
+    width: 15px; height: 15px; flex-shrink: 0; margin-top: 3px;
+    border: 1.5px solid var(--border); border-radius: 3px;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 10px; color: var(--bg-deep);
+  }
+  .item.sel .cb { background: var(--accent); border-color: var(--accent); }
+  .sev { font-family: var(--font-mono); font-size: 10px;
+         font-weight: 700; letter-spacing: 0.08em; margin-bottom: 3px; }
+  .h { color: var(--error); }
+  .m { color: var(--warning); }
+  .l { color: var(--accent); }
+  .title { font-family: var(--font-body); font-size: 13px; font-weight: 500;
+           color: var(--text-primary); margin-bottom: 2px; }
+  .desc { font-family: var(--font-body); font-size: 12px;
+          color: var(--text-muted); line-height: 1.4; }
+  .badge {
+    font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
+    padding: 3px 7px; border-radius: 9999px; flex-shrink: 0; margin-top: 2px;
+    letter-spacing: 0.06em;
+  }
+  .a { background: rgba(74,222,128,0.14); color: var(--success); }
+  .x { background: rgba(107,106,112,0.18); color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="item sel">
+    <div class="cb">✓</div>
+    <div style="flex:1">
+      <div class="sev h">HIGH · POWER PLAN</div>
+      <div class="title">Switch to Ultimate Performance</div>
+      <div class="desc">Your PC is in Balanced mode which throttles CPU clocks mid-game.</div>
+    </div>
+    <div class="badge a">AUTO</div>
+  </div>
+  <div class="item" style="opacity:0.7">
+    <div class="cb"></div>
+    <div style="flex:1">
+      <div class="sev m">MEDIUM · XMP/EXPO</div>
+      <div class="title">Enable XMP in BIOS</div>
+      <div class="desc">RAM at base 2133 MHz. Requires BIOS access and restart.</div>
+    </div>
+    <div class="badge x">MANUAL</div>
+  </div>
+</body></html>

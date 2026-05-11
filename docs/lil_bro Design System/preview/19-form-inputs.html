@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Form inputs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);}
+  body { width: 700px; padding: 24px 28px; background-image: var(--scanline);
+         display:grid; grid-template-columns: 1fr 1fr; gap: 20px 28px; align-items:end; }
+  .field { display:flex; flex-direction:column; gap: 6px; }
+  label { font-family: var(--font-mono); font-size: 10px;
+          letter-spacing: 0.14em; text-transform: uppercase;
+          color: var(--text-muted); }
+  input, select {
+    font-family: var(--font-mono); font-size: 13px;
+    padding: 9px 12px; background: var(--bg-deep);
+    border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text-primary); outline:none;
+    transition: all 150ms ease-out;
+  }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  input::placeholder { color: var(--text-muted); }
+  .toggle {
+    width: 44px; height: 24px; background: var(--bg-elevated);
+    border: 1px solid var(--border); border-radius: 9999px;
+    position: relative; cursor: pointer;
+  }
+  .toggle::after {
+    content:''; position:absolute; top: 2px; left: 2px;
+    width: 18px; height: 18px; border-radius: 50%; background: var(--text-muted);
+    transition: all 200ms ease-out;
+  }
+  .toggle.on { background: var(--accent-dim); border-color: var(--border-accent); }
+  .toggle.on::after { left: 22px; background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+  .switch-row { display:flex; align-items:center; gap: 12px;
+                font-family: var(--font-body); font-size: 13px; color: var(--text-primary); }
+  .switch-row .desc { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+</style>
+</head>
+<body>
+  <div class="field"><label>Session label</label><input value="2026-05-11_1234"></div>
+  <div class="field"><label>AI Model</label><select><option>Qwen2.5-7B-Instruct</option></select></div>
+  <div class="field"><label>API key (focused)</label><input style="border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)" placeholder="optional"></div>
+  <div class="field"><label>Switches</label>
+    <div class="switch-row"><div class="toggle on"></div><div>Auto-revert on error<div class="desc">Roll back if a fix fails</div></div></div>
+    <div class="switch-row" style="margin-top:8px"><div class="toggle"></div><div>Telemetry<div class="desc">Off · stays offline</div></div></div>
+  </div>
+</body></html>

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>lil_bro — Desktop UI Kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../colors_and_type.css">
+<link rel="stylesheet" href="app.css">
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script type="text/babel" src="Chrome.jsx"></script>
+<script type="text/babel" src="DashboardView.jsx"></script>
+<script type="text/babel" src="OutputView.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+function App() {
+  // boot: splash → confirm restore → dashboard ↔ output (+ approval dialog)
+  const [stage, setStage] = useState('splash'); // splash | confirm | app
+  const [view,  setView]  = useState('dashboard'); // dashboard | output
+  const [running, setRunning] = useState(false);   // optimization in-flight
+  const [showApproval, setShowApproval] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  function handleNav(id) {
+    if (id === 'dashboard' || id === 'output') setView(id);
+    else if (id === 'start') {
+      if (running) { setView('output'); }
+      else { setShowApproval(true); }
+    }
+    else if (id === 'exit') alert('stay sweaty lil_bro');
+    else if (id === 'revert') {
+      setRunning(false);
+      setToast('↩  Reverting last session — all 2 fixes restored.');
+      setTimeout(() => setToast(null), 2200);
+    }
+  }
+
+  return (
+    <div className="app-window">
+      <window.TitleBar />
+
+      {stage === 'splash' && (
+        <div className="app-layout" style={{ display: 'block' }}>
+          <window.Splash onContinue={() => setStage('confirm')} />
+        </div>
+      )}
+
+      {stage === 'confirm' && (
+        <>
+          <div className="app-layout" style={{ display: 'block', background: 'var(--bg-deep)', backgroundImage: 'var(--scanline)' }}></div>
+          <window.ConfirmDialog
+            onYes={() => setStage('app')}
+            onNo={()  => setStage('app')}
+          />
+        </>
+      )}
+
+      {stage === 'app' && (
+        <div className="app-layout">
+          <window.Sidebar view={view} onChange={handleNav} running={running} />
+          {view === 'dashboard' ? <window.DashboardView /> : <window.OutputView />}
+        </div>
+      )}
+
+      {showApproval && (
+        <window.ApprovalDialog
+          onApply={(n) => {
+            setShowApproval(false);
+            setRunning(true);
+            setView('output');
+            setToast(`Applying ${n} ${n === 1 ? 'fix' : 'fixes'}…`);
+            setTimeout(() => setToast(null), 2400);
+          }}
+          onSkip={() => setShowApproval(false)}
+        />
+      )}
+
+      <window.StatusBar
+        state={running ? 'running' : 'idle'}
+        session="2026-05-11_1234"
+        extra={running ? 'Fixes: 1 / 2 applied' : null}
+      />
+
+      {toast && (
+        <div className="lb-toast">{toast}</div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+<style>
+  .lb-toast {
+    position: absolute; bottom: 40px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-accent);
+    color: var(--text-primary);
+    font-family: var(--font-mono); font-size: 12px;
+    padding: 10px 16px; border-radius: 8px;
+    box-shadow: 0 0 24px rgba(0,229,204,0.25),
+                0 8px 24px rgba(0,0,0,0.4);
+    z-index: 30;
+    animation: dlg-in 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+</style>
+</body>
+</html>

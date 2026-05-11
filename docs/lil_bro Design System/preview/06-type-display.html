@@ -1,0 +1,23 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Type — display/mono</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);}
+  body { width: 700px; padding: 24px 28px; background-image: var(--scanline); }
+  .row { display:flex; align-items:baseline; gap: 14px; padding: 6px 0; }
+  .meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em;
+          text-transform: uppercase; color: var(--text-muted); width: 100px; flex-shrink:0; }
+  h2 { font-family: var(--font-mono); font-size: 11px; color: var(--accent);
+       letter-spacing: 0.18em; text-transform: uppercase; margin: 0 0 8px; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h2>JetBrains Mono · display + data</h2>
+  <div class="row"><div class="meta">3xl · 800</div><div style="font-family:var(--font-display);font-size:56px;font-weight:800;letter-spacing:-0.02em;line-height:1">lil<span style="color:var(--accent)">_</span>bro</div></div>
+  <div class="row"><div class="meta">2xl · 700</div><div style="font-family:var(--font-display);font-size:32px;font-weight:700">System Dashboard</div></div>
+  <div class="row"><div class="meta">xl · 700</div><div style="font-family:var(--font-display);font-size:24px;font-weight:700;font-variant-numeric:tabular-nums">68°C · 1000 Hz</div></div>
+  <div class="row"><div class="meta">md · 500</div><div style="font-family:var(--font-mono);font-size:16px;font-weight:500">$ scan --verbose</div></div>
+  <div class="row"><div class="meta">4xs · 600</div><div style="font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-muted)">SECTION LABEL</div></div>
+</body></html>

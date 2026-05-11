@@ -1,0 +1,57 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Status indicators</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);}
+  body { width: 700px; padding: 24px 28px; background-image: var(--scanline);
+         display:flex; flex-direction:column; gap: 14px; }
+  .row { display:flex; gap: 16px; align-items:center; flex-wrap:wrap; }
+  .label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em;
+           text-transform: uppercase; color: var(--text-muted); width: 70px; flex-shrink:0; }
+  .pill {
+    display:inline-flex; align-items:center; gap: 8px;
+    font-family: var(--font-mono); font-size: 11px;
+    color: var(--text-secondary);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .dot.ok  { background: var(--success); box-shadow: 0 0 10px rgba(74,222,128,0.6); }
+  .dot.run { background: var(--accent);  box-shadow: 0 0 10px var(--accent-glow); }
+  .dot.warn{ background: var(--warning); box-shadow: 0 0 10px rgba(255,181,71,0.6); }
+  .dot.err { background: var(--error);   box-shadow: 0 0 10px rgba(255,107,107,0.6); }
+  .badge {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+    letter-spacing: 0.08em; padding: 3px 8px; border-radius: 9999px;
+  }
+  .b-h { background: rgba(255,107,107,0.14); color: var(--error); }
+  .b-m { background: rgba(255,181,71,0.14); color: var(--warning); }
+  .b-l { background: rgba(0,229,204,0.14); color: var(--accent); }
+  .b-a { background: rgba(74,222,128,0.14); color: var(--success); }
+  .b-x { background: rgba(107,106,112,0.18); color: var(--text-muted); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .blink { animation: blink 1.2s ease-in-out infinite; }
+</style>
+</head>
+<body>
+  <div class="row"><div class="label">Dots</div>
+    <div class="pill"><span class="dot ok"></span>LHM Active</div>
+    <div class="pill"><span class="dot run blink"></span>Phase 4 — Applying</div>
+    <div class="pill"><span class="dot warn"></span>XMP not enabled</div>
+    <div class="pill"><span class="dot err"></span>Driver out of date</div>
+  </div>
+  <div class="row"><div class="label">Severity</div>
+    <span class="badge b-h">HIGH</span>
+    <span class="badge b-m">MEDIUM</span>
+    <span class="badge b-l">LOW</span>
+    <span class="badge b-a">AUTO</span>
+    <span class="badge b-x">MANUAL</span>
+  </div>
+  <div class="row"><div class="label">Log tags</div>
+    <span style="font-family:var(--font-mono);font-size:12px;color:var(--success)">[OK]</span>
+    <span style="font-family:var(--font-mono);font-size:12px;color:var(--accent)">[INFO]</span>
+    <span style="font-family:var(--font-mono);font-size:12px;color:var(--warning)">[WARN]</span>
+    <span style="font-family:var(--font-mono);font-size:12px;color:var(--error)">[FAIL]</span>
+    <span style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted)">[DEBUG]</span>
+  </div>
+</body></html>

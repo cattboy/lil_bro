@@ -1,0 +1,73 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Shadows & glow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;background:#0C0D12;color:var(--text-primary);font-family:var(--font-mono);}
+  body { width: 700px; padding: 28px 24px 32px; background-image: var(--scanline);
+         display:grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items:end; }
+  .item { display:flex; flex-direction:column; align-items:center; gap: 10px; }
+  .box {
+    width: 168px; height: 92px; border-radius: 8px;
+    background: var(--bg-surface); border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    color: var(--text-secondary); font-size: 11px; letter-spacing: 0.06em;
+    position: relative;
+  }
+  /* Card: subtle, resting on the surface */
+  .card {
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.02) inset,
+      0 2px 6px rgba(0,0,0,0.30);
+  }
+  /* Glow: accent ambient, low z */
+  .glow {
+    border-color: var(--border-accent);
+    color: var(--accent);
+    box-shadow: 0 0 20px rgba(0,229,204,0.30);
+  }
+  /* Dialog: lifted high, hard shadow + ambient halo + thicker stroke */
+  .dialog {
+    border-radius: 12px;
+    border-color: var(--border-accent);
+    transform: translateY(-6px);
+    box-shadow:
+      0 28px 64px -8px rgba(0,0,0,0.75),
+      0 8px 16px rgba(0,0,0,0.55),
+      0 0 0 1px rgba(0,229,204,0.08);
+    color: var(--text-primary);
+  }
+  /* Stage marker under dialog to imply backdrop */
+  .stage {
+    position: relative;
+    padding: 6px 0 0;
+  }
+  .stage::before {
+    content:''; position:absolute; left:-8px; right:-8px; top: 18px; height: 80px;
+    background: radial-gradient(ellipse at 50% 50%, rgba(0,0,0,0.55), transparent 70%);
+    z-index: 0; border-radius: 50%;
+    filter: blur(2px);
+  }
+  .stage .box { z-index: 1; }
+  .name { font-size: 11px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.08em; }
+  .desc { font-size: 10px; color: var(--text-muted); text-align:center; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <div class="item">
+    <div class="box card">card</div>
+    <div class="name">CARD</div>
+    <div class="desc">0 2px 6px / .30<br>resting on surface</div>
+  </div>
+  <div class="item">
+    <div class="box glow">glow</div>
+    <div class="name">GLOW</div>
+    <div class="desc">0 0 20px accent / .30<br>hover · active</div>
+  </div>
+  <div class="item stage">
+    <div class="box dialog">dialog</div>
+    <div class="name">DIALOG</div>
+    <div class="desc">0 28px 64px / .75<br>lifted modal</div>
+  </div>
+</body></html>

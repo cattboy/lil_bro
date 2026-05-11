@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Stat cards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);}
+  body { width: 700px; padding: 24px; background-image: var(--scanline);
+         display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .card {
+    background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px;
+    position: relative; overflow: hidden;
+  }
+  .card::before {
+    content:''; position:absolute; inset:0; background: var(--scanline);
+    opacity: 0.3; pointer-events:none;
+  }
+  .lbl { font-family: var(--font-mono); font-size: 9.5px;
+         letter-spacing: 0.12em; text-transform: uppercase;
+         color: var(--text-muted); margin-bottom: 8px; }
+  .val { font-family: var(--font-mono); font-size: 28px; font-weight: 700;
+         line-height: 1; font-variant-numeric: tabular-nums; }
+  .unit { font-family: var(--font-mono); font-size: 13px;
+          color: var(--text-muted); margin-left: 4px; }
+  .meta { font-family: var(--font-mono); font-size: 11px;
+          color: var(--text-muted); margin-top: 6px; }
+  .ok .val { color: var(--success); }
+  .warn .val { color: var(--warning); }
+  .cyan .val { color: var(--accent); text-shadow: 0 0 16px var(--accent-glow); }
+  .norm .val { color: var(--text-primary); }
+</style>
+</head>
+<body>
+  <div class="card norm"><div class="lbl">CPU Usage</div><div class="val">45<span class="unit">%</span></div><div class="meta">Ryzen 7 5800X</div></div>
+  <div class="card warn"><div class="lbl">CPU Temp</div><div class="val">68<span class="unit">°C</span></div><div class="meta">All Cores</div></div>
+  <div class="card ok"><div class="lbl">GPU Temp</div><div class="val">72<span class="unit">°C</span></div><div class="meta">RTX 3080</div></div>
+  <div class="card cyan"><div class="lbl">RAM Used</div><div class="val">16.2<span class="unit">GB</span></div><div class="meta">of 32.0 GB</div></div>
+</body></html>

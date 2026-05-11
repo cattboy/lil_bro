@@ -1,0 +1,49 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Phase cards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@600&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);}
+  body { width: 700px; padding: 24px 20px; background-image: var(--scanline);
+         display:flex; gap: 8px; }
+  .card {
+    flex: 1; background: var(--bg-surface);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; position: relative; overflow: hidden;
+  }
+  .card::before {
+    content:''; position:absolute; inset:0; background: var(--scanline);
+    opacity: 0.22; pointer-events:none;
+  }
+  .num { font-family: var(--font-mono); font-size: 9px;
+         letter-spacing: 0.12em; text-transform: uppercase;
+         color: var(--text-muted); margin-bottom: 4px; }
+  .name { font-family: var(--font-display); font-size: 12px;
+          font-weight: 600; margin-bottom: 8px; }
+  .stat { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.05em; }
+  .bar { height: 3px; background: var(--bg-deep); border-radius: 9999px;
+         overflow: hidden; margin-top: 8px; }
+  .fill {
+    height: 100%; border-radius: 9999px;
+    background: linear-gradient(90deg, var(--accent), #00FFE0, var(--accent));
+    background-size: 200% 100%;
+    animation: plasma 1.5s linear infinite;
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+  @keyframes plasma { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .done { border-color: rgba(74,222,128,0.28); background: rgba(74,222,128,0.04); }
+  .done .name, .done .stat { color: var(--success); }
+  .run { border-color: var(--border-accent); box-shadow: 0 0 16px rgba(0,229,204,0.1); }
+  .run .name, .run .stat { color: var(--accent); }
+  .pend .name { color: var(--text-secondary); }
+  .pend .stat { color: var(--text-muted); }
+</style>
+</head>
+<body>
+  <div class="card done"><div class="num">Phase 01</div><div class="name">Bootstrap</div><div class="stat">✓ COMPLETE</div></div>
+  <div class="card done"><div class="num">Phase 02</div><div class="name">System Scan</div><div class="stat">✓ COMPLETE</div></div>
+  <div class="card done"><div class="num">Phase 03</div><div class="name">AI Analysis</div><div class="stat">✓ COMPLETE</div></div>
+  <div class="card run"><div class="num">Phase 04</div><div class="name">Apply Fixes</div><div class="stat">● RUNNING</div><div class="bar"><div class="fill" style="width:60%"></div></div></div>
+  <div class="card pend"><div class="num">Phase 05</div><div class="name">Verify</div><div class="stat">○ PENDING</div></div>
+</body></html>

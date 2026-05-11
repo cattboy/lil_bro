@@ -1,0 +1,41 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Signature texture & glow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;background:#0C0D12;color:var(--text-primary);font-family:var(--font-body);}
+  body { width: 700px; padding: 0; display:grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  .panel { padding: 24px 26px; min-height: 220px; box-sizing: border-box; position:relative; overflow:hidden; }
+  .panel:first-child { background: var(--bg-deep); background-image: var(--scanline); border-right: 1px solid var(--border); }
+  .panel:last-child { background:
+    radial-gradient(ellipse at 70% 30%, rgba(0,229,204,0.18), transparent 60%),
+    radial-gradient(ellipse at 30% 80%, rgba(209,131,232,0.10), transparent 50%),
+    var(--bg-deep);
+  }
+  h2 { font-family: var(--font-mono); font-size: 10px;
+       letter-spacing: 0.14em; text-transform: uppercase;
+       color: var(--accent); margin: 0 0 14px; font-weight: 600; }
+  .demo {
+    font-family: var(--font-display); font-size: 36px; font-weight: 800;
+    letter-spacing: -0.02em; color: var(--text-primary);
+    text-shadow: 0 0 30px var(--accent-glow);
+  }
+  .demo span { color: var(--accent); }
+  .caption { font-family: var(--font-mono); font-size: 11px;
+             color: var(--text-muted); margin-top: 14px; line-height: 1.6; }
+  .caption code { color: var(--accent); }
+</style>
+</head>
+<body>
+  <div class="panel">
+    <h2>Scanlines · 2/4px CRT warmth</h2>
+    <div class="demo">CRT<br>TEXTURE</div>
+    <div class="caption">repeating-linear-gradient<br>0deg · alpha 0.03</div>
+  </div>
+  <div class="panel">
+    <h2>Accent glow · ambient light</h2>
+    <div class="demo">lil<span>_</span>bro</div>
+    <div class="caption">box-shadow: 0 0 20px<br><code>rgba(0,229,204,0.30)</code></div>
+  </div>
+</body></html>
