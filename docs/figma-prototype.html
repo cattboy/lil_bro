@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>lil_bro — Figma Prototype</title>
+<!--
+FIGMA IMPORT:
+  1. Install "HTML to Figma" extension for Chrome/Edge (Chrome Web Store)
+  2. Open this file in browser (File > Open File, or drag-drop)
+  3. Click the extension icon > "Get Frame"
+  4. Each .artboard div imports as a named Figma frame
+  Source: lil_bro feat/frontend-ui — generated 2026-05-11
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ── Design Tokens (verbatim from DESIGN.md / design-preview.html) ── */
+:root {
+  --bg-deep:       #1A1B23;
+  --bg-surface:    #24252F;
+  --bg-elevated:   #2E2F3A;
+  --bg-hover:      #363745;
+  --accent:        #00E5CC;
+  --accent-dim:    rgba(0,229,204,0.15);
+  --accent-glow:   rgba(0,229,204,0.3);
+  --warning:       #FFB547;
+  --error:         #FF6B6B;
+  --success:       #4ADE80;
+  --info:          #60A5FA;
+  --magenta:       #D183E8;
+  --text-primary:  #E8E6E3;
+  --text-secondary:#9B9AA0;
+  --text-muted:    #6B6A70;
+  --border:        #363745;
+  --border-accent: rgba(0,229,204,0.25);
+  --radius-sm:     4px;
+  --radius-md:     8px;
+  --radius-lg:     12px;
+  --font-display:  'JetBrains Mono', monospace;
+  --font-body:     'DM Sans', sans-serif;
+  --font-mono:     'JetBrains Mono', monospace;
+  --scanline: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px
+  );
+}
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; }
+body {
+  font-family: var(--font-body);
+  background: #0C0D12;
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  padding: 80px 60px;
+}
+
+/* ── Canvas header ── */
+.canvas-header { text-align: center; margin-bottom: 72px; }
+.canvas-header h1 {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+.canvas-header h1 span { color: var(--accent); }
+.canvas-header p {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+}
+
+/* ── Artboard scaffold ── */
+.artboard-wrap { margin-bottom: 80px; }
+.artboard-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  padding-left: 2px;
+}
+.artboard {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #1A1B25;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* ── Titlebar ── */
+.titlebar {
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 36px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 12px; z-index: 10;
+}
+.tb-dots { display: flex; gap: 6px; align-items: center; }
+.tb-dot { width: 10px; height: 10px; border-radius: 50%; }
+.tb-title {
+  font-family: var(--font-mono);
+  font-size: 0.62rem; color: var(--text-muted);
+  letter-spacing: 0.04em;
+  position: absolute; left: 50%; transform: translateX(-50%);
+}
+.tb-controls { display: flex; gap: 2px; margin-left: auto; }
+.tb-btn {
+  width: 28px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 0.65rem;
+  color: var(--text-muted); border-radius: 2px; cursor: pointer;
+}
+
+/* ── App layout ── */
+.app-layout {
+  position: absolute;
+  top: 36px; left: 0; right: 0; bottom: 28px;
+  display: flex;
+}
+.sidebar {
+  width: 200px; flex-shrink: 0;
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  padding: 12px 0;
+}
+.sb-brand {
+  font-family: var(--font-display);
+  font-size: 1.05rem; font-weight: 700;
+  color: var(--text-primary);
+  padding: 4px 16px 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+.sb-brand span { color: var(--accent); }
+.nav-item {
+  font-family: var(--font-body);
+  font-size: 0.8rem; font-weight: 500;
+  padding: 9px 14px; margin: 1px 8px;
+  color: var(--text-secondary);
+  display: flex; align-items: center; gap: 10px;
+  border-radius: var(--radius-sm);
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+.nav-item.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
+.nav-icon { font-size: 0.8rem; width: 16px; text-align: center; }
+.nav-spacer { flex: 1; }
+.nav-divider { height: 1px; background: var(--border); margin: 6px 16px; }
+
+/* ── Main content ── */
+.main-area {
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--bg-deep);
+  background-image: var(--scanline);
+}
+.main-header {
+  padding: 18px 24px 14px;
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.main-title {
+  font-family: var(--font-display);
+  font-size: 0.95rem; font-weight: 600;
+  color: var(--text-primary);
+}
+.status-pill {
+  font-family: var(--font-mono); font-size: 0.62rem;
+  color: var(--text-secondary);
+  display: flex; align-items: center; gap: 6px;
+}
+.s-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+.s-dot.ok  { background: var(--success); box-shadow: 0 0 8px rgba(74,222,128,0.5); }
+.s-dot.run { background: var(--accent);  box-shadow: 0 0 8px var(--accent-glow); }
+
+/* ── Status bar ── */
+.statusbar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0; height: 28px;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 16px; gap: 14px; z-index: 5;
+}
+.sb-item {
+  font-family: var(--font-mono); font-size: 0.58rem;
+  color: var(--text-muted);
+  display: flex; align-items: center; gap: 4px;
+}
+.sb-sep { width: 1px; height: 14px; background: var(--border); }
+
+/* ── Stat cards ── */
+.stat-grid {
+  display: grid; grid-template-columns: repeat(4,1fr);
+  gap: 12px; padding: 16px 24px 12px;
+  flex-shrink: 0;
+}
+.stat-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  position: relative; overflow: hidden;
+}
+.stat-card::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--scanline); opacity: 0.3; pointer-events: none;
+}
+.sc-label {
+  font-family: var(--font-mono); font-size: 0.58rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 6px;
+}
+.sc-val {
+  font-family: var(--font-mono); font-size: 1.5rem; font-weight: 700;
+  line-height: 1; font-variant-numeric: tabular-nums;
+}
+.sc-unit {
+  font-family: var(--font-mono); font-size: 0.72rem;
+  color: var(--text-muted); margin-top: 4px;
+}
+.stat-card.ok   .sc-val { color: var(--success); }
+.stat-card.warn .sc-val { color: var(--warning); }
+.stat-card.cyan .sc-val { color: var(--accent); }
+.stat-card.norm .sc-val { color: var(--text-primary); }
+
+/* ── Thermal chart ── */
+.chart-wrap {
+  margin: 0 24px 12px; flex-shrink: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  position: relative; overflow: hidden;
+}
+.chart-wrap::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--scanline); opacity: 0.25; pointer-events: none;
+}
+.chart-hdr {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px; position: relative; z-index: 1;
+}
+.chart-title {
+  font-family: var(--font-mono); font-size: 0.58rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.chart-legend { display: flex; gap: 12px; }
+.leg-item {
+  font-family: var(--font-mono); font-size: 0.58rem;
+  color: var(--text-muted);
+  display: flex; align-items: center; gap: 5px;
+}
+.leg-line { width: 14px; height: 2px; border-radius: 1px; }
+
+/* ── Mouse polling widget ── */
+.poll-widget {
+  margin: 0 24px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 20px;
+  display: flex; align-items: center; gap: 32px;
+  position: relative; overflow: hidden;
+  flex-shrink: 0;
+}
+.poll-widget::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--scanline); opacity: 0.25; pointer-events: none;
+}
+.poll-label {
+  font-family: var(--font-mono); font-size: 0.58rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 4px;
+}
+.poll-val {
+  font-family: var(--font-mono); font-size: 2.2rem; font-weight: 700;
+  color: var(--accent); line-height: 1;
+  text-shadow: 0 0 20px var(--accent-glow);
+  font-variant-numeric: tabular-nums;
+}
+.poll-unit {
+  font-family: var(--font-mono); font-size: 0.85rem;
+  color: var(--text-muted); margin-bottom: 4px;
+}
+.poll-status {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-body); font-size: 0.75rem;
+  color: var(--success);
+}
+
+/* ── Phase cards ── */
+.phase-row {
+  display: flex; gap: 8px;
+  padding: 16px 24px 10px; flex-shrink: 0;
+}
+.phase-card {
+  flex: 1; background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  position: relative; overflow: hidden;
+}
+.phase-card::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--scanline); opacity: 0.22; pointer-events: none;
+}
+.pc-num {
+  font-family: var(--font-mono); font-size: 0.52rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 4px;
+}
+.pc-name {
+  font-family: var(--font-display); font-size: 0.72rem; font-weight: 600;
+  margin-bottom: 8px;
+}
+.pc-status { font-family: var(--font-mono); font-size: 0.58rem; letter-spacing: 0.05em; }
+.phase-card.done { border-color: rgba(74,222,128,0.28); background: rgba(74,222,128,0.04); }
+.phase-card.done .pc-name,
+.phase-card.done .pc-status { color: var(--success); }
+.phase-card.running { border-color: var(--border-accent); box-shadow: 0 0 16px rgba(0,229,204,0.1); }
+.phase-card.running .pc-name,
+.phase-card.running .pc-status { color: var(--accent); }
+.phase-card.pending .pc-name { color: var(--text-secondary); }
+.phase-card.pending .pc-status { color: var(--text-muted); }
+.pc-bar-bg { height: 3px; background: var(--bg-deep); border-radius: 9999px; overflow: hidden; margin-top: 8px; }
+.pc-bar-fill {
+  height: 100%; border-radius: 9999px;
+  background: linear-gradient(90deg, var(--accent), #00FFE0, var(--accent));
+  background-size: 200% 100%;
+  animation: plasma 1.5s linear infinite;
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+@keyframes plasma {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Log panel ── */
+.log-panel {
+  flex: 1; margin: 0 24px 16px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden; display: flex; flex-direction: column;
+}
+.log-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 12px; border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated); flex-shrink: 0;
+}
+.log-tb-title {
+  font-family: var(--font-mono); font-size: 0.58rem;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.log-tb-btns { display: flex; gap: 5px; }
+.log-btn {
+  font-family: var(--font-mono); font-size: 0.58rem;
+  padding: 3px 7px;
+  background: transparent; border: 1px solid var(--border);
+  border-radius: 3px; color: var(--text-muted); cursor: pointer;
+}
+.log-body {
+  padding: 10px 14px; overflow: hidden;
+  font-family: var(--font-mono); font-size: 0.7rem; line-height: 1.85;
+  flex: 1;
+}
+.ll { white-space: pre; display: block; }
+.lc { color: var(--accent); }
+.lg { color: var(--success); }
+.ly { color: var(--warning); }
+.lr { color: var(--error); }
+.lb { color: var(--info); }
+.lm { color: var(--magenta); }
+.ld { color: var(--text-muted); }
+.lw { color: var(--text-secondary); }
+
+/* ── Splash ── */
+.splash-bg {
+  position: absolute; inset: 0;
+  background: var(--bg-deep);
+  background-image: var(--scanline);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+}
+.splash-brand {
+  font-family: var(--font-display);
+  font-size: 3rem; font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.02em; line-height: 1;
+  margin-bottom: 10px;
+}
+.splash-brand span { color: var(--accent); text-shadow: 0 0 40px var(--accent-glow); }
+.splash-sub {
+  font-family: var(--font-body); font-size: 0.78rem;
+  color: var(--text-secondary); text-align: center;
+  margin-bottom: 40px; line-height: 1.5;
+}
+.splash-badge {
+  font-family: var(--font-mono); font-size: 0.58rem;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--accent); border: 1px solid var(--border-accent);
+  border-radius: var(--radius-sm); padding: 4px 12px;
+  background: var(--accent-dim); margin-bottom: 44px;
+}
+.splash-steps { display: flex; flex-direction: column; gap: 10px; width: 220px; }
+.splash-step {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-mono); font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+.splash-step.done .si { color: var(--success); }
+.splash-step.run  .si { color: var(--accent); }
+.splash-step.run  { color: var(--text-primary); }
+.si { width: 14px; text-align: center; flex-shrink: 0; }
+.step-r { margin-left: auto; color: var(--text-muted) !important; }
+
+/* ── Dialogs ── */
+.dlg-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.65);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 20;
+}
+.dlg {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.55);
+  position: relative;
+}
+.dlg::before {
+  content: ''; position: absolute; inset: 0;
+  background: var(--scanline); opacity: 0.28;
+  pointer-events: none; z-index: 0;
+}
+.dlg > * { position: relative; z-index: 1; }
+.dlg-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.dlg-title {
+  font-family: var(--font-display); font-size: 0.88rem; font-weight: 600;
+  color: var(--text-primary);
+}
+.dlg-x {
+  font-size: 0.9rem; color: var(--text-muted);
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px; cursor: pointer;
+}
+.dlg-body { padding: 18px 20px; }
+.dlg-foot {
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: 8px;
+  background: var(--bg-elevated);
+}
+.dlg-sub {
+  font-family: var(--font-body); font-size: 0.78rem;
+  color: var(--text-muted); margin-bottom: 14px;
+  line-height: 1.5;
+}
+
+/* ── Fix list ── */
+.fix-list { display: grid; gap: 8px; }
+.fix-item {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 11px 13px;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.fix-item.sel { border-color: var(--border-accent); background: rgba(0,229,204,0.04); }
+.fix-cb {
+  width: 15px; height: 15px; flex-shrink: 0; margin-top: 3px;
+  border: 1.5px solid var(--border); border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.65rem; color: var(--bg-deep);
+}
+.fix-item.sel .fix-cb { background: var(--accent); border-color: var(--accent); }
+.fix-sev {
+  font-family: var(--font-mono); font-size: 0.58rem;
+  font-weight: 700; letter-spacing: 0.08em; margin-bottom: 2px;
+}
+.sev-h { color: var(--error); }
+.sev-m { color: var(--warning); }
+.sev-l { color: var(--accent); }
+.fix-title {
+  font-family: var(--font-body); font-size: 0.8rem; font-weight: 500;
+  color: var(--text-primary); margin-bottom: 2px;
+}
+.fix-desc { font-family: var(--font-body); font-size: 0.73rem; color: var(--text-muted); line-height: 1.4; }
+.fix-badge {
+  font-family: var(--font-mono); font-size: 0.58rem;
+  padding: 2px 6px; border-radius: 9999px; flex-shrink: 0; margin-top: 2px;
+  letter-spacing: 0.04em;
+}
+.badge-a { background: rgba(74,222,128,0.14); color: var(--success); }
+.badge-m { background: rgba(107,106,112,0.18); color: var(--text-muted); }
+
+/* ── Progress bar ── */
+.prog-wrap { margin: 14px 0 6px; }
+.prog-lbl {
+  font-family: var(--font-mono); font-size: 0.63rem;
+  color: var(--text-muted);
+  display: flex; justify-content: space-between; margin-bottom: 6px;
+}
+.prog-bg {
+  height: 9px; background: var(--bg-deep); border-radius: 9999px;
+  overflow: hidden; border: 1px solid var(--border);
+}
+.prog-fill {
+  height: 100%; border-radius: 9999px;
+  background: linear-gradient(90deg, var(--accent), #00FFE0, var(--accent));
+  background-size: 200% 100%;
+  animation: plasma 2s linear infinite;
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+/* ── Buttons ── */
+.btn {
+  font-family: var(--font-body); font-size: 0.8rem; font-weight: 500;
+  padding: 8px 16px; border-radius: var(--radius-sm); border: none; cursor: pointer;
+}
+.btn-p { background: var(--accent); color: var(--bg-deep); font-weight: 600; }
+.btn-s { background: transparent; color: var(--accent); border: 1px solid var(--border-accent); }
+.btn-g { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+.btn-d { background: transparent; color: var(--error); border: 1px solid rgba(255,107,107,0.3); }
+
+/* ── Debug log ── */
+.dbg-win {
+  position: absolute; inset: 0;
+  background: var(--bg-deep); background-image: var(--scanline);
+  display: flex; flex-direction: column;
+}
+.dbg-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 12px; height: 40px;
+  background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.dbg-title {
+  font-family: var(--font-mono); font-size: 0.68rem; font-weight: 600;
+  color: var(--text-primary); display: flex; align-items: center; gap: 10px;
+}
+.dbg-body {
+  flex: 1; padding: 11px 14px; overflow: hidden;
+  font-family: var(--font-mono); font-size: 0.7rem; line-height: 1.85;
+}
+.dl { white-space: pre; display: block; }
+.dt { color: var(--text-muted); }
+.di { color: var(--info); }
+.dd { color: var(--text-secondary); }
+.dw { color: var(--warning); }
+.de { color: var(--error); }
+.dok { color: var(--success); }
+
+/* ── Animations ── */
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.blink { animation: blink 1s step-end infinite; }
+</style>
+</head>
+<body>
+
+<div class="canvas-header">
+  <h1>lil<span>_</span>bro &mdash; Screen Prototype</h1>
+  <p>feat/frontend-ui &bull; 9 screens &bull; 2026-05-11 &bull; Import via "HTML to Figma" Chrome extension</p>
+</div>
+
+<!-- ══════════════════════════════════════════════
+  01 — SPLASH SCREEN  320 × 480
+══════════════════════════════════════════════ -->
+<div class="artboard-wrap">
+  <div class="artboard-label">01 — Splash Screen</div>
+  <div class="artboard" style="width:320px;height:480px">
+    <div class="splash-bg">
+      <div class="splash-brand">lil<span>_</span>bro</div>
+      <div class="splash-sub">Your Local AI PC<br>Optimization Agent</div>
+      <div class="splash-badge">100% Offline &bull; Privacy First</div>
+      <div class="splash-steps">
+        <div class="splash-step done">
+          <span class="si">✓</span>
+          <span>LHM Monitor</span>
+          <span class="step-r">OK</span>
+        </div>
+        <div class="splash-step done">
+          <span class="si">✓</span>
+          <span>Loading fonts</span>
+          <span class="step-r">OK</span>
+        </div>
+        <div class="splash-step run">
+          <span class="si blink">●</span>
+          <span>Checking system</span>
+          <span class="step-r">...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+  02 — DASHBOARD VIEW  1280 × 800
+══════════════════════════════════════════════ -->
+<div class="artboard-wrap">
+  <div class="artboard-label">02 — Main Window &mdash; Dashboard</div>
+  <div class="artboard" style="width:1280px;height:800px">
+    <div class="titlebar">
+      <div class="tb-dots">
+        <div class="tb-dot" style="background:#FF6B6B"></div>
+        <div class="tb-dot" style="background:#FFB547"></div>
+        <div class="tb-dot" style="background:#4ADE80"></div>
+      </div>
+      <div class="tb-title">lil_bro v1.0 &mdash; Optimization Agent</div>
+      <div class="tb-controls">
+        <div class="tb-btn">&#8722;</div>
+        <div class="tb-btn">&#9633;</div>
+        <div class="tb-btn" style="color:var(--error)">&#10005;</div>
+      </div>
+    </div>
+
+    <div class="app-layout">
+      <div class="sidebar">
+        <div class="sb-brand">lil<span>_</span>bro</div>
+        <div class="nav-item active"><span class="nav-icon">&#9670;</span> Dashboard</div>
+        <div class="nav-item"><span class="nav-icon">&#8801;</span> Output</div>
+        <div class="nav-spacer"></div>
+        <div class="nav-divider"></div>
+        <div class="nav-item" style="color:var(--text-muted);font-size:0.75rem">
+          <span class="nav-icon">&#128196;</span> Debug Log
+        </div>
+        <div class="nav-item" style="color:var(--warning)">
+          <span class="nav-icon">&#8617;</span> Revert
+        </div>
+        <div class="nav-item" style="color:var(--error)">
+          <span class="nav-icon">&#10005;</span> Exit
+        </div>
+      </div>
+
+      <div class="main-area">
+        <div class="main-header">
+          <div class="main-title">System Dashboard</div>
+          <div class="status-pill">
+            <span class="s-dot ok"></span>
+            LHM Active &nbsp;&bull;&nbsp; 12:34:56
+          </div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-card norm">
+            <div class="sc-label">CPU Usage</div>
+            <div class="sc-val">45<span style="font-size:0.85rem;color:var(--text-muted)">%</span></div>
+            <div class="sc-unit">Ryzen 7 5800X</div>
+          </div>
+          <div class="stat-card warn">
+            <div class="sc-label">CPU Temp</div>
+            <div class="sc-val">68<span style="font-size:0.85rem;color:var(--text-muted)">°C</span></div>
+            <div class="sc-unit">All Cores</div>
+          </div>
+          <div class="stat-card ok">
+            <div class="sc-label">GPU Temp</div>
+            <div class="sc-val">72<span style="font-size:0.85rem;color:var(--text-muted)">°C</span></div>
+            <div class="sc-unit">RTX 3080</div>
+          </div>
+          <div class="stat-card cyan">
+            <div class="sc-label">RAM Used</div>
+            <div class="sc-val">16.2<span style="font-size:0.85rem;color:var(--text-muted)"> GB</span></div>
+            <div class="sc-unit">of 32.0 GB</div>
+          </div>
+        </div>
+
+        <div class="chart-wrap">
+          <div class="chart-hdr">
+            <div class="chart-title">Temperature History &mdash; Last 60s</div>
+            <div class="chart-legend">
+              <div class="leg-item"><div class="leg-line" style="background:var(--accent)"></div>CPU</div>
+              <div class="leg-item"><div class="leg-line" style="background:var(--magenta)"></div>GPU</div>
+            </div>
+          </div>
+          <svg width="100%" height="130" viewBox="0 0 900 130" preserveAspectRatio="none" style="display:block;position:relative;z-index:1">
+            <!-- zones: red >85°C y<33, amber 70-85°C y33-65, green <70°C y>65 -->
+            <rect x="0" y="0"  width="900" height="33" fill="rgba(255,107,107,0.055)"/>
+            <rect x="0" y="33" width="900" height="32" fill="rgba(255,181,71,0.045)"/>
+            <rect x="0" y="65" width="900" height="65" fill="rgba(74,222,128,0.03)"/>
+            <line x1="0" y1="33" x2="900" y2="33" stroke="rgba(255,107,107,0.22)" stroke-width="1" stroke-dasharray="4 4"/>
+            <line x1="0" y1="65" x2="900" y2="65" stroke="rgba(255,181,71,0.22)" stroke-width="1" stroke-dasharray="4 4"/>
+            <text x="896" y="13" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="9" fill="rgba(255,107,107,0.5)">85°C</text>
+            <text x="896" y="59" text-anchor="end" font-family="JetBrains Mono,monospace" font-size="9" fill="rgba(255,181,71,0.5)">70°C</text>
+            <!-- CPU glow -->
+            <polyline points="0,74 60,70 120,63 180,56 240,48 300,52 360,56 420,61 480,65 540,59 600,63 660,67 720,61 780,56 840,63 900,69"
+              stroke="rgba(0,229,204,0.22)" stroke-width="6" fill="none" stroke-linejoin="round"/>
+            <!-- CPU line -->
+            <polyline points="0,74 60,70 120,63 180,56 240,48 300,52 360,56 420,61 480,65 540,59 600,63 660,67 720,61 780,56 840,63 900,69"
+              stroke="#00E5CC" stroke-width="2" fill="none" stroke-linejoin="round"/>
+            <!-- GPU glow -->
+            <polyline points="0,85 60,80 120,74 180,68 240,60 300,64 360,69 420,73 480,78 540,72 600,76 660,80 720,74 780,69 840,76 900,82"
+              stroke="rgba(209,131,232,0.22)" stroke-width="6" fill="none" stroke-linejoin="round"/>
+            <!-- GPU line -->
+            <polyline points="0,85 60,80 120,74 180,68 240,60 300,64 360,69 420,73 480,78 540,72 600,76 660,80 720,74 780,69 840,76 900,82"
+              stroke="#D183E8" stroke-width="2" fill="none" stroke-linejoin="round"/>
+            <circle cx="900" cy="69" r="3.5" fill="#00E5CC"/>
+            <circle cx="900" cy="82" r="3.5" fill="#D183E8"/>
+          </svg>
+        </div>
+
+        <div class="poll-widget" style="margin-top:12px">
+          <div style="position:relative;z-index:1">
+            <div class="poll-label">USB Polling Rate</div>
+            <div style="display:flex;align-items:flex-end;gap:6px;margin-bottom:4px">
+              <div class="poll-val">1000</div>
+              <div class="poll-unit">Hz</div>
+            </div>
+            <div class="poll-status"><div class="s-dot ok"></div>Excellent</div>
+          </div>
+          <div style="position:relative;z-index:1;margin-left:auto">
+            <button class="btn btn-s" style="font-size:0.74rem;padding:6px 13px">Test Polling</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <div class="sb-item"><span class="s-dot ok" style="width:5px;height:5px"></span>Idle</div>
+      <div class="sb-sep"></div>
+      <div class="sb-item">Model: Qwen2.5-7B</div>
+      <div class="sb-sep"></div>
+      <div class="sb-item">Session: 2026-05-11_1234</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+  03 — OUTPUT VIEW  1280 × 800
+══════════════════════════════════════════════ -->
+<div class="artboard-wrap">
+  <div class="artboard-label">03 — Main Window &mdash; Output (Phase 4 Running)</div>
+  <div class="artboard" style="width:1280px;height:800px">
+    <div class="titlebar">
+      <div class="tb-dots">
+        <div class="tb-dot" style="background:#FF6B6B"></div>
+        <div class="tb-dot" style="background:#FFB547"></div>
+        <div class="tb-dot" style="background:#4ADE80"></div>
+      </div>
+      <div class="tb-title">lil_bro v1.0 &mdash; Optimization Agent</div>
+      <div class="tb-controls">
+        <div class="tb-btn">&#8722;</div>
+        <div class="tb-btn">&#9633;</div>
+        <div class="tb-btn" style="color:var(--error)">&#10005;</div>
+      </div>
+    </div>
+
+    <div class="app-layout">
+      <div class="sidebar">
+        <div class="sb-brand">lil<span>_</span>bro</div>
+        <div class="nav-item"><span class="nav-icon">&#9670;</span> Dashboard</div>
+        <div class="nav-item active"><span class="nav-icon">&#8801;</span> Output</div>
+        <div class="nav-spacer"></div>
+        <div class="nav-divider"></div>
+        <div class="nav-item" style="color:var(--text-muted);font-size:0.75rem">
+          <span class="nav-icon">&#128196;</span> Debug Log
+        </div>
+        <div class="nav-item" style="color:var(--warning)">
+          <span class="nav-icon">&#8617;</span> Revert
+        </div>
+        <div class="nav-item" style="color:var(--error)">
+          <span class="nav-icon">&#10005;</span> Exit
+        </div>
+      </div>
+
+      <div class="main-area">
+        <div class="main-header">
+          <div class="main-title">Pipeline Output</div>
+          <div class="status-pill">
+            <span class="s-dot run"></span>
+            Phase 4 &mdash; Applying Fixes
+          </div>
+        </div>
+
+        <div class="phase-row">
+          <div class="phase-card done">
+            <div class="pc-num">Phase 01</div>
+            <div class="pc-name">Bootstrap</div>
+            <div class="pc-status">&#10003; COMPLETE</div>
+          </div>
+          <div class="phase-card done">
+            <div class="pc-num">Phase 02</div>
+            <div class="pc-name">System Scan</div>
+            <div class="pc-status">&#10003; COMPLETE</div>
+          </div>
+          <div class="phase-card done">
+            <div class="pc-num">Phase 03</div>
+            <div class="pc-name">AI Analysis</div>
+            <div class="pc-status">&#10003; COMPLETE</div>
+          </div>
+          <div class="phase-card running">
+            <div class="pc-num">Phase 04</div>
+            <div class="pc-name">Apply Fixes</div>
+            <div class="pc-status">&#9679; RUNNING</div>
+            <div class="pc-bar-bg"><div class="pc-bar-fill" style="width:60%"></div></div>
+          </div>
+          <div class="phase-card pending">
+            <div class="pc-num">Phase 05</div>
+            <div class="pc-name">Verify</div>
+            <div class="pc-status">&#9675; PENDING</div>
+          </div>
+        </div>
+
+        <div class="log-panel">
+          <div class="log-toolbar">
+            <div class="log-tb-title">Pipeline Log</div>
+            <div class="log-tb-btns">
+              <div class="log-btn">Clear</div>
+              <div class="log-btn">Copy</div>
+            </div>
+          </div>
+          <div class="log-body">
+            <span class="ll"><span class="lm" style="font-weight:700">&#9552;&#9552; Phase 1: Bootstrap &#9552;&#9552;</span></span>
+            <span class="ll"><span class="lg">  [OK]</span><span class="lw">  System Restore Point created</span></span>
+            <span class="ll"><span class="lg">  [OK]</span><span class="lw">  LHM sidecar started on port 8085</span></span>
+            <span class="ll"><span class="lm" style="font-weight:700">&#9552;&#9552; Phase 2: System Scan &#9552;&#9552;</span></span>
+            <span class="ll"><span class="lc">  [INFO]</span><span class="lw"> Collecting hardware specs...</span></span>
+            <span class="ll"><span class="lg">  [OK]</span><span class="lw">   nvidia-smi found &#8212; Driver 552.44</span></span>
+            <span class="ll"><span class="lg">  [OK]</span><span class="lw">   Monitor: ASUS VG27AQ1A @ 165Hz</span></span>
+            <span class="ll"><span class="ly">  [WARN]</span><span class="lw"> Power Plan: Balanced &#8212; not optimal</span></span>
+            <span class="ll"><span class="ly">  [WARN]</span><span class="lw"> XMP not enabled &#8212; RAM at 2133 MHz</span></span>
+            <span class="ll"><span class="lg">  [OK]</span><span class="lw">   Mouse polling at 1000Hz</span></span>
+            <span class="ll"><span class="lm" style="font-weight:700">&#9552;&#9552; Phase 3: AI Analysis &#9552;&#9552;</span></span>
+            <span class="ll"><span class="lc">  [INFO]</span><span class="lw"> LLM model loaded &#8212; Qwen2.5-7B-Instruct</span></span>
+            <span class="ll"><span class="lc">  [INFO]</span><span class="lw"> Generating recommendations (6.2s)...</span></span>
+            <span class="ll"><span class="lg">  [OK]</span><span class="lw">   3 fixes: 1 HIGH, 1 MEDIUM, 1 LOW</span></span>
+            <span class="ll"><span class="lm" style="font-weight:700">&#9552;&#9552; Phase 4: Apply Fixes &#9552;&#9552;</span></span>
+            <span class="ll"><span class="lc">  [INFO]</span><span class="lw"> Applying: Ultimate Performance power plan...</span></span>
+            <span class="ll"><span class="lg">  [OK]</span><span class="lw">   Power plan switched</span></span>
+            <span class="ll"><span class="lc">  [INFO]</span><span class="lw"> Cleaning temp folders (12.4 GB)</span><span class="blink lc">&#9608;</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <div class="sb-item"><span class="s-dot run" style="width:5px;height:5px"></span>Running &#8212; Phase 4/5</div>
+      <div class="sb-sep"></div>
+      <div class="sb-item">Fixes: 1 / 2 applied</div>
+      <div class="sb-sep"></div>
+      <div class="sb-item">Session: 2026-05-11_1234</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+  04 — APPROVAL DIALOG  560 × 490
+══════════════════════════════════════════════ -->
+<div class="artboard-wrap">
+  <div class="artboard-label">04 — Approval Dialog</div>
+  <div class="artboard" style="width:560px;height:490px;background:var(--bg-deep);background-image:var(--scanline)">
+    <div class="dlg-backdrop">
+      <div class="dlg" style="width:520px">
+        <div class="dlg-head">
+          <div class="dlg-title">Apply These Fixes?</div>
+          <div class="dlg-x">&#10005;</div>
+        </div>
+        <div class="dlg-body">
+          <div class="dlg-sub">lil_bro identified 3 improvements. Select which to apply:</div>
+          <div class="fix-list">
+            <div class="fix-item sel">
+              <div class="fix-cb">&#10003;</div>
+              <div style="flex:1">
+                <div class="fix-sev sev-h">HIGH &nbsp;&middot;&nbsp; POWER PLAN</div>
+                <div class="fix-title">Switch to Ultimate Performance</div>
+                <div class="fix-desc">Your PC is in Balanced mode which throttles CPU clocks mid-game.</div>
+              </div>
+              <div class="fix-badge badge-a">AUTO</div>
+            </div>
+            <div class="fix-item" style="opacity:0.65">
+              <div class="fix-cb"></div>
+              <div style="flex:1">
+                <div class="fix-sev sev-m">MEDIUM &nbsp;&middot;&nbsp; XMP/EXPO</div>
+                <div class="fix-title">Enable XMP in BIOS</div>
+                <div class="fix-desc">RAM at base 2133 MHz. Requires BIOS access and restart.</div>
+              </div>
+              <div class="fix-badge badge-m">MANUAL</div>
+            </div>
+            <div class="fix-item sel">
+              <div class="fix-cb">&#10003;</div>
+              <div style="flex:1">
+                <div class="fix-sev sev-l">LOW &nbsp;&middot;&nbsp; TEMP FOLDERS</div>
+                <div class="fix-title">Clean Shader Cache</div>
+                <div class="fix-desc">12.4 GB across 3 temp locations. Safe to remove.</div>
+              </div>
+              <div class="fix-badge badge-a">AUTO</div>
+            </div>
+          </div>
+        </div>
+        <div class="dlg-foot">
+          <button class="btn btn-g">Skip All</button>
+          <button class="btn btn-p">Apply 2 Selected</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+  05 — BATCH SELECTION DIALOG  540 × 400
+══════════════════════════════════════════════ -->
+<div class="artboard-wrap">
+  <div class="artboard-label">05 — Batch Selection Dialog</div>
+  <div class="artboard" style="width:540px;height:400px;background:var(--bg-deep);background-image:var(--scanline)">
+    <div class="dlg-backdrop">
+      <div class="dlg" style="width:500px">
+        <div class="dlg-head">
+          <div class="dlg-title">Select Optimizations</div>
+          <div class="dlg-x">&#10005;</div>
+        </div>
+        <div class="dlg-body">
+          <div class="dlg-sub">Choose which optimizations to batch-apply:</div>
+          <div class="fix-list" style="gap:6px">
+            <div class="fix-item sel" style="padding:10px 12px">
+              <div class="fix-cb">&#10003;</div>
+              <div style="flex:1"><div class="fix-title" style="font-size:0.78rem">Power Plan &#8594; Ultimate Performance</div></div>
+            </div>
+            <div class="fix-item sel" style="padding:10px 12px">
+              <div class="fix-cb">&#10003;</div>
+              <div style="flex:1"><div class="fix-title" style="font-size:0.78rem">Temp Folder Cleanup (12.4 GB)</div></div>
+            </div>
+            <div class="fix-item sel" style="padding:10px 12px">
+              <div class="fix-cb">&#10003;</div>
+              <div style="flex:1"><div class="fix-title" style="font-size:0.78rem">NVIDIA Profile Inspector Settings</div></div>
+            </div>
+            <div class="fix-item" style="padding:10px 12px;opacity:0.55">
+              <div class="fix-cb"></div>
+              <div style="flex:1"><div class="fix-title" style="font-size:0.78rem;color:var(--text-secondary)">Disable Mouse Acceleration</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="dlg-foot" style="justify-content:space-between">
+          <button class="btn btn-g" style="font-size:0.74rem;padding:7px 12px">Select All</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-g">Cancel</button>
+            <button class="btn btn-p">Apply 3 Selected</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+  06 — CONFIRM DIALOG  440 × 220
+══════════════════════════════════════════════ -->
+<div class="artboard-wrap">
+  <div class="artboard-label">06 — Confirm Dialog</div>
+  <div class="artboard" style="width:440px;height:220px;background:var(--bg-deep);background-image:var(--scanline)">
+    <div class="dlg-backdrop">
+      <div class="dlg" style="width:400px">
+        <div class="dlg-head">
+          <div class="dlg-title">Create Restore Point?</div>
+          <div class="dlg-x">&#10005;</div>
+        </div>
+        <div class="dlg-body" style="display:flex;gap:14px;align-items:flex-start">
+          <div style="font-size:1.4rem;color:var(--accent);margin-top:2px;flex-shrink:0">&#9889;</div>
+          <div>
+            <div style="font-family:var(--font-body);font-size:0.84rem;font-weight:500;color:var(--text-primary);margin-bottom:6px">
+              lil_bro will create a Windows System Restore Point
+            </div>
+            <div style="font-family:var(--font-body);font-size:0.76rem;color:var(--text-muted);line-height:1.5">
+              Takes ~30 seconds. Lets you roll back any changes if needed. Strongly recommended before applying fixes.
+            </div>
+          </div>
+        </div>
+        <div class="dlg-foot">
+          <button class="btn btn-g">Skip</button>
+          <button class="btn btn-p">Yes, Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+  07 — AI SETUP DIALOG  520 × 400
+══════════════════════════════════════════════ -->
+<div class="artboard-wrap">
+  <div class="artboard-label">07 — AI Setup Dialog (First-Run Model Download)</div>
+  <div class="artboard" style="width:520px;height:400px;background:var(--bg-deep);background-image:var(--scanline)">
+    <div class="dlg-backdrop">
+      <div class="dlg" style="width:480px">
+        <div class="dlg-head">
+          <div class="dlg-title">First-Run Setup &mdash; AI Model</div>
+          <div class="dlg-x">&#10005;</div>
+        </div>
+        <div class="dlg-body">
+          <div style="text-align:center;padding:6px 0 18px">
+            <div style="font-family:var(--font-mono);font-size:0.6rem;color:var(--text-muted);letter-spacing:0.12em;margin-bottom:6px">DOWNLOADING</div>
+            <div style="font-family:var(--font-display);font-size:0.95rem;font-weight:600;color:var(--text-primary);margin-bottom:4px">Qwen2.5-7B-Instruct-GGUF</div>
+            <div style="font-family:var(--font-mono);font-size:0.65rem;color:var(--text-muted)">4.6 GB &bull; HuggingFace CDN</div>
+          </div>
+
+          <div class="prog-wrap">
+            <div class="prog-lbl">
+              <span>2.1 GB / 4.6 GB</span>
+              <span style="color:var(--accent)">45%</span>
+            </div>
+            <div class="prog-bg" style="height:10px">
+              <div class="prog-fill" style="width:45%"></div>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;margin-top:10px">
+            <div style="font-family:var(--font-mono);font-size:0.62rem;color:var(--text-muted)">18.4 MB/s</div>
+            <div style="font-family:var(--font-mono);font-size:0.62rem;color:var(--text-muted)">ETA&nbsp; 02:22</div>
+          </div>
+
+          <div style="margin-top:18px;padding:10px 12px;background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--radius-sm)">
+            <div style="font-family:var(--font-mono);font-size:0.62rem;color:var(--text-muted);line-height:1.55">
+              &#9432;&nbsp; One-time download. lil_bro works fully offline after setup &mdash; no data is sent externally.
+            </div>
+          </div>
+        </div>
+        <div class="dlg-foot">
+          <button class="btn btn-d">Cancel Download</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+  08 — DEBUG LOG VIEWER  800 × 560
+══════════════════════════════════════════════ -->
+<div class="artboard-wrap">
+  <div class="artboard-label">08 — Debug Log Viewer</div>
+  <div class="artboard" style="width:800px;height:560px">
+    <div class="dbg-win">
+      <div class="dbg-toolbar">
+        <div class="dbg-title">
+          <div class="tb-dots" style="display:flex;gap:5px">
+            <div class="tb-dot" style="background:#FF6B6B;width:9px;height:9px"></div>
+            <div class="tb-dot" style="background:#FFB547;width:9px;height:9px"></div>
+            <div class="tb-dot" style="background:#4ADE80;width:9px;height:9px"></div>
+          </div>
+          lil_bro &mdash; Debug Log
+        </div>
+        <div style="display:flex;gap:6px">
+          <div class="log-btn">Clear</div>
+          <div class="log-btn">Copy All</div>
+          <div class="log-btn">Close</div>
+        </div>
+      </div>
+      <div class="dbg-body">
+        <span class="dl"><span class="dt">2026-05-11 12:34:55</span> <span class="dd">[DEBUG]</span> Initializing pipeline...</span>
+        <span class="dl"><span class="dt">2026-05-11 12:34:55</span> <span class="di"> [INFO]</span> <span class="dok">LHM sidecar: running on localhost:8085</span></span>
+        <span class="dl"><span class="dt">2026-05-11 12:34:56</span> <span class="di"> [INFO]</span> Creating System Restore Point...</span>
+        <span class="dl"><span class="dt">2026-05-11 12:34:58</span> <span class="di"> [INFO]</span> <span class="dok">Restore point created: OK</span></span>
+        <span class="dl"><span class="dt">2026-05-11 12:34:59</span> <span class="dd">[DEBUG]</span> Starting phase 2: system scan</span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:01</span> <span class="di"> [INFO]</span> nvidia-smi found &#8212; version 552.44</span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:01</span> <span class="dd">[DEBUG]</span> Parsing nvidia-smi XML output...</span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:02</span> <span class="dw"> [WARN]</span> Power plan: BALANCED (GUID: ...381b4222...)</span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:02</span> <span class="dw"> [WARN]</span> XMP profile not enabled &#8212; RAM at 2133 MHz</span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:03</span> <span class="di"> [INFO]</span> Monitor: ASUS VG27AQ1A &#8212; 2560&#215;1440 @ 165Hz &#10003;</span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:03</span> <span class="dd">[DEBUG]</span> Starting phase 3: AI analysis</span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:04</span> <span class="di"> [INFO]</span> LLM model loaded from cache (3.2s)</span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:04</span> <span class="dd">[DEBUG]</span> Sending 2847-token prompt to model...</span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:10</span> <span class="di"> [INFO]</span> <span class="dok">Model inference complete: 6.2s, 3 fixes identified</span></span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:11</span> <span class="di"> [INFO]</span> User approved 2/3 fixes (skipped: XMP manual)</span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:11</span> <span class="dd">[DEBUG]</span> Applying fix: power_plan &#8594; Ultimate Performance</span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:12</span> <span class="di"> [INFO]</span> <span class="dok">powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c</span></span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:12</span> <span class="dd">[DEBUG]</span> Applying fix: temp_folders cleanup...</span>
+        <span class="dl"><span class="dt">2026-05-11 12:35:14</span> <span class="di"> [INFO]</span> <span class="dok">Cleaned 12.4 GB from 3 temp locations</span></span>
+        <span class="dl blink" style="color:var(--accent)">&#9608;</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+  09 — MOUSE POLLING WIDGET  320 × 180
+══════════════════════════════════════════════ -->
+<div class="artboard-wrap">
+  <div class="artboard-label">09 — Mouse Polling Widget (standalone)</div>
+  <div class="artboard" style="width:320px;height:180px;background:var(--bg-deep);background-image:var(--scanline)">
+    <div style="position:absolute;inset:14px">
+      <div class="poll-widget" style="height:100%;display:flex;flex-direction:column;justify-content:space-between;margin:0">
+        <div style="position:relative;z-index:1">
+          <div class="poll-label">USB Polling Rate</div>
+          <div style="font-family:var(--font-mono);font-size:0.62rem;color:var(--text-muted)">Logitech G Pro X Superlight 2</div>
+        </div>
+        <div style="position:relative;z-index:1">
+          <div style="display:flex;align-items:flex-end;gap:6px;margin-bottom:5px">
+            <div class="poll-val">1000</div>
+            <div class="poll-unit">Hz</div>
+          </div>
+          <div class="poll-status" style="margin-bottom:10px">
+            <div class="s-dot ok"></div>
+            Excellent &mdash; no jitter detected
+          </div>
+          <button class="btn btn-s" style="font-size:0.72rem;padding:6px 12px;width:100%">&#9654;&nbsp; Run Polling Test</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
