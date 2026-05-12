@@ -44,10 +44,11 @@ class PipelineWorker(QObject):
     pipeline_finished = Signal()
     pipeline_failed = Signal(str, str, str)  # exc_type, message, traceback
 
-    def __init__(self, lhm: Any = None, llm: Any = None, parent: QObject | None = None) -> None:
+    def __init__(self, lhm: Any = None, llm: Any = None, preloaded_specs: dict | None = None, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._lhm = lhm
         self._llm = llm
+        self._preloaded_specs = preloaded_specs or {}
         self._cancel_requested = False
 
     @property
@@ -64,7 +65,7 @@ class PipelineWorker(QObject):
         try:
             self.pipeline_started.emit()
             from src.pipeline.phases import run_optimization_pipeline
-            run_optimization_pipeline(self._lhm, self._llm)
+            run_optimization_pipeline(self._lhm, self._llm, preloaded_specs=self._preloaded_specs)
         except Exception as exc:  # pragma: no cover - dispatched to GUI
             from src.utils.debug_logger import get_debug_logger
             get_debug_logger().error("PipelineWorker uncaught exception", exc_info=True)

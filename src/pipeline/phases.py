@@ -25,7 +25,7 @@ _PHASES: list[Phase] = [
 ]
 
 
-def run_optimization_pipeline(lhm: LHMSidecar, llm: Optional[Llama] = None) -> None:
+def run_optimization_pipeline(lhm: LHMSidecar, llm: Optional[Llama] = None, preloaded_specs: dict | None = None) -> None:
     """Top-level pipeline entry. LHM lifecycle is owned by the caller (main.py).
 
     Cooperative cancel: between phases we poll ``_state.is_cancelled()``;
@@ -34,7 +34,7 @@ def run_optimization_pipeline(lhm: LHMSidecar, llm: Optional[Llama] = None) -> N
     """
     from src.pipeline import _state
     with ThermalMonitor() as thermal:
-        ctx = PipelineContext(lhm=lhm, thermal=thermal, llm=llm)
+        ctx = PipelineContext(lhm=lhm, thermal=thermal, llm=llm, specs=preloaded_specs or {})
         log = get_debug_logger()
         try:
             for phase in _PHASES:

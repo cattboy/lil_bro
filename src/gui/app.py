@@ -147,6 +147,18 @@ def run(debug: bool = False) -> int:
         log.debug("GUI Startup: _on_finished entry")
         runtime["startup_done"] = True
         runtime["lhm"] = startup_lhm
+
+        # Load pre-collected specs (written by StartupOrchestrator Step 3)
+        preloaded_specs: dict = {}
+        if orchestrator.specs_path:
+            try:
+                import json as _json
+                with open(orchestrator.specs_path, encoding="utf-8") as _f:
+                    preloaded_specs = _json.load(_f)
+            except Exception:
+                pass
+        runtime["preloaded_specs"] = preloaded_specs
+
         try:
             if runtime.get("pipeline_thread") is None and runtime.get("revert_thread") is None:
                 _set_flow_controls(True)
@@ -225,7 +237,7 @@ def run(debug: bool = False) -> int:
         main.status_bar_widget.set_state("run", "Pipeline starting…")
 
         pipeline_thread = QThread()
-        pipeline_worker = PipelineWorker(lhm=runtime["lhm"], llm=None)
+        pipeline_worker = PipelineWorker(lhm=runtime["lhm"], llm=None, preloaded_specs=runtime.get("preloaded_specs", {}))
         pipeline_worker.moveToThread(pipeline_thread)
         pipeline_thread.started.connect(pipeline_worker.run)
 

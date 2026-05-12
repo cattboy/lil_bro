@@ -29,6 +29,7 @@ class StartupOrchestrator(QObject):
         from src.pipeline.startup_thermals import _SENSOR_RETRIES, _SENSOR_RETRY_DELAY
         from time import sleep
 
+        self.specs_path: str | None = None
         startup_lhm = None
         try:
             # ── Step 1: LHM Monitor — PawnIO install + sidecar launch ───────
@@ -55,6 +56,17 @@ class StartupOrchestrator(QObject):
                 except Exception:
                     pass
             self.init_step.emit("Sensors", "done")
+
+            # ── Step 3: System Specs — collect full hardware profile ─────────
+            self.init_step.emit("System Specs", "running")
+            try:
+                from src.collectors.spec_dumper import dump_system_specs
+                path = dump_system_specs()
+                self.specs_path = path if path else None
+                self.init_step.emit("System Specs", "done" if path else "fail")
+            except Exception:
+                self.specs_path = None
+                self.init_step.emit("System Specs", "fail")
 
         except Exception:
             from src.utils.debug_logger import get_debug_logger

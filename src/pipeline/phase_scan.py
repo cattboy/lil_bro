@@ -24,19 +24,27 @@ class ScanPhase:
             log.warning("LHM sidecar unavailable — continuing without thermal monitoring")
             print_info("Continuing without thermal monitoring -- Cinebench will still run.")
 
-        dump_path = dump_system_specs()
-        if dump_path:
-            print_info(f"Full system specs temporarily saved to {dump_path}")
-            try:
-                with open(dump_path, "r", encoding="utf-8") as f:
-                    ctx.specs = json.load(f)
-                hw = extract_hardware_summary(ctx.specs)
-                print()
-                print_key_value("CPU", hw.get("cpu", "Unknown"))
-                print_key_value("GPU", hw.get("gpu", "Unknown"))
-                print_key_value("Driver", hw.get("gpu_driver", "Unknown"))
-                print_key_value("RAM", f"{hw.get('ram_gb', 0)} GB @ {hw.get('ram_mhz', 0)} MHz")
-                print_key_value("OS", hw.get("os", "Unknown"))
-            except Exception as exc:
-                log.warning("Could not parse specs preview for display: %s", exc)
+        if ctx.specs:
+            hw = extract_hardware_summary(ctx.specs)
+        else:
+            dump_path = dump_system_specs()
+            if dump_path:
+                print_info(f"Full system specs temporarily saved to {dump_path}")
+                try:
+                    with open(dump_path, "r", encoding="utf-8") as f:
+                        ctx.specs = json.load(f)
+                    hw = extract_hardware_summary(ctx.specs)
+                except Exception as exc:
+                    log.warning("Could not parse specs preview for display: %s", exc)
+                    hw = {}
+            else:
+                hw = {}
+
+        if hw:
+            print()
+            print_key_value("CPU", hw.get("cpu", "Unknown"))
+            print_key_value("GPU", hw.get("gpu", "Unknown"))
+            print_key_value("Driver", hw.get("gpu_driver", "Unknown"))
+            print_key_value("RAM", f"{hw.get('ram_gb', 0)} GB @ {hw.get('ram_mhz', 0)} MHz")
+            print_key_value("OS", hw.get("os", "Unknown"))
         return PhaseResult("completed", "System scan complete")

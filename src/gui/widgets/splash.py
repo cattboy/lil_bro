@@ -83,7 +83,7 @@ from PySide6.QtWidgets import (  # noqa: E402
     QWidget,
 )
 
-_STEP_NAMES = ("LHM Monitor", "Sensors")
+_STEP_NAMES = ("LHM Monitor", "Sensors", "System Specs")  # = ("LHM Monitor", "Sensors", "System Specs") = ("LHM Monitor", "Sensors")
 
 
 class SplashDialog(QDialog):
