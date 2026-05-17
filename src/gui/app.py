@@ -56,8 +56,6 @@ def run(debug: bool = False) -> int:
 
     import re
 
-    from PySide6.QtCore import QTimer
-
     from src.gui.widgets.batch_selection_dialog import BatchSelectionDialog
     from src.gui.widgets.approval_dialog import ApprovalDialog
     from src.gui.widgets.confirm_dialog import ConfirmDialog
@@ -144,7 +142,10 @@ def run(debug: bool = False) -> int:
             log.error("_on_step EXC: %s: %r", type(exc).__name__, exc, exc_info=True)
 
     def _on_finished(startup_lhm) -> None:
-        log.debug("GUI Startup: _on_finished entry")
+        log.info(
+            "GUI Startup: _on_finished entry (lhm=%s)",
+            "yes" if startup_lhm else "no",
+        )
         runtime["startup_done"] = True
         runtime["lhm"] = startup_lhm
 
@@ -159,6 +160,13 @@ def run(debug: bool = False) -> int:
                 pass
         runtime["preloaded_specs"] = preloaded_specs
 
+        # Monitor card wiring is deliberately NOT done here. In the bundled
+        # PyInstaller exe, work scheduled from inside splash.exec()'s nested
+        # event loop and expected to fire after that loop ends (either via
+        # QTimer.singleShot or any cross-loop event hop) is silently
+        # dropped. The wiring is performed directly after main.show() in
+        # run() — see the block right before `return app.exec()`.
+
         try:
             if runtime.get("pipeline_thread") is None and runtime.get("revert_thread") is None:
                 _set_flow_controls(True)
@@ -167,13 +175,69 @@ def run(debug: bool = False) -> int:
         try:
             main.status_bar_widget.set_state("ok", "Idle")
             # Start dashboard polling now that LHM is ready
+            log.info(
+                "GUI Startup: invoking dashboard.start_polling(lhm=%s)",
+                "yes" if startup_lhm else "no",
+            )
             main._dashboard.start_polling(lhm=startup_lhm)
             chart = main._dashboard.thermal_chart
             if startup_lhm is None:
                 chart.set_offline("Thermal monitor unavailable")
         except Exception as exc:
             log.error("_on_finished EXC: %s: %r", type(exc).__name__, exc, exc_info=True)
-        log.debug("GUI Startup: _on_finished exit")
+        log.info("GUI Startup: _on_finished exit")
+
+    def _refresh_monitor_card() -> None:
+        try:
+            from src.collectors.sub.monitor_dumper import get_monitor_refresh_capabilities
+            displays = get_monitor_refresh_capabilities()
+            main._dashboard.set_monitor_data(displays)
+            sp = runtime.get("preloaded_specs", {}) or {}
+            sp["DisplayCapabilities"] = displays
+            runtime["preloaded_specs"] = sp
+        except Exception as exc:
+            log.warning("Could not refresh monitor card: %s", exc)
+
+    def _on_monitor_fix_requested(device: str) -> None:
+        specs = runtime.get("preloaded_specs", {}) or {}
+        displays = specs.get("DisplayCapabilities", []) or []
+        target = next((d for d in displays if d.get("device") == device), None)
+        if target is None:
+            log.warning("Monitor fix requested for unknown device: %s", device)
+            return
+        desc = (
+            f"{device}: Current {target.get('current_refresh_hz', '?')}Hz  →  "
+            f"Max {target.get('max_refresh_hz', '?')}Hz at {target.get('at_resolution', '')}"
+        )
+        proposal = {
+            "finding": "display",
+            "title": "Set Monitor to Maximum Refresh Rate",
+            "sev": "medium",
+            "desc": desc,
+            "can_auto_fix": True,
+            "mode": "AUTO",
+            "tag": "DISPLAY",
+        }
+        from src.gui.widgets.batch_selection_dialog import BatchSelectionDialog
+        dialog = BatchSelectionDialog([proposal], parent=main)
+        if not dialog.exec() or not dialog.selected_indices():
+            return
+        # Filter so _fix_display targets ONLY this device
+        filtered_specs = {**specs, "DisplayCapabilities": [target]}
+        from src.gui.worker import _MonitorFixWorker
+        fix_thread = QThread()
+        fix_worker = _MonitorFixWorker(filtered_specs)
+        fix_worker.moveToThread(fix_thread)
+        fix_thread.started.connect(fix_worker.run)
+        fix_worker.finished.connect(fix_thread.quit)
+        fix_thread.finished.connect(_refresh_monitor_card)
+        fix_thread.finished.connect(fix_worker.deleteLater)
+        fix_thread.finished.connect(fix_thread.deleteLater)
+        runtime["monitor_fix_thread"] = fix_thread
+        runtime["monitor_fix_worker"] = fix_worker
+        fix_thread.finished.connect(lambda: runtime.pop("monitor_fix_thread", None))
+        fix_thread.finished.connect(lambda: runtime.pop("monitor_fix_worker", None))
+        fix_thread.start()
 
     # -- Pipeline run wiring ----------------------------------------------
 
@@ -357,5 +421,29 @@ def run(debug: bool = False) -> int:
     # Splash runs first; main window appears only after startup completes
     splash.exec()
     main.show()
+
+    # Wire monitor card AFTER main.show() returns. In the bundled exe,
+    # QTimer.singleShot scheduled during splash.exec()'s nested event loop
+    # is dropped when the loop ends — the timer event does not survive the
+    # splash.exec() -> app.exec() handoff (worker-thread QTimers are fine
+    # because they never bridge event loops). Pump the queue once so the
+    # show event propagates before set_monitor_data inspects layout state,
+    # and guard on startup_done in case the user dismissed splash before
+    # the orchestrator finished. _refresh_monitor_card and
+    # _on_monitor_fix_requested are nested closures of run() defined
+    # earlier and remain in scope here.
+    app.processEvents()
+
+    if not runtime.get("startup_done"):
+        log.info("GUI Startup: skipping monitor wiring (startup did not complete)")
+    else:
+        log.info("GUI Startup: wiring monitor card (after main.show())")
+        _specs = runtime.get("preloaded_specs", {}) or {}
+        try:
+            main._dashboard.set_monitor_data(_specs.get("DisplayCapabilities", []))
+            main._dashboard.monitor_fix_requested.connect(_on_monitor_fix_requested)
+            main._dashboard.monitor_refresh_requested.connect(_refresh_monitor_card)
+        except Exception as exc:
+            log.warning("Could not wire monitor card: %s", exc, exc_info=True)
 
     return app.exec()

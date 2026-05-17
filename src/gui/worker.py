@@ -77,6 +77,31 @@ class PipelineWorker(QObject):
         self.pipeline_finished.emit()
 
 
+
+class _MonitorFixWorker(QObject):
+    """Runs ``execute_fix('display', specs)`` off the GUI thread.
+
+    The bridge's installed approval handler intercepts ``prompt_approval()``
+    inside ``_fix_display()`` and surfaces it via the standard ApprovalDialog,
+    so this worker only needs to invoke the dispatcher.
+    """
+
+    finished = Signal()
+
+    def __init__(self, specs: dict) -> None:
+        super().__init__()
+        self._specs = specs
+
+    def run(self) -> None:
+        try:
+            from src.pipeline.fix_dispatch import execute_fix
+            execute_fix("display", self._specs)
+        except Exception:
+            from src.utils.debug_logger import get_debug_logger
+            get_debug_logger().error("MonitorFixWorker uncaught exception", exc_info=True)
+        self.finished.emit()
+
+
 class RevertWorker(QObject):
     """Wraps run_revert_phase for a QThread."""
 

@@ -27,6 +27,11 @@ from src.agent_tools.quick_status import quick_status_snapshot
 _POLL_INTERVAL_MS = 5000
 from PySide6.QtWidgets import QHBoxLayout, QPushButton  # noqa: E402
 
+# Top-level import so PyInstaller's static analyzer picks up both card classes
+# (the previous lazy import inside set_monitor_data could be missed by modulegraph).
+from src.gui.widgets.monitor_refresh_card import MonitorRefreshCard, MonitorEmptyCard  # noqa: E402
+
+
 _CARDS = (
     ("cpu_usage", "CPU USAGE", "norm"),
     ("cpu_temp",  "CPU TEMP",  "warn"),
@@ -50,6 +55,10 @@ class DashboardWorker(QObject):
         self._lhm = lhm
 
     def start(self) -> None:
+        from src.utils.debug_logger import get_debug_logger
+        log = get_debug_logger()
+        log.info("DashboardWorker.start: entering on thread %s",
+                 QThread.currentThread().objectName() or "<unnamed>")
         try:
             import psutil
             psutil.cpu_percent(interval=None)  # prime baseline so first real tick isn't 0%
@@ -59,7 +68,8 @@ class DashboardWorker(QObject):
             self._timer = QTimer()
             self._timer.timeout.connect(self._tick)
             self._timer.start(_POLL_INTERVAL_MS)
-        self._tick()  # immediate first sample
+        log.info("DashboardWorker.start: timer armed, firing first tick now")
+        self._tick()  # immediate first sample  # immediate first sample
 
     def stop(self) -> None:
         if self._timer is not None:
@@ -76,6 +86,8 @@ class DashboardWorker(QObject):
     def _tick(self) -> None:
         if self._paused:
             return
+        from src.utils.debug_logger import get_debug_logger
+        log = get_debug_logger()
         try:
             snap = dict(quick_status_snapshot(self._lhm))
         except Exception:
@@ -94,6 +106,7 @@ class DashboardWorker(QObject):
         # Thermal data from fetch_snapshot — same source the chart uses, so always accurate.
         # Also overrides cpu_temp/gpu_temp from quick_status_snapshot (which calls
         # lhm.read_latest(), a method LHMSidecar does not implement).
+        therm: dict = {}
         try:
             from src.agent_tools.thermal_guidance import derive_cpu_temp, derive_gpu_temp
             from src.benchmarks.thermal_monitor import fetch_snapshot
@@ -107,8 +120,24 @@ class DashboardWorker(QObject):
                 if gpu_c_f is not None:
                     snap["_gpu_c"] = gpu_c_f
                     snap["gpu_temp"] = f"{int(round(gpu_c_f))}°C"
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning("DashboardWorker._tick: thermal fetch failed: %s", exc, exc_info=True)
+
+        # Diagnostic INFO on first 3 ticks and every 12th (≈ 1 min) — keeps
+        # the log compact but proves the polling loop is alive and surfaces
+        # what fetch_snapshot is returning vs. what derive_*_temp extracted.
+        self._tick_count = getattr(self, "_tick_count", 0) + 1
+        if self._tick_count <= 3 or self._tick_count % 12 == 0:
+            sample_keys = list(therm.keys())[:3] if therm else []
+            log.info(
+                "DashboardWorker._tick #%d: therm_keys=%d sample=%s cpu_c=%s gpu_c=%s cpu_temp=%s",
+                self._tick_count,
+                len(therm),
+                sample_keys,
+                snap.get("_cpu_c"),
+                snap.get("_gpu_c"),
+                snap.get("cpu_temp"),
+            )
 
         self.snapshot_ready.emit(snap)
 
@@ -142,6 +171,9 @@ class _DashboardCard(QFrame):
 
 class Dashboard(QWidget):
     """V2 dashboard: 4-col stat grid + temperature chart + USB polling widget."""
+
+    monitor_fix_requested = Signal(str)  # = Signal()
+    monitor_refresh_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -239,6 +271,31 @@ class Dashboard(QWidget):
         poll_h.addWidget(self._poll_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         outer.addWidget(poll_frame)
+
+        # ── Monitor refresh PRE-ALLOCATED slots ───────────────────────
+        # Created here during Dashboard.__init__ alongside the stat tiles
+        # / polling card / thermal chart — all of which parent correctly.
+        # Dynamic creation later (via _on_finished during splash.exec()'s
+        # nested event loop) fails to parent in the bundled PyInstaller
+        # exe (3 rounds of evidence). Slots are hidden initially; one is
+        # shown by set_monitor_data based on whether displays were
+        # detected. Extras for displays 2..N go through dynamic creation.
+        self._monitor_card_slot = MonitorRefreshCard(parent=self)
+        self._monitor_card_slot.fix_requested.connect(self.monitor_fix_requested)
+        self._monitor_card_slot.hide()
+        outer.addWidget(self._monitor_card_slot)
+
+        self._monitor_empty_slot = MonitorEmptyCard(parent=self)
+        self._monitor_empty_slot.refresh_requested.connect(self.monitor_refresh_requested)
+        self._monitor_empty_slot.hide()
+        outer.addWidget(self._monitor_empty_slot)
+
+        # Extras list (slots are separate). Uses indexOf(slot) at insert
+        # time rather than a cached index, so it's robust to layout
+        # mutations elsewhere.
+        self._outer_layout = outer
+        self._monitor_cards: list = []
+
         outer.addStretch(1)
 
         self._worker_thread: QThread | None = None
@@ -274,15 +331,25 @@ class Dashboard(QWidget):
     # ── Polling lifecycle ──────────────────────────────────────────────
 
     def start_polling(self, lhm=None) -> None:
+        from src.utils.debug_logger import get_debug_logger
+        log = get_debug_logger()
         if self._worker is not None:
+            log.info("Dashboard.start_polling: already running, skipping")
             return
+        log.info(
+            "Dashboard.start_polling: spawning worker thread (lhm=%s)",
+            "yes" if lhm else "no",
+        )
         self._worker_thread = QThread(self)
+        self._worker_thread.setObjectName("DashboardPoll")
         self._worker = DashboardWorker()
         self._worker.set_lhm(lhm)
         self._worker.moveToThread(self._worker_thread)
         self._worker.snapshot_ready.connect(self.apply_snapshot)
         self._worker_thread.started.connect(self._worker.start)
         self._worker_thread.start()
+        log.info("Dashboard.start_polling: worker thread started (isRunning=%s)",
+                 self._worker_thread.isRunning())
 
     def stop_polling(self) -> None:
         if self._worker is None or self._worker_thread is None:
@@ -304,6 +371,18 @@ class Dashboard(QWidget):
     # ── Render slot ────────────────────────────────────────────────────
 
     def apply_snapshot(self, snapshot: dict) -> None:
+        self._apply_count = getattr(self, "_apply_count", 0) + 1
+        if self._apply_count <= 3 or self._apply_count % 12 == 0:
+            from src.utils.debug_logger import get_debug_logger
+            log = get_debug_logger()
+            log.info(
+                "Dashboard.apply_snapshot #%d: cpu_temp=%s gpu_temp=%s _cpu_c=%s _gpu_c=%s",
+                self._apply_count,
+                snapshot.get("cpu_temp"),
+                snapshot.get("gpu_temp"),
+                snapshot.get("_cpu_c"),
+                snapshot.get("_gpu_c"),
+            )
         for key, card in self._cards.items():
             card.set_value(str(snapshot.get(key, "—")))
         # Update poll display from snapshot data
@@ -315,3 +394,89 @@ class Dashboard(QWidget):
         gpu_c = snapshot.get("_gpu_c")
         if cpu_c is not None or gpu_c is not None:
             self.thermal_chart.append_sample(cpu_c, gpu_c)
+
+    def set_monitor_data(self, displays: list[dict]) -> None:
+        """Show/hide pre-allocated slots; dynamically build extras for 2+ monitors.
+
+        Primary card uses the slot allocated in __init__ (parents correctly).
+        Extras for displays 2..N go through dynamic insertion — known to be
+        fragile in the bundled PyInstaller exe but tolerable when caller
+        defers this until after main.show().
+        """
+        from src.utils.debug_logger import get_debug_logger
+        from PySide6.QtCore import QTimer
+        log = get_debug_logger()
+        log.info("Dashboard.set_monitor_data: %d display(s) received", len(displays or []))
+
+        # Diagnostic: confirm dashboard widget state at call time
+        log.info(
+            "Dashboard: self.parent()=%s self.parentWidget()=%s layout_is_outer=%s",
+            type(self.parent()).__name__ if self.parent() else "None",
+            type(self.parentWidget()).__name__ if self.parentWidget() else "None",
+            self.layout() is self._outer_layout,
+        )
+
+        # Tear down extras from prior calls (slots survive)
+        for extra in self._monitor_cards:
+            self._outer_layout.removeWidget(extra)
+            extra.deleteLater()
+        self._monitor_cards = []
+
+        if not displays:
+            self._monitor_card_slot.hide()
+            self._monitor_empty_slot.show()
+            log.info("Dashboard: showing pre-allocated MonitorEmptyCard slot")
+        else:
+            self._monitor_empty_slot.hide()
+            self._monitor_card_slot.set_display(displays[0])
+            self._monitor_card_slot.show()
+            log.info("Dashboard: showing pre-allocated MonitorRefreshCard slot for %s",
+                     displays[0].get("device"))
+
+            # Extras (displays 2..N) — dynamic. Use indexOf(slot) so we're
+            # position-independent even if other widgets shift around.
+            base_idx = self._outer_layout.indexOf(self._monitor_card_slot)
+            for offset, d in enumerate(displays[1:], start=1):
+                card = MonitorRefreshCard(parent=self)
+                card.set_display(d)
+                card.fix_requested.connect(self.monitor_fix_requested)
+                self._outer_layout.insertWidget(base_idx + offset, card)
+                if card.parentWidget() is not self:
+                    card.setParent(self)
+                self._monitor_cards.append(card)
+                log.info("Dashboard: extra card[%d] %s parent=%s",
+                         offset, d.get("device"),
+                         type(card.parentWidget()).__name__ if card.parentWidget() else "None")
+
+        # Force layout + style recompute (belt-and-suspenders)
+        self.updateGeometry()
+        if self.layout() is not None:
+            self.layout().activate()
+        self._monitor_card_slot.ensurePolished()
+        self._monitor_empty_slot.ensurePolished()
+
+        def _log_geometry(tag: str) -> None:
+            try:
+                for slot_name, c in (("slot_card", self._monitor_card_slot),
+                                     ("slot_empty", self._monitor_empty_slot)):
+                    log.info(
+                        "Dashboard[%s]: %s sz=%dx%d hint=%dx%d visible=%s hidden=%s parent=%s",
+                        tag, slot_name,
+                        c.size().width(), c.size().height(),
+                        c.sizeHint().width(), c.sizeHint().height(),
+                        c.isVisible(), c.isHidden(),
+                        type(c.parentWidget()).__name__ if c.parentWidget() else "None",
+                    )
+                for i, c in enumerate(self._monitor_cards):
+                    log.info(
+                        "Dashboard[%s]: extra[%d] %s sz=%dx%d visible=%s parent=%s",
+                        tag, i, type(c).__name__,
+                        c.size().width(), c.size().height(),
+                        c.isVisible(),
+                        type(c.parentWidget()).__name__ if c.parentWidget() else "None",
+                    )
+            except Exception as exc:
+                log.warning("Dashboard: geometry-log[%s] failed: %s", tag, exc)
+
+        _log_geometry("immediate")
+        QTimer.singleShot(500, self, lambda: _log_geometry("deferred"))

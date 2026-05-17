@@ -10,6 +10,84 @@
       "reason": "Deleted temp files cannot be restored",
       "applied_at": "2026-05-11T19:53:57.426859",
       "display": "temp files deleted \u2014 files gone"
+    },
+    {
+      "fix": "game_mode",
+      "revertible": false,
+      "reason": "Before-state not available in specs",
+      "applied_at": "2026-05-17T17:05:11.065702"
+    },
+    {
+      "fix": "temp_folders",
+      "revertible": false,
+      "reason": "Deleted temp files cannot be restored",
+      "applied_at": "2026-05-17T17:05:11.096458",
+      "display": "temp files deleted \u2014 files gone"
+    },
+    {
+      "fix": "temp_folders",
+      "revertible": false,
+      "reason": "Deleted temp files cannot be restored",
+      "applied_at": "2026-05-17T17:05:11.116270",
+      "display": "temp files deleted \u2014 files gone"
+    },
+    {
+      "fix": "display",
+      "revertible": true,
+      "applied_at": "2026-05-17T17:05:11.139731",
+      "before": {
+        "device": "\\\\.\\DISPLAY1",
+        "width": 1920,
+        "height": 1080,
+        "hz": 60
+      },
+      "after": {
+        "device": "\\\\.\\DISPLAY1",
+        "width": 1920,
+        "height": 1080,
+        "hz": 144
+      }
+    },
+    {
+      "fix": "power_plan",
+      "revertible": false,
+      "reason": "Before-state not available in specs",
+      "applied_at": "2026-05-17T17:05:11.173783"
+    },
+    {
+      "fix": "power_plan",
+      "revertible": false,
+      "reason": "Before-state not available in specs",
+      "applied_at": "2026-05-17T17:05:11.195250"
+    },
+    {
+      "fix": "power_plan",
+      "revertible": false,
+      "reason": "Before-state not available in specs",
+      "applied_at": "2026-05-17T17:05:11.218421"
+    },
+    {
+      "fix": "power_plan",
+      "revertible": false,
+      "reason": "Before-state not available in specs",
+      "applied_at": "2026-05-17T17:05:29.430954"
+    },
+    {
+      "fix": "display",
+      "revertible": true,
+      "applied_at": "2026-05-17T17:46:54.836966",
+      "before": {
+        "device": "\\\\.\\DISPLAY1",
+        "width": 1920,
+        "height": 1080,
+        "hz": 60
+      },
+      "after": {
+        "device": "\\\\.\\DISPLAY1",
+        "width": 1920,
+        "height": 1080,
+        "hz": 144
+      }
     }
   ]
 }

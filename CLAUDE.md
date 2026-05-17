@@ -43,6 +43,10 @@
 - Any new code spawning subprocesses that produce temp files must use `dir=str(get_temp_dir())` — never rely on the system default temp directory.
 - PyInstaller's `runtime_tmpdir='.'` in `lil_bro.spec` ensures `_MEI*` extraction dirs are created in CWD. Stale `_MEI*` dirs from crashes are cleaned up by `_cleanup_stale_mei()` in `post_run_cleanup.py`.
 
+### Bundling (PyInstaller)
+- **Every new module under `src/gui/widgets/` MUST be added to `hiddenimports` in `lil_bro.spec`** (alphabetical with the existing widget list around line 81-91). PyInstaller's static analyzer can miss lazy imports inside method bodies, and the `try/except` in `app.py._on_finished` will swallow the resulting `ImportError` silently — the widget appears fine in dev mode but never renders in the bundled exe.
+- After updating the spec, rebuild with `python -m PyInstaller lil_bro.spec --noconfirm`.
+
 ---
 
 ## Serena MCP Tools

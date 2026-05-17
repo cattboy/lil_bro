@@ -83,6 +83,7 @@ a = Analysis(
         'src.gui.widgets.batch_selection_dialog',
         'src.gui.widgets.confirm_dialog',
         'src.gui.widgets.dashboard',
+        'src.gui.widgets.monitor_refresh_card',
         'src.gui.widgets.mouse_polling_widget',
         'src.gui.widgets.output_panel',
         'src.gui.widgets.phase_card',
