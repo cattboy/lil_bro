@@ -1,29 +1,26 @@
 ---
-name: setup-deploy
-preamble-tier: 2
-version: 1.0.0
+name: landing-report
+version: 0.1.0
 description: |
-  Configure deployment settings for /land-and-deploy. Detects your deploy
-  platform (Fly.io, Render, Vercel, Netlify, Heroku, GitHub Actions, custom),
-  production URL, health check endpoints, and deploy status commands. Writes
-  the configuration to CLAUDE.md so all future deploys are automatic.
-  Use when: "setup deploy", "configure deployment", "set up land-and-deploy",
-  "how do I deploy with gstack", "add deploy config".
+  Read-only queue dashboard for workspace-aware ship. Shows which VERSION slots
+  are currently claimed by open PRs, which sibling Conductor workspaces have
+  WIP work likely to ship soon, and what slot /ship would pick next. No
+  mutations — just a snapshot. Use when asked to "landing report", "what's in
+  the queue", "show me open PRs", or "which version do I claim next". (gstack)
 triggers:
-  - configure deploy
-  - setup deployment
-  - set deploy platform
+  - landing report
+  - version queue
+  - ship queue
+  - what version comes next
+  - show open PR versions
 allowed-tools:
   - Bash
   - Read
-  - Write
-  - Edit
-  - Glob
-  - Grep
-  - AskUserQuestion
 ---
 <!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->
 <!-- Regenerate: bun run gen:skill-docs -->
+
+# /landing-report — Version Queue Dashboard
 
 ## Preamble (run first)
 
@@ -60,7 +57,7 @@ _QUESTION_TUNING=$(~/.claude/skills/gstack/bin/gstack-config get question_tuning
 echo "QUESTION_TUNING: $_QUESTION_TUNING"
 mkdir -p ~/.gstack/analytics
 if [ "$_TEL" != "off" ]; then
-echo '{"skill":"setup-deploy","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
+echo '{"skill":"landing-report","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 fi
 for _PF in $(find ~/.gstack/analytics -maxdepth 1 -name '.pending-*' 2>/dev/null); do
   if [ -f "$_PF" ]; then
@@ -82,7 +79,7 @@ if [ -f "$_LEARN_FILE" ]; then
 else
   echo "LEARNINGS: 0"
 fi
-~/.claude/skills/gstack/bin/gstack-timeline-log '{"skill":"setup-deploy","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
+~/.claude/skills/gstack/bin/gstack-timeline-log '{"skill":"landing-report","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
 _HAS_ROUTING="no"
 if [ -f CLAUDE.md ] && grep -q "## Skill routing" CLAUDE.md 2>/dev/null; then
   _HAS_ROUTING="yes"
@@ -678,7 +675,7 @@ Before each AskUserQuestion, choose `question_id` from `scripts/question-registr
 
 After answer, log best-effort:
 ```bash
-~/.claude/skills/gstack/bin/gstack-question-log '{"skill":"setup-deploy","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
+~/.claude/skills/gstack/bin/gstack-question-log '{"skill":"landing-report","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
 ```
 
 For two-way questions, offer: "Tune this question? Reply `tune: never-ask`, `tune: always-ask`, or free-form."
@@ -691,6 +688,24 @@ Write (only after confirmation for free-form):
 ```
 
 Exit code 2 = rejected as not user-originated; do not retry. On success: "Set `<id>` → `<preference>`. Active immediately."
+
+## Repo Ownership — See Something, Say Something
+
+`REPO_MODE` controls how to handle issues outside your branch:
+- **`solo`** — You own everything. Investigate and offer to fix proactively.
+- **`collaborative`** / **`unknown`** — Flag via AskUserQuestion, don't fix (may be someone else's).
+
+Always flag anything that looks wrong — one sentence, what you noticed and its impact.
+
+## Search Before Building
+
+Before building anything unfamiliar, **search first.** See `~/.claude/skills/gstack/ETHOS.md`.
+- **Layer 1** (tried and true) — don't reinvent. **Layer 2** (new and popular) — scrutinize. **Layer 3** (first principles) — prize above all.
+
+**Eureka:** When first-principles reasoning contradicts conventional wisdom, name it and log:
+```bash
+jq -n --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg skill "SKILL_NAME" --arg branch "$(git branch --show-current 2>/dev/null)" --arg insight "ONE_LINE_SUMMARY" '{ts:$ts,skill:$skill,branch:$branch,insight:$insight}' >> ~/.gstack/analytics/eureka.jsonl 2>/dev/null || true
+```
 
 ## Completion Status Protocol
 
@@ -745,201 +760,141 @@ Replace `SKILL_NAME`, `OUTCOME`, and `USED_BROWSE` before running.
 
 Skills that run plan reviews (`/plan-*-review`, `/codex review`) include the EXIT PLAN MODE GATE blocking checklist at the end of the skill, which verifies the plan file ends with `## GSTACK REVIEW REPORT` before ExitPlanMode is called. Skills that don't run plan reviews (operational skills like `/ship`, `/qa`, `/review`) typically don't operate in plan mode and have no review report to verify; this footer is a no-op for them. Writing the plan file is the one edit allowed in plan mode.
 
-# /setup-deploy — Configure Deployment for gstack
+---
 
-You are helping the user configure their deployment so `/land-and-deploy` works
-automatically. Your job is to detect the deploy platform, production URL, health
-checks, and deploy status commands — then persist everything to CLAUDE.md.
+## Why this skill exists
 
-After this runs once, `/land-and-deploy` reads CLAUDE.md and skips detection entirely.
+When you're running 5-10 parallel Conductor workspaces, it helps to see — at a
+glance — which version numbers are claimed, by whom, and what slot your next
+`/ship` would land in. This skill is a read-only call into the same
+`bin/gstack-next-version` utility `/ship` uses, but with nothing mutating.
+Think of it as `gh pr list` for VERSION numbers.
 
-## User-invocable
-When the user types `/setup-deploy`, run this skill.
+---
 
-## Instructions
+## Step 1: Detect platform and base branch
 
-### Step 1: Check existing configuration
+Same detection as other gstack skills.
 
 ```bash
-grep -A 20 "## Deploy Configuration" CLAUDE.md 2>/dev/null || echo "NO_CONFIG"
+BASE_BRANCH=$(gh pr view --json baseRefName -q .baseRefName 2>/dev/null || \
+              gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || \
+              echo main)
+echo "Base branch: $BASE_BRANCH"
 ```
 
-If configuration already exists, show it and ask:
+---
 
-- **Context:** Deploy configuration already exists in CLAUDE.md.
-- **RECOMMENDATION:** Choose A to update if your setup changed.
-- A) Reconfigure from scratch (overwrite existing)
-- B) Edit specific fields (show current config, let me change one thing)
-- C) Done — configuration looks correct
-
-If the user picks C, stop.
-
-### Step 2: Detect platform
-
-Run the platform detection from the deploy bootstrap:
+## Step 2: Read current state
 
 ```bash
-# Platform config files
-[ -f fly.toml ] && echo "PLATFORM:fly" && cat fly.toml
-[ -f render.yaml ] && echo "PLATFORM:render" && cat render.yaml
-[ -f vercel.json ] || [ -d .vercel ] && echo "PLATFORM:vercel"
-[ -f netlify.toml ] && echo "PLATFORM:netlify" && cat netlify.toml
-[ -f Procfile ] && echo "PLATFORM:heroku"
-[ -f railway.json ] || [ -f railway.toml ] && echo "PLATFORM:railway"
+CURRENT_VERSION=$(cat VERSION 2>/dev/null | tr -d '[:space:]' || echo "0.0.0.0")
+git fetch origin "$BASE_BRANCH" --quiet 2>/dev/null || true
+BASE_VERSION=$(git show "origin/$BASE_BRANCH:VERSION" 2>/dev/null | tr -d '[:space:]' || echo "$CURRENT_VERSION")
+echo "origin/$BASE_BRANCH VERSION: $BASE_VERSION"
+echo "branch HEAD VERSION: $CURRENT_VERSION"
+```
 
-# GitHub Actions deploy workflows
-for f in $(find .github/workflows -maxdepth 1 \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null); do
-  [ -f "$f" ] && grep -qiE "deploy|release|production|staging|cd" "$f" 2>/dev/null && echo "DEPLOY_WORKFLOW:$f"
+---
+
+## Step 3: Query the queue
+
+Call the util three times — once for each bump level — so the user sees what
+they'd claim for micro/patch/minor/major. Cheap (same gh call cached by bun).
+
+```bash
+for LEVEL in micro patch minor major; do
+  bun run bin/gstack-next-version \
+    --base "$BASE_BRANCH" \
+    --bump "$LEVEL" \
+    --current-version "$BASE_VERSION" \
+    > "/tmp/landing-$LEVEL.json" 2>/dev/null || echo '{"offline":true}' > "/tmp/landing-$LEVEL.json"
 done
-
-# Project type
-[ -f package.json ] && grep -q '"bin"' package.json 2>/dev/null && echo "PROJECT_TYPE:cli"
-find . -maxdepth 1 -name '*.gemspec' 2>/dev/null | grep -q . && echo "PROJECT_TYPE:library"
 ```
 
-### Step 3: Platform-specific setup
+---
 
-Based on what was detected, guide the user through platform-specific configuration.
+## Step 4: Render the dashboard
 
-#### Fly.io
+Build a single table output. Use the `patch`-level JSON as canonical for
+queue + siblings (they're identical across bump levels; only `.version`
+differs).
 
-If `fly.toml` detected:
+Use `jq` to extract:
+- `.host` — github | gitlab | unknown
+- `.offline` — did the query fail?
+- `.claimed` — array of {pr, branch, version, url}
+- `.siblings` — all sibling worktrees found
+- `.active_siblings` — subset that's likely about to ship
 
-1. Extract app name: `grep -m1 "^app" fly.toml | sed 's/app = "\(.*\)"/\1/'`
-2. Check if `fly` CLI is installed: `which fly 2>/dev/null`
-3. If installed, verify: `fly status --app {app} 2>/dev/null`
-4. Infer URL: `https://{app}.fly.dev`
-5. Set deploy status command: `fly status --app {app}`
-6. Set health check: `https://{app}.fly.dev` (or `/health` if the app has one)
-
-Ask the user to confirm the production URL. Some Fly apps use custom domains.
-
-#### Render
-
-If `render.yaml` detected:
-
-1. Extract service name and type from render.yaml
-2. Check for Render API key: `echo $RENDER_API_KEY | head -c 4` (don't expose the full key)
-3. Infer URL: `https://{service-name}.onrender.com`
-4. Render deploys automatically on push to the connected branch — no deploy workflow needed
-5. Set health check: the inferred URL
-
-Ask the user to confirm. Render uses auto-deploy from the connected git branch — after
-merge to main, Render picks it up automatically. The "deploy wait" in /land-and-deploy
-should poll the Render URL until it responds with the new version.
-
-#### Vercel
-
-If vercel.json or .vercel detected:
-
-1. Check for `vercel` CLI: `which vercel 2>/dev/null`
-2. If installed: `vercel ls --prod 2>/dev/null | head -3`
-3. Vercel deploys automatically on push — preview on PR, production on merge to main
-4. Set health check: the production URL from vercel project settings
-
-#### Netlify
-
-If netlify.toml detected:
-
-1. Extract site info from netlify.toml
-2. Netlify deploys automatically on push
-3. Set health check: the production URL
-
-#### GitHub Actions only
-
-If deploy workflows detected but no platform config:
-
-1. Read the workflow file to understand what it does
-2. Extract the deploy target (if mentioned)
-3. Ask the user for the production URL
-
-#### Custom / Manual
-
-If nothing detected:
-
-Use AskUserQuestion to gather the information:
-
-1. **How are deploys triggered?**
-   - A) Automatically on push to main (Fly, Render, Vercel, Netlify, etc.)
-   - B) Via GitHub Actions workflow
-   - C) Via a deploy script or CLI command (describe it)
-   - D) Manually (SSH, dashboard, etc.)
-   - E) This project doesn't deploy (library, CLI, tool)
-
-2. **What's the production URL?** (Free text — the URL where the app runs)
-
-3. **How can gstack check if a deploy succeeded?**
-   - A) HTTP health check at a specific URL (e.g., /health, /api/status)
-   - B) CLI command (e.g., `fly status`, `kubectl rollout status`)
-   - C) Check the GitHub Actions workflow status
-   - D) No automated way — just check the URL loads
-
-4. **Any pre-merge or post-merge hooks?**
-   - Commands to run before merging (e.g., `bun run build`)
-   - Commands to run after merge but before deploy verification
-
-### Step 4: Write configuration
-
-Read CLAUDE.md (or create it). Find and replace the `## Deploy Configuration` section
-if it exists, or append it at the end.
-
-```markdown
-## Deploy Configuration (configured by /setup-deploy)
-- Platform: {platform}
-- Production URL: {url}
-- Deploy workflow: {workflow file or "auto-deploy on push"}
-- Deploy status command: {command or "HTTP health check"}
-- Merge method: {squash/merge/rebase}
-- Project type: {web app / API / CLI / library}
-- Post-deploy health check: {health check URL or command}
-
-### Custom deploy hooks
-- Pre-merge: {command or "none"}
-- Deploy trigger: {command or "automatic on push to main"}
-- Deploy status: {command or "poll production URL"}
-- Health check: {URL or command}
-```
-
-### Step 5: Verify
-
-After writing, verify the configuration works:
-
-1. If a health check URL was configured, try it:
-```bash
-curl -sf "{health-check-url}" -o /dev/null -w "%{http_code}" 2>/dev/null || echo "UNREACHABLE"
-```
-
-2. If a deploy status command was configured, try it:
-```bash
-{deploy-status-command} 2>/dev/null | head -5 || echo "COMMAND_FAILED"
-```
-
-Report results. If anything failed, note it but don't block — the config is still
-useful even if the health check is temporarily unreachable.
-
-### Step 6: Summary
+Render in this exact format:
 
 ```
-DEPLOY CONFIGURATION — COMPLETE
-════════════════════════════════
-Platform:      {platform}
-URL:           {url}
-Health check:  {health check}
-Status cmd:    {status command}
-Merge method:  {merge method}
+╔══════════════════════════════════════════════════════════════════╗
+║                     GSTACK LANDING REPORT                        ║
+╠══════════════════════════════════════════════════════════════════╣
+║ Repo:    <owner/repo>                                            ║
+║ Base:    <base> @ v<base-version>                                ║
+║ Host:    <github|gitlab|unknown>                                 ║
+║ Status:  <ONLINE|OFFLINE: queue-awareness unavailable>           ║
+╚══════════════════════════════════════════════════════════════════╝
 
-Saved to CLAUDE.md. /land-and-deploy will use these settings automatically.
+Open PRs claiming versions on <base>:
+  #1152  alpha-branch         → v1.7.0.0
+  #1153  beta-branch          → v1.7.0.0  ⚠ collision with #1152
+  #1151  gamma-branch         → v1.6.5.0
 
-Next steps:
-- Run /land-and-deploy to merge and deploy your current PR
-- Edit the "## Deploy Configuration" section in CLAUDE.md to change settings
-- Run /setup-deploy again to reconfigure
+Sibling Conductor worktrees (<workspace_root>):
+  path                        branch                 VERSION      last commit   PR
+  ──────────────────────────────────────────────────────────────────────────────────
+  ../tokyo-v2                 feat/dashboard         v1.7.1.0    3h ago         none  ★ active
+  ../melbourne                feat/review            v1.6.0.0    12d ago        none
+  ../osaka                    feat/payments          v1.8.0.0    5h ago         #1155
+
+★ active = has VERSION ahead of base AND last commit < 24h AND no open PR.
+  These are the ones likely to ship soon.
+
+If you ran /ship right now, you'd claim:
+  micro bump:  v1.6.3.1   (queue-advance: none)
+  patch bump:  v1.7.1.0   (bumped past claimed 1.7.0.0)
+  minor bump:  v1.8.0.0   (bumped past claimed 1.7.0.0)
+  major bump:  v2.0.0.0   (no major collisions)
 ```
 
-## Important Rules
+For offline / unknown-host output, print a shorter block:
 
-- **Never expose secrets.** Don't print full API keys, tokens, or passwords.
-- **Confirm with the user.** Always show the detected config and ask for confirmation before writing.
-- **CLAUDE.md is the source of truth.** All configuration lives there — not in a separate config file.
-- **Idempotent.** Running /setup-deploy multiple times overwrites the previous config cleanly.
-- **Platform CLIs are optional.** If `fly` or `vercel` CLI isn't installed, fall back to URL-based health checks.
+```
+╔══════════════════════════════════════════════════════════════════╗
+║                     GSTACK LANDING REPORT                        ║
+╠══════════════════════════════════════════════════════════════════╣
+║ Status:  OFFLINE — queue-awareness unavailable                   ║
+║ Reason:  <offline reason from warnings>                          ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Fallback: local VERSION bumps still work, but collisions cannot be detected.
+```
+
+---
+
+## Step 5: Suggest next action
+
+After rendering the table, suggest ONE of:
+
+1. **If there are collisions in the queue** (two open PRs claim the same version):
+   "⚠ Two open PRs collide on v<X>. Whoever merges second will either overwrite
+   the first's CHANGELOG entry or land a duplicate. Consider asking one author
+   to rerun /ship to pick up the next free slot."
+
+2. **If an active sibling outranks the user's branch version:**
+   "Sibling worktree <path> has v<X> committed <N>h ago and hasn't PR'd yet.
+   If that work ships first, your branch will need to rebump at land time."
+
+3. **If everything looks clean:**
+   "Queue is clean. Next /ship will claim a slot without conflict."
+
+---
+
+## Plan Mode
+
+PLAN MODE EXCEPTION — ALWAYS RUN. This skill is entirely read-only: no file
+writes, no git mutations, no network state changes. Safe to run in plan mode.

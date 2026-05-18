@@ -1,26 +1,27 @@
 ---
-name: setup-deploy
+name: context-restore
 preamble-tier: 2
 version: 1.0.0
 description: |
-  Configure deployment settings for /land-and-deploy. Detects your deploy
-  platform (Fly.io, Render, Vercel, Netlify, Heroku, GitHub Actions, custom),
-  production URL, health check endpoints, and deploy status commands. Writes
-  the configuration to CLAUDE.md so all future deploys are automatic.
-  Use when: "setup deploy", "configure deployment", "set up land-and-deploy",
-  "how do I deploy with gstack", "add deploy config".
-triggers:
-  - configure deploy
-  - setup deployment
-  - set deploy platform
+  Restore working context saved earlier by /context-save. Loads the most recent
+  saved state (across all branches by default) so you can pick up where you
+  left off — even across Conductor workspace handoffs.
+  Use when asked to "resume", "restore context", "where was I", or
+  "pick up where I left off". Pair with /context-save.
+  Formerly /checkpoint resume — renamed because Claude Code treats /checkpoint
+  as a native rewind alias in current environments. (gstack)
 allowed-tools:
   - Bash
   - Read
-  - Write
-  - Edit
   - Glob
   - Grep
   - AskUserQuestion
+triggers:
+  - resume where i left off
+  - restore context
+  - where was i
+  - pick up where i left off
+  - context restore
 ---
 <!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->
 <!-- Regenerate: bun run gen:skill-docs -->
@@ -60,7 +61,7 @@ _QUESTION_TUNING=$(~/.claude/skills/gstack/bin/gstack-config get question_tuning
 echo "QUESTION_TUNING: $_QUESTION_TUNING"
 mkdir -p ~/.gstack/analytics
 if [ "$_TEL" != "off" ]; then
-echo '{"skill":"setup-deploy","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
+echo '{"skill":"context-restore","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 fi
 for _PF in $(find ~/.gstack/analytics -maxdepth 1 -name '.pending-*' 2>/dev/null); do
   if [ -f "$_PF" ]; then
@@ -82,7 +83,7 @@ if [ -f "$_LEARN_FILE" ]; then
 else
   echo "LEARNINGS: 0"
 fi
-~/.claude/skills/gstack/bin/gstack-timeline-log '{"skill":"setup-deploy","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
+~/.claude/skills/gstack/bin/gstack-timeline-log '{"skill":"context-restore","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
 _HAS_ROUTING="no"
 if [ -f CLAUDE.md ] && grep -q "## Skill routing" CLAUDE.md 2>/dev/null; then
   _HAS_ROUTING="yes"
@@ -678,7 +679,7 @@ Before each AskUserQuestion, choose `question_id` from `scripts/question-registr
 
 After answer, log best-effort:
 ```bash
-~/.claude/skills/gstack/bin/gstack-question-log '{"skill":"setup-deploy","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
+~/.claude/skills/gstack/bin/gstack-question-log '{"skill":"context-restore","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
 ```
 
 For two-way questions, offer: "Tune this question? Reply `tune: never-ask`, `tune: always-ask`, or free-form."
@@ -745,201 +746,129 @@ Replace `SKILL_NAME`, `OUTCOME`, and `USED_BROWSE` before running.
 
 Skills that run plan reviews (`/plan-*-review`, `/codex review`) include the EXIT PLAN MODE GATE blocking checklist at the end of the skill, which verifies the plan file ends with `## GSTACK REVIEW REPORT` before ExitPlanMode is called. Skills that don't run plan reviews (operational skills like `/ship`, `/qa`, `/review`) typically don't operate in plan mode and have no review report to verify; this footer is a no-op for them. Writing the plan file is the one edit allowed in plan mode.
 
-# /setup-deploy — Configure Deployment for gstack
+# /context-restore — Restore Saved Working Context
 
-You are helping the user configure their deployment so `/land-and-deploy` works
-automatically. Your job is to detect the deploy platform, production URL, health
-checks, and deploy status commands — then persist everything to CLAUDE.md.
+You are a **Staff Engineer reading a colleague's meticulous session notes** to
+pick up exactly where they left off. Your job is to load the most recent saved
+context and present it clearly so the user can resume work without losing a beat.
 
-After this runs once, `/land-and-deploy` reads CLAUDE.md and skips detection entirely.
+**HARD GATE:** Do NOT implement code changes. This skill only reads saved
+context files and presents the summary.
 
-## User-invocable
-When the user types `/setup-deploy`, run this skill.
+**Default: load the most recent saved context across ALL branches.** This is
+intentionally different from `/context-save list`, which defaults to the current
+branch. `/context-restore` is for Conductor workspace handoff — a context saved
+on one branch can be resumed from another.
 
-## Instructions
+**Do NOT filter the candidate set by current branch.** The `list` flow does
+that; `/context-restore` does not.
 
-### Step 1: Check existing configuration
+---
+
+## Detect command
+
+Parse the user's input:
+
+- `/context-restore` → load the most recent saved context (any branch)
+- `/context-restore <title-fragment-or-number>` → load a specific saved context
+- `/context-restore list` → tell the user "Use `/context-save list` — listing
+  lives on the save side" and exit. No mode detection here.
+
+---
+
+## Restore flow
+
+### Step 1: Find saved contexts
 
 ```bash
-grep -A 20 "## Deploy Configuration" CLAUDE.md 2>/dev/null || echo "NO_CONFIG"
+eval "$(~/.claude/skills/gstack/bin/gstack-slug 2>/dev/null)" && mkdir -p ~/.gstack/projects/$SLUG
+eval "$(~/.claude/skills/gstack/bin/gstack-paths)"
+CHECKPOINT_DIR="$GSTACK_STATE_ROOT/projects/$SLUG/checkpoints"
+if [ ! -d "$CHECKPOINT_DIR" ]; then
+  echo "NO_CHECKPOINTS"
+else
+  # Use find + sort instead of ls -1t. Two reasons:
+  # 1. Canonical order is the filename YYYYMMDD-HHMMSS prefix (stable across
+  #    copies/rsync). Filesystem mtime drifts and is not authoritative.
+  # 2. On macOS, `find ... | xargs ls -1t` with zero results falls back to
+  #    listing cwd. `sort -r` on empty input cleanly returns nothing.
+  # Cap at 20 most recent: a user with 10k saved files shouldn't blow the
+  # context window just listing them. /context-save list handles pagination.
+  FILES=$(find "$CHECKPOINT_DIR" -maxdepth 1 -name "*.md" -type f 2>/dev/null | sort -r | head -20)
+  if [ -z "$FILES" ]; then
+    echo "NO_CHECKPOINTS"
+  else
+    echo "$FILES"
+  fi
+fi
 ```
 
-If configuration already exists, show it and ask:
+**Candidates include every `.md` file in the directory, regardless of branch**
+(the branch is recorded in frontmatter, not used for filtering here). This
+enables Conductor workspace handoff.
 
-- **Context:** Deploy configuration already exists in CLAUDE.md.
-- **RECOMMENDATION:** Choose A to update if your setup changed.
-- A) Reconfigure from scratch (overwrite existing)
-- B) Edit specific fields (show current config, let me change one thing)
-- C) Done — configuration looks correct
+### Step 2: Load the right file
 
-If the user picks C, stop.
+- If the user specified a title fragment or number: find the matching file among
+  the candidates.
+- Otherwise: load the **first file returned by the `sort -r` above** — that is
+  the newest `YYYYMMDD-HHMMSS` prefix, which is the canonical "most recent."
 
-### Step 2: Detect platform
-
-Run the platform detection from the deploy bootstrap:
-
-```bash
-# Platform config files
-[ -f fly.toml ] && echo "PLATFORM:fly" && cat fly.toml
-[ -f render.yaml ] && echo "PLATFORM:render" && cat render.yaml
-[ -f vercel.json ] || [ -d .vercel ] && echo "PLATFORM:vercel"
-[ -f netlify.toml ] && echo "PLATFORM:netlify" && cat netlify.toml
-[ -f Procfile ] && echo "PLATFORM:heroku"
-[ -f railway.json ] || [ -f railway.toml ] && echo "PLATFORM:railway"
-
-# GitHub Actions deploy workflows
-for f in $(find .github/workflows -maxdepth 1 \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null); do
-  [ -f "$f" ] && grep -qiE "deploy|release|production|staging|cd" "$f" 2>/dev/null && echo "DEPLOY_WORKFLOW:$f"
-done
-
-# Project type
-[ -f package.json ] && grep -q '"bin"' package.json 2>/dev/null && echo "PROJECT_TYPE:cli"
-find . -maxdepth 1 -name '*.gemspec' 2>/dev/null | grep -q . && echo "PROJECT_TYPE:library"
-```
-
-### Step 3: Platform-specific setup
-
-Based on what was detected, guide the user through platform-specific configuration.
-
-#### Fly.io
-
-If `fly.toml` detected:
-
-1. Extract app name: `grep -m1 "^app" fly.toml | sed 's/app = "\(.*\)"/\1/'`
-2. Check if `fly` CLI is installed: `which fly 2>/dev/null`
-3. If installed, verify: `fly status --app {app} 2>/dev/null`
-4. Infer URL: `https://{app}.fly.dev`
-5. Set deploy status command: `fly status --app {app}`
-6. Set health check: `https://{app}.fly.dev` (or `/health` if the app has one)
-
-Ask the user to confirm the production URL. Some Fly apps use custom domains.
-
-#### Render
-
-If `render.yaml` detected:
-
-1. Extract service name and type from render.yaml
-2. Check for Render API key: `echo $RENDER_API_KEY | head -c 4` (don't expose the full key)
-3. Infer URL: `https://{service-name}.onrender.com`
-4. Render deploys automatically on push to the connected branch — no deploy workflow needed
-5. Set health check: the inferred URL
-
-Ask the user to confirm. Render uses auto-deploy from the connected git branch — after
-merge to main, Render picks it up automatically. The "deploy wait" in /land-and-deploy
-should poll the Render URL until it responds with the new version.
-
-#### Vercel
-
-If vercel.json or .vercel detected:
-
-1. Check for `vercel` CLI: `which vercel 2>/dev/null`
-2. If installed: `vercel ls --prod 2>/dev/null | head -3`
-3. Vercel deploys automatically on push — preview on PR, production on merge to main
-4. Set health check: the production URL from vercel project settings
-
-#### Netlify
-
-If netlify.toml detected:
-
-1. Extract site info from netlify.toml
-2. Netlify deploys automatically on push
-3. Set health check: the production URL
-
-#### GitHub Actions only
-
-If deploy workflows detected but no platform config:
-
-1. Read the workflow file to understand what it does
-2. Extract the deploy target (if mentioned)
-3. Ask the user for the production URL
-
-#### Custom / Manual
-
-If nothing detected:
-
-Use AskUserQuestion to gather the information:
-
-1. **How are deploys triggered?**
-   - A) Automatically on push to main (Fly, Render, Vercel, Netlify, etc.)
-   - B) Via GitHub Actions workflow
-   - C) Via a deploy script or CLI command (describe it)
-   - D) Manually (SSH, dashboard, etc.)
-   - E) This project doesn't deploy (library, CLI, tool)
-
-2. **What's the production URL?** (Free text — the URL where the app runs)
-
-3. **How can gstack check if a deploy succeeded?**
-   - A) HTTP health check at a specific URL (e.g., /health, /api/status)
-   - B) CLI command (e.g., `fly status`, `kubectl rollout status`)
-   - C) Check the GitHub Actions workflow status
-   - D) No automated way — just check the URL loads
-
-4. **Any pre-merge or post-merge hooks?**
-   - Commands to run before merging (e.g., `bun run build`)
-   - Commands to run after merge but before deploy verification
-
-### Step 4: Write configuration
-
-Read CLAUDE.md (or create it). Find and replace the `## Deploy Configuration` section
-if it exists, or append it at the end.
-
-```markdown
-## Deploy Configuration (configured by /setup-deploy)
-- Platform: {platform}
-- Production URL: {url}
-- Deploy workflow: {workflow file or "auto-deploy on push"}
-- Deploy status command: {command or "HTTP health check"}
-- Merge method: {squash/merge/rebase}
-- Project type: {web app / API / CLI / library}
-- Post-deploy health check: {health check URL or command}
-
-### Custom deploy hooks
-- Pre-merge: {command or "none"}
-- Deploy trigger: {command or "automatic on push to main"}
-- Deploy status: {command or "poll production URL"}
-- Health check: {URL or command}
-```
-
-### Step 5: Verify
-
-After writing, verify the configuration works:
-
-1. If a health check URL was configured, try it:
-```bash
-curl -sf "{health-check-url}" -o /dev/null -w "%{http_code}" 2>/dev/null || echo "UNREACHABLE"
-```
-
-2. If a deploy status command was configured, try it:
-```bash
-{deploy-status-command} 2>/dev/null | head -5 || echo "COMMAND_FAILED"
-```
-
-Report results. If anything failed, note it but don't block — the config is still
-useful even if the health check is temporarily unreachable.
-
-### Step 6: Summary
+Read the chosen file and present a summary:
 
 ```
-DEPLOY CONFIGURATION — COMPLETE
-════════════════════════════════
-Platform:      {platform}
-URL:           {url}
-Health check:  {health check}
-Status cmd:    {status command}
-Merge method:  {merge method}
+RESUMING CONTEXT
+════════════════════════════════════════
+Title:       {title}
+Branch:      {branch from frontmatter}
+Saved:       {timestamp, human-readable}
+Duration:    Last session was {formatted duration} (if available)
+Status:      {status}
+════════════════════════════════════════
 
-Saved to CLAUDE.md. /land-and-deploy will use these settings automatically.
+### Summary
+{summary from saved file}
 
-Next steps:
-- Run /land-and-deploy to merge and deploy your current PR
-- Edit the "## Deploy Configuration" section in CLAUDE.md to change settings
-- Run /setup-deploy again to reconfigure
+### Remaining Work
+{remaining work items}
+
+### Notes
+{notes}
 ```
+
+If the current branch differs from the saved context's branch, note this:
+"This context was saved on branch `{branch}`. You are currently on
+`{current branch}`. You may want to switch branches before continuing."
+
+### Step 3: Offer next steps
+
+After presenting, ask via AskUserQuestion:
+
+- A) Continue working on the remaining items
+- B) Show the full saved file
+- C) Just needed the context, thanks
+
+If A, summarize the first remaining work item and suggest starting there.
+
+---
+
+## If no saved contexts exist
+
+If Step 1 printed `NO_CHECKPOINTS`, tell the user:
+
+"No saved contexts yet. Run `/context-save` first to save your current working
+state, then `/context-restore` will find it."
+
+---
 
 ## Important Rules
 
-- **Never expose secrets.** Don't print full API keys, tokens, or passwords.
-- **Confirm with the user.** Always show the detected config and ask for confirmation before writing.
-- **CLAUDE.md is the source of truth.** All configuration lives there — not in a separate config file.
-- **Idempotent.** Running /setup-deploy multiple times overwrites the previous config cleanly.
-- **Platform CLIs are optional.** If `fly` or `vercel` CLI isn't installed, fall back to URL-based health checks.
+- **Never modify code.** This skill only reads saved files and presents them.
+- **Always search across all branches by default.** Cross-branch resume is the
+  whole point. Only filter by branch if the user explicitly asks via a
+  title-fragment match that happens to be branch-specific.
+- **"Most recent" means the filename `YYYYMMDD-HHMMSS` prefix**, not
+  `ls -1t` (filesystem mtime). Filenames are stable across file-system
+  operations; mtime is not.
+- **This is a gstack skill, not a Claude Code built-in.** When the user types
+  `/context-restore`, invoke this skill via the Skill tool.

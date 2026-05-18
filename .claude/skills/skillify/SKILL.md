@@ -1,26 +1,24 @@
 ---
-name: setup-deploy
-preamble-tier: 2
+name: skillify
 version: 1.0.0
 description: |
-  Configure deployment settings for /land-and-deploy. Detects your deploy
-  platform (Fly.io, Render, Vercel, Netlify, Heroku, GitHub Actions, custom),
-  production URL, health check endpoints, and deploy status commands. Writes
-  the configuration to CLAUDE.md so all future deploys are automatic.
-  Use when: "setup deploy", "configure deployment", "set up land-and-deploy",
-  "how do I deploy with gstack", "add deploy config".
-triggers:
-  - configure deploy
-  - setup deployment
-  - set deploy platform
+  Codify the most recent successful /scrape flow into a permanent
+  browser-skill on disk. Future /scrape calls with the same intent run
+  the codified script in ~200ms instead of re-driving the page. Walks
+  back through the conversation, synthesizes script.ts + script.test.ts
+  + fixture, runs the test in a temp dir, and asks before committing.
+  Use when asked to "skillify", "codify", "save this scrape", or
+  "make this permanent". (gstack)
 allowed-tools:
   - Bash
   - Read
   - Write
-  - Edit
-  - Glob
-  - Grep
   - AskUserQuestion
+triggers:
+  - skillify
+  - codify this scrape
+  - save this scrape
+  - make this permanent
 ---
 <!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->
 <!-- Regenerate: bun run gen:skill-docs -->
@@ -60,7 +58,7 @@ _QUESTION_TUNING=$(~/.claude/skills/gstack/bin/gstack-config get question_tuning
 echo "QUESTION_TUNING: $_QUESTION_TUNING"
 mkdir -p ~/.gstack/analytics
 if [ "$_TEL" != "off" ]; then
-echo '{"skill":"setup-deploy","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
+echo '{"skill":"skillify","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 fi
 for _PF in $(find ~/.gstack/analytics -maxdepth 1 -name '.pending-*' 2>/dev/null); do
   if [ -f "$_PF" ]; then
@@ -82,7 +80,7 @@ if [ -f "$_LEARN_FILE" ]; then
 else
   echo "LEARNINGS: 0"
 fi
-~/.claude/skills/gstack/bin/gstack-timeline-log '{"skill":"setup-deploy","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
+~/.claude/skills/gstack/bin/gstack-timeline-log '{"skill":"skillify","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
 _HAS_ROUTING="no"
 if [ -f CLAUDE.md ] && grep -q "## Skill routing" CLAUDE.md 2>/dev/null; then
   _HAS_ROUTING="yes"
@@ -678,7 +676,7 @@ Before each AskUserQuestion, choose `question_id` from `scripts/question-registr
 
 After answer, log best-effort:
 ```bash
-~/.claude/skills/gstack/bin/gstack-question-log '{"skill":"setup-deploy","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
+~/.claude/skills/gstack/bin/gstack-question-log '{"skill":"skillify","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
 ```
 
 For two-way questions, offer: "Tune this question? Reply `tune: never-ask`, `tune: always-ask`, or free-form."
@@ -691,6 +689,24 @@ Write (only after confirmation for free-form):
 ```
 
 Exit code 2 = rejected as not user-originated; do not retry. On success: "Set `<id>` → `<preference>`. Active immediately."
+
+## Repo Ownership — See Something, Say Something
+
+`REPO_MODE` controls how to handle issues outside your branch:
+- **`solo`** — You own everything. Investigate and offer to fix proactively.
+- **`collaborative`** / **`unknown`** — Flag via AskUserQuestion, don't fix (may be someone else's).
+
+Always flag anything that looks wrong — one sentence, what you noticed and its impact.
+
+## Search Before Building
+
+Before building anything unfamiliar, **search first.** See `~/.claude/skills/gstack/ETHOS.md`.
+- **Layer 1** (tried and true) — don't reinvent. **Layer 2** (new and popular) — scrutinize. **Layer 3** (first principles) — prize above all.
+
+**Eureka:** When first-principles reasoning contradicts conventional wisdom, name it and log:
+```bash
+jq -n --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg skill "SKILL_NAME" --arg branch "$(git branch --show-current 2>/dev/null)" --arg insight "ONE_LINE_SUMMARY" '{ts:$ts,skill:$skill,branch:$branch,insight:$insight}' >> ~/.gstack/analytics/eureka.jsonl 2>/dev/null || true
+```
 
 ## Completion Status Protocol
 
@@ -745,201 +761,435 @@ Replace `SKILL_NAME`, `OUTCOME`, and `USED_BROWSE` before running.
 
 Skills that run plan reviews (`/plan-*-review`, `/codex review`) include the EXIT PLAN MODE GATE blocking checklist at the end of the skill, which verifies the plan file ends with `## GSTACK REVIEW REPORT` before ExitPlanMode is called. Skills that don't run plan reviews (operational skills like `/ship`, `/qa`, `/review`) typically don't operate in plan mode and have no review report to verify; this footer is a no-op for them. Writing the plan file is the one edit allowed in plan mode.
 
-# /setup-deploy — Configure Deployment for gstack
+# /skillify — codify the last scrape into a permanent skill
 
-You are helping the user configure their deployment so `/land-and-deploy` works
-automatically. Your job is to detect the deploy platform, production URL, health
-checks, and deploy status commands — then persist everything to CLAUDE.md.
+The productivity multiplier. `/scrape` discovered how to pull the data;
+`/skillify` writes it as deterministic Playwright-via-`browse-client`
+code so the next `/scrape` call on the same intent runs in ~200ms.
 
-After this runs once, `/land-and-deploy` reads CLAUDE.md and skips detection entirely.
+Without this command, `/scrape` is a slow wrapper around `$B`. With it,
+every successful scrape is a one-time cost.
 
-## User-invocable
-When the user types `/setup-deploy`, run this skill.
+## Iron contract — never write a half-broken skill to disk
 
-## Instructions
+Skills are user-trust artifacts. A broken skill in `$B skill list` makes
+agents reach for the wrong tool and erodes confidence. This skill writes
+to a temp dir, runs the auto-generated test there, and only renames into
+the final tier path on (a) test pass + (b) explicit user approval. On
+either failure, the temp dir is removed entirely. There is no "almost
+shipped" state.
 
-### Step 1: Check existing configuration
+---
+
+## Step 1 — Provenance guard (D1)
+
+Walk back through the conversation, **at most 10 agent turns**, looking
+for the most recent `/scrape` invocation that:
+
+- Was bounded (you can identify the user's intent line and the trailing
+  JSON the prototype produced)
+- Produced a JSON result the user did not subsequently invalidate
+  (e.g., did not say "that's wrong", did not ask you to retry)
+
+If you cannot find one, refuse with exactly this message:
+
+> "No recent /scrape result found in this conversation. Run /scrape
+> <intent> first, then say /skillify."
+
+Stop. Do not synthesize from chat fragments. Do not synthesize from a
+match-path /scrape result (matched skills are already codified — there's
+nothing to skillify).
+
+If you find a candidate but the user is currently three turns past it
+discussing something unrelated, ask once before proceeding:
+
+> "The last successful /scrape was '<intent line>' a few turns back.
+> Skillify that one?"
+
+A "yes" lets you continue. Anything else: refuse with the message above.
+
+## Step 2 — Propose name + triggers
+
+From the prototype intent, extract:
+
+- A short skill name: lowercase letters/digits/dashes, ≤32 chars,
+  starts with a letter, no consecutive dashes. E.g.,
+  `lobsters-frontpage`, `gh-issue-list`, `pypi-package-stats`.
+- 3–5 trigger phrases the agent should match against in future `/scrape`
+  calls. Mix the canonical phrase ("scrape lobsters frontpage") with
+  paraphrases ("top posts on lobste.rs", "lobsters front page").
+- The host (just the hostname, e.g. `lobste.rs`).
+
+Then **AskUserQuestion** to confirm:
+
+```
+D<N> — Skill name + tier
+Project/branch/task: codifying /scrape "<intent>" as a browser-skill.
+ELI10: Pick a short name we'll use to find this skill next time you say
+something similar. Pick a tier — global means every project on this
+machine sees it, project means just this repo.
+Stakes if we pick wrong: bad name buries the skill in $B skill list;
+wrong tier means future projects can't find it (or can find it when you
+didn't want them to).
+Recommendation: A — <proposed-name> at global tier — most scrape skills
+generalize across projects.
+Note: options differ in kind, not coverage — no completeness score.
+A) Keep "<proposed-name>" at global tier — ~/.gstack/browser-skills/<proposed-name>/  (recommended)
+B) Keep "<proposed-name>" but at project tier — <project>/.gstack/browser-skills/<proposed-name>/
+C) Rename it (free-form — say the new name)
+```
+
+**Tier-shadowing check.** Before showing the question, run `$B skill list`
+and check for an existing skill at the same name. If found, add to the
+question:
+
+> "Note: a <tier> skill named '<name>' already exists. Picking the same
+> name at a higher tier (project > global > bundled) shadows it; picking
+> the same tier collides and will be refused at write time. Pick a
+> different name to coexist."
+
+## Step 3 — Synthesize `script.ts` (D2)
+
+**Use only the final-attempt `$B` calls** that produced the JSON the
+user accepted, plus the user's intent string. Drop:
+
+- Failed selector attempts (the four selectors you tried before the
+  working one)
+- Unrelated `$B` commands from earlier turns
+- All conversation prose, summaries, your own reasoning
+
+The script imports the SDK from `./_lib/browse-client` (a sibling copy,
+written in step 6) and exports a parser function so `script.test.ts` can
+exercise it against the bundled fixture without spinning up the daemon.
+
+Mirror the bundled reference at `browser-skills/hackernews-frontpage/script.ts`:
+
+```ts
+import { browse } from './_lib/browse-client';
+
+export interface Item { /* one row of the JSON output */ }
+export interface Output { items: Item[]; count: number; }
+
+const TARGET_URL = '<the URL the prototype used>';
+
+export function parseFromHtml(html: string): Item[] {
+  // Pure function: HTML in, parsed Item[] out. No $B calls.
+  // Future fixture-replay tests call this directly.
+}
+
+if (import.meta.main) { await main(); }
+
+async function main(): Promise<void> {
+  await browse.goto(TARGET_URL);
+  const html = await browse.html();
+  const items = parseFromHtml(html);
+  const output: Output = { items, count: items.length };
+  process.stdout.write(JSON.stringify(output) + '\n');
+}
+```
+
+The parser MUST be a pure function. If your prototype used multiple `$B`
+calls (e.g., goto + click "Next" + html), keep all of them in `main()`
+but extract the parsing into pure helpers. The fixture-replay tests in
+step 5 only exercise the pure parts.
+
+## Step 4 — Capture the fixture
 
 ```bash
-grep -A 20 "## Deploy Configuration" CLAUDE.md 2>/dev/null || echo "NO_CONFIG"
+$B goto "<TARGET_URL>"
+$B html > /tmp/skillify-fixture-$$.html
 ```
 
-If configuration already exists, show it and ask:
+The fixture filename inside the staged dir is
+`fixtures/<host-with-dashes>-<YYYY-MM-DD>.html`, where the date is today.
+E.g. `fixtures/lobste-rs-2026-04-27.html`.
 
-- **Context:** Deploy configuration already exists in CLAUDE.md.
-- **RECOMMENDATION:** Choose A to update if your setup changed.
-- A) Reconfigure from scratch (overwrite existing)
-- B) Edit specific fields (show current config, let me change one thing)
-- C) Done — configuration looks correct
+Read the file you wrote, store its contents in a variable, and use it
+when staging in step 7.
 
-If the user picks C, stop.
+## Step 5 — Write `script.test.ts`
 
-### Step 2: Detect platform
+Mirror `browser-skills/hackernews-frontpage/script.test.ts`. The test
+must include at least one ★★ assertion — parsed output has the expected
+shape AND non-empty key fields — not a smoke ★ assertion. Smoke tests
+that only check `parseFromHtml` doesn't throw are insufficient.
 
-Run the platform detection from the deploy bootstrap:
+```ts
+import { describe, it, expect } from 'bun:test';
+import * as fs from 'fs';
+import * as path from 'path';
+import { parseFromHtml } from './script';
+
+describe('<name> parser', () => {
+  const fixturePath = path.join(import.meta.dir, 'fixtures', '<host>-<date>.html');
+  const html = fs.readFileSync(fixturePath, 'utf-8');
+  const items = parseFromHtml(html);
+
+  it('returns at least one item from the bundled fixture', () => {
+    expect(items.length).toBeGreaterThan(0);
+  });
+
+  it('every item has the required shape', () => {
+    for (const item of items) {
+      expect(typeof item.<keyfield>).toBe('<keytype>');
+      // ... assert on every required field
+    }
+  });
+});
+```
+
+## Step 6 — Resolve the canonical SDK path + read it
+
+The canonical SDK lives at `<gstack-install>/browse/src/browse-client.ts`.
+The bundled-skill loader walks the install tree to find it; mirror that.
+
+Resolve the gstack install dir. Two reliable signals (in order):
+
+1. The bundled `hackernews-frontpage` skill — look at its tier path from
+   `$B skill list` (the `bundled` row). The skill dir is
+   `<gstack-install>/browser-skills/hackernews-frontpage/`, so the install
+   dir is two `dirname` calls above its `_lib/browse-client.ts`.
+2. The active gstack skills install at `~/.claude/skills/gstack/`. Read
+   the symlink target if it's a symlink, otherwise use the path directly.
+
+Example (run as Bun, not bash, to avoid shell-redirect parsing issues):
+
+```ts
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+function resolveSdkPath(): string {
+  const candidates = [
+    path.join(os.homedir(), '.claude', 'skills', 'gstack', 'browse', 'src', 'browse-client.ts'),
+    // Add other install-dir candidates if your environment differs.
+  ];
+  for (const c of candidates) {
+    try {
+      const real = fs.realpathSync(c);
+      if (fs.existsSync(real)) return real;
+    } catch {}
+  }
+  throw new Error('Could not resolve canonical browse-client.ts');
+}
+
+const sdkContents = fs.readFileSync(resolveSdkPath(), 'utf-8');
+```
+
+Read the SDK contents into a variable. The staging step writes it as
+`_lib/browse-client.ts` byte-identical to the canonical. Phase 1 decision
+#4 — each skill is fully self-contained, no version drift possible.
+
+## Step 7 — Stage the skill (D3 atomic write)
+
+Use the helper at `browse/src/browser-skill-write.ts`. Construct an inline
+TypeScript snippet (or shell out to a small Bun one-liner) that calls:
+
+```ts
+import { stageSkill } from '<gstack-install>/browse/src/browser-skill-write';
+
+const stagedDir = stageSkill({
+  name: '<name>',
+  files: new Map([
+    ['SKILL.md', skillMd],
+    ['script.ts', scriptTs],
+    ['script.test.ts', scriptTestTs],
+    ['_lib/browse-client.ts', sdkContents],
+    ['fixtures/<host>-<date>.html', fixtureHtml],
+  ]),
+});
+console.log(stagedDir);
+```
+
+The SKILL.md content for `<name>` follows the Phase 1 frontmatter
+contract:
+
+```yaml
+---
+name: <name>
+description: <one-line, what data this returns>
+host: <hostname>
+trusted: false       # agent-authored skills are untrusted by default
+source: agent
+version: 1.0.0
+args: []             # extend if your script accepts --arg key=value
+triggers:
+  - <phrase 1>
+  - <phrase 2>
+  - <phrase 3>
+---
+
+# <Name> scraper
+
+<2-3 sentences on what the script does, what URL it hits, and what
+shape of JSON it returns. NO conversation context. NO chat fragments.
+This is a durable on-disk artifact — keep it tight.>
+
+## Usage
+
+\`\`\`
+$ $B skill run <name>
+{ "items": [...], "count": N }
+\`\`\`
+```
+
+Capture `stagedDir` (the path returned by `stageSkill`). You'll pass it
+to `$B skill test` next, then to `commitSkill` or `discardStaged`.
+
+## Step 8 — Run `$B skill test` against the staged dir
 
 ```bash
-# Platform config files
-[ -f fly.toml ] && echo "PLATFORM:fly" && cat fly.toml
-[ -f render.yaml ] && echo "PLATFORM:render" && cat render.yaml
-[ -f vercel.json ] || [ -d .vercel ] && echo "PLATFORM:vercel"
-[ -f netlify.toml ] && echo "PLATFORM:netlify" && cat netlify.toml
-[ -f Procfile ] && echo "PLATFORM:heroku"
-[ -f railway.json ] || [ -f railway.toml ] && echo "PLATFORM:railway"
-
-# GitHub Actions deploy workflows
-for f in $(find .github/workflows -maxdepth 1 \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null); do
-  [ -f "$f" ] && grep -qiE "deploy|release|production|staging|cd" "$f" 2>/dev/null && echo "DEPLOY_WORKFLOW:$f"
-done
-
-# Project type
-[ -f package.json ] && grep -q '"bin"' package.json 2>/dev/null && echo "PROJECT_TYPE:cli"
-find . -maxdepth 1 -name '*.gemspec' 2>/dev/null | grep -q . && echo "PROJECT_TYPE:library"
+$B skill test "<name>" --dir "<stagedDir>"
 ```
 
-### Step 3: Platform-specific setup
+If `$B skill test` does not yet accept `--dir`, fall back to invoking the
+test runner directly against the staged path:
 
-Based on what was detected, guide the user through platform-specific configuration.
-
-#### Fly.io
-
-If `fly.toml` detected:
-
-1. Extract app name: `grep -m1 "^app" fly.toml | sed 's/app = "\(.*\)"/\1/'`
-2. Check if `fly` CLI is installed: `which fly 2>/dev/null`
-3. If installed, verify: `fly status --app {app} 2>/dev/null`
-4. Infer URL: `https://{app}.fly.dev`
-5. Set deploy status command: `fly status --app {app}`
-6. Set health check: `https://{app}.fly.dev` (or `/health` if the app has one)
-
-Ask the user to confirm the production URL. Some Fly apps use custom domains.
-
-#### Render
-
-If `render.yaml` detected:
-
-1. Extract service name and type from render.yaml
-2. Check for Render API key: `echo $RENDER_API_KEY | head -c 4` (don't expose the full key)
-3. Infer URL: `https://{service-name}.onrender.com`
-4. Render deploys automatically on push to the connected branch — no deploy workflow needed
-5. Set health check: the inferred URL
-
-Ask the user to confirm. Render uses auto-deploy from the connected git branch — after
-merge to main, Render picks it up automatically. The "deploy wait" in /land-and-deploy
-should poll the Render URL until it responds with the new version.
-
-#### Vercel
-
-If vercel.json or .vercel detected:
-
-1. Check for `vercel` CLI: `which vercel 2>/dev/null`
-2. If installed: `vercel ls --prod 2>/dev/null | head -3`
-3. Vercel deploys automatically on push — preview on PR, production on merge to main
-4. Set health check: the production URL from vercel project settings
-
-#### Netlify
-
-If netlify.toml detected:
-
-1. Extract site info from netlify.toml
-2. Netlify deploys automatically on push
-3. Set health check: the production URL
-
-#### GitHub Actions only
-
-If deploy workflows detected but no platform config:
-
-1. Read the workflow file to understand what it does
-2. Extract the deploy target (if mentioned)
-3. Ask the user for the production URL
-
-#### Custom / Manual
-
-If nothing detected:
-
-Use AskUserQuestion to gather the information:
-
-1. **How are deploys triggered?**
-   - A) Automatically on push to main (Fly, Render, Vercel, Netlify, etc.)
-   - B) Via GitHub Actions workflow
-   - C) Via a deploy script or CLI command (describe it)
-   - D) Manually (SSH, dashboard, etc.)
-   - E) This project doesn't deploy (library, CLI, tool)
-
-2. **What's the production URL?** (Free text — the URL where the app runs)
-
-3. **How can gstack check if a deploy succeeded?**
-   - A) HTTP health check at a specific URL (e.g., /health, /api/status)
-   - B) CLI command (e.g., `fly status`, `kubectl rollout status`)
-   - C) Check the GitHub Actions workflow status
-   - D) No automated way — just check the URL loads
-
-4. **Any pre-merge or post-merge hooks?**
-   - Commands to run before merging (e.g., `bun run build`)
-   - Commands to run after merge but before deploy verification
-
-### Step 4: Write configuration
-
-Read CLAUDE.md (or create it). Find and replace the `## Deploy Configuration` section
-if it exists, or append it at the end.
-
-```markdown
-## Deploy Configuration (configured by /setup-deploy)
-- Platform: {platform}
-- Production URL: {url}
-- Deploy workflow: {workflow file or "auto-deploy on push"}
-- Deploy status command: {command or "HTTP health check"}
-- Merge method: {squash/merge/rebase}
-- Project type: {web app / API / CLI / library}
-- Post-deploy health check: {health check URL or command}
-
-### Custom deploy hooks
-- Pre-merge: {command or "none"}
-- Deploy trigger: {command or "automatic on push to main"}
-- Deploy status: {command or "poll production URL"}
-- Health check: {URL or command}
-```
-
-### Step 5: Verify
-
-After writing, verify the configuration works:
-
-1. If a health check URL was configured, try it:
 ```bash
-curl -sf "{health-check-url}" -o /dev/null -w "%{http_code}" 2>/dev/null || echo "UNREACHABLE"
+( cd "<stagedDir>" && bun test script.test.ts )
 ```
 
-2. If a deploy status command was configured, try it:
+If the test fails:
+
+1. Read the test output. If the failure is a fixable parser bug,
+   rewrite `script.ts` and `script.test.ts` (still inside the staged
+   dir) and retry — at most twice. Show the diff to the user before
+   each retry.
+2. If still failing after two retries, OR the failure is an
+   environmental issue (SDK import, daemon connection):
+
+   ```ts
+   import { discardStaged } from '<gstack-install>/browse/src/browser-skill-write';
+   discardStaged('<stagedDir>');
+   ```
+
+   Report the failure to the user, show them the staged `script.ts` for
+   reference, and stop. No on-disk artifact.
+
+## Step 9 — Approval gate
+
+Tests passed. Now ask the user before committing:
+
+```
+D<N> — Commit skill "<name>" at <resolved-tier-path>?
+Project/branch/task: codified /scrape "<intent>" — tests pass against fixture.
+ELI10: The script ran clean against the snapshot we captured. Saying yes
+moves the staged folder into ~/.gstack/browser-skills/ where /scrape
+will find it next time. Saying no removes the staged folder and nothing
+lands on disk.
+Stakes if we pick wrong: yes commits an artifact you have to manually rm
+later if you regret it ($B skill rm <name> --global). No throws away
+~30s of synthesis work.
+Recommendation: A — tests passed, the script is self-contained, this is
+the productivity payoff for the prototype.
+Note: options differ in kind, not coverage — no completeness score.
+A) Commit it (recommended)
+B) Look at the script first (I'll print SKILL.md + script.ts and re-ask)
+C) Discard — don't commit
+```
+
+If the user picks B, print the staged `SKILL.md` and `script.ts` (NOT
+the fixture or _lib/), then re-ask the same A/B/C question (without B
+this time — they already saw it).
+
+## Step 10 — Commit (atomic) or discard
+
+If the user approved:
+
+```ts
+import { commitSkill } from '<gstack-install>/browse/src/browser-skill-write';
+const dest = commitSkill({
+  name: '<name>',
+  tier: '<global|project>',  // from step 2 answer
+  stagedDir: '<stagedDir>',
+});
+console.log(`Committed: ${dest}`);
+```
+
+If `commitSkill` throws "already exists" (tier-shadowing collision the
+user dismissed in step 2), report and ask whether to:
+
+- Pick a different name (back to step 2)
+- `$B skill rm <name>` then retry
+- Discard
+
+If the user rejected in step 9:
+
+```ts
+import { discardStaged } from '<gstack-install>/browse/src/browser-skill-write';
+discardStaged('<stagedDir>');
+```
+
+Report: "Discarded. No skill was written to disk."
+
+## Step 11 — Confirm + verify
+
+After a successful commit, run one verification:
+
 ```bash
-{deploy-status-command} 2>/dev/null | head -5 || echo "COMMAND_FAILED"
+$B skill list | grep <name>
+$B skill run <name>    # should match the JSON the prototype produced
 ```
 
-Report results. If anything failed, note it but don't block — the config is still
-useful even if the health check is temporarily unreachable.
+If the post-commit run does not match the prototype output, something
+in synthesis drifted. Surface this to the user — they may want to
+`$B skill rm <name>` and retry. Do NOT silently roll back; the user
+deserves to see the discrepancy.
 
-### Step 6: Summary
+End the skill with one line: "Skill '<name>' committed at <tier>. Future
+/scrape calls matching '<canonical-trigger>' will run in ~200ms."
 
+---
+
+## Limits (be honest)
+
+- **Bun runtime required.** The codified skill runs as a Bun process
+  (`bun run script.ts`). Phase 1 design carry-over (Codex finding #7).
+  Real fix lands in Phase 4 (self-contained binary or Node fallback).
+  For now: the skill works on any machine that has gstack installed,
+  which means it has Bun.
+- **Fixture-replay tests are point-in-time.** When the target site
+  rotates HTML, the fixture goes stale and the test passes against an
+  outdated snapshot. Phase 4 will add fixture-staleness detection.
+- **Synthesis is best-effort.** You're writing a script from your own
+  conversation memory. If the prototype was complex (multi-page, JS
+  hydration, lazy load) the codified script may need a hand-edit before
+  it's reliable. The post-commit verify step catches obvious drift.
+- **Single-target only.** One `$B goto` URL per skill. Multi-page
+  crawls are out of scope — write a separate skill per target, or
+  parameterize via `args:` if the URL pattern is regular.
+
+## What this skill does NOT do
+
+- Codify match-path /scrape results (matched skills are already codified)
+- Codify mutating flows (those are /automate's job — Phase 2 P0)
+- Run skills (that's `$B skill run` — codified skills are run via /scrape's
+  match path or directly)
+- Edit existing skills ($EDITOR + the skill dir is the surface — `$B skill
+  show <name>` finds the path)
+- Tombstone or remove ($B skill rm)
+
+## Capture Learnings
+
+If you discovered a non-obvious pattern, pitfall, or architectural insight during
+this session, log it for future sessions:
+
+```bash
+~/.claude/skills/gstack/bin/gstack-learnings-log '{"skill":"skillify","type":"TYPE","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"SOURCE","files":["path/to/relevant/file"]}'
 ```
-DEPLOY CONFIGURATION — COMPLETE
-════════════════════════════════
-Platform:      {platform}
-URL:           {url}
-Health check:  {health check}
-Status cmd:    {status command}
-Merge method:  {merge method}
 
-Saved to CLAUDE.md. /land-and-deploy will use these settings automatically.
+**Types:** `pattern` (reusable approach), `pitfall` (what NOT to do), `preference`
+(user stated), `architecture` (structural decision), `tool` (library/framework insight),
+`operational` (project environment/CLI/workflow knowledge).
 
-Next steps:
-- Run /land-and-deploy to merge and deploy your current PR
-- Edit the "## Deploy Configuration" section in CLAUDE.md to change settings
-- Run /setup-deploy again to reconfigure
-```
+**Sources:** `observed` (you found this in the code), `user-stated` (user told you),
+`inferred` (AI deduction), `cross-model` (both Claude and Codex agree).
 
-## Important Rules
+**Confidence:** 1-10. Be honest. An observed pattern you verified in the code is 8-9.
+An inference you're not sure about is 4-5. A user preference they explicitly stated is 10.
 
-- **Never expose secrets.** Don't print full API keys, tokens, or passwords.
-- **Confirm with the user.** Always show the detected config and ask for confirmation before writing.
-- **CLAUDE.md is the source of truth.** All configuration lives there — not in a separate config file.
-- **Idempotent.** Running /setup-deploy multiple times overwrites the previous config cleanly.
-- **Platform CLIs are optional.** If `fly` or `vercel` CLI isn't installed, fall back to URL-based health checks.
+**files:** Include the specific file paths this learning references. This enables
+staleness detection: if those files are later deleted, the learning can be flagged.
+
+**Only log genuine discoveries.** Don't log obvious things. Don't log things the user
+already knows. A good test: would this insight save time in a future session? If yes, log it.

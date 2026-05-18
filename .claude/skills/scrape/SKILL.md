@@ -1,26 +1,23 @@
 ---
-name: setup-deploy
-preamble-tier: 2
+name: scrape
 version: 1.0.0
 description: |
-  Configure deployment settings for /land-and-deploy. Detects your deploy
-  platform (Fly.io, Render, Vercel, Netlify, Heroku, GitHub Actions, custom),
-  production URL, health check endpoints, and deploy status commands. Writes
-  the configuration to CLAUDE.md so all future deploys are automatic.
-  Use when: "setup deploy", "configure deployment", "set up land-and-deploy",
-  "how do I deploy with gstack", "add deploy config".
-triggers:
-  - configure deploy
-  - setup deployment
-  - set deploy platform
+  Pull data from a web page. First call on a new intent prototypes the flow
+  via $B primitives and returns JSON. Subsequent calls on a matching intent
+  route to a codified browser-skill and return in ~200ms. Read-only — for
+  mutating flows (form fills, clicks, submissions), use /automate.
+  Use when asked to "scrape", "get data from", "pull", "extract from", or
+  "what's on" a page. (gstack)
 allowed-tools:
   - Bash
   - Read
-  - Write
-  - Edit
-  - Glob
-  - Grep
   - AskUserQuestion
+triggers:
+  - scrape this page
+  - get data from
+  - pull from
+  - extract from
+  - what is on
 ---
 <!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->
 <!-- Regenerate: bun run gen:skill-docs -->
@@ -60,7 +57,7 @@ _QUESTION_TUNING=$(~/.claude/skills/gstack/bin/gstack-config get question_tuning
 echo "QUESTION_TUNING: $_QUESTION_TUNING"
 mkdir -p ~/.gstack/analytics
 if [ "$_TEL" != "off" ]; then
-echo '{"skill":"setup-deploy","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
+echo '{"skill":"scrape","ts":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","repo":"'$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || echo "unknown")'"}'  >> ~/.gstack/analytics/skill-usage.jsonl 2>/dev/null || true
 fi
 for _PF in $(find ~/.gstack/analytics -maxdepth 1 -name '.pending-*' 2>/dev/null); do
   if [ -f "$_PF" ]; then
@@ -82,7 +79,7 @@ if [ -f "$_LEARN_FILE" ]; then
 else
   echo "LEARNINGS: 0"
 fi
-~/.claude/skills/gstack/bin/gstack-timeline-log '{"skill":"setup-deploy","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
+~/.claude/skills/gstack/bin/gstack-timeline-log '{"skill":"scrape","event":"started","branch":"'"$_BRANCH"'","session":"'"$_SESSION_ID"'"}' 2>/dev/null &
 _HAS_ROUTING="no"
 if [ -f CLAUDE.md ] && grep -q "## Skill routing" CLAUDE.md 2>/dev/null; then
   _HAS_ROUTING="yes"
@@ -678,7 +675,7 @@ Before each AskUserQuestion, choose `question_id` from `scripts/question-registr
 
 After answer, log best-effort:
 ```bash
-~/.claude/skills/gstack/bin/gstack-question-log '{"skill":"setup-deploy","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
+~/.claude/skills/gstack/bin/gstack-question-log '{"skill":"scrape","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
 ```
 
 For two-way questions, offer: "Tune this question? Reply `tune: never-ask`, `tune: always-ask`, or free-form."
@@ -691,6 +688,24 @@ Write (only after confirmation for free-form):
 ```
 
 Exit code 2 = rejected as not user-originated; do not retry. On success: "Set `<id>` → `<preference>`. Active immediately."
+
+## Repo Ownership — See Something, Say Something
+
+`REPO_MODE` controls how to handle issues outside your branch:
+- **`solo`** — You own everything. Investigate and offer to fix proactively.
+- **`collaborative`** / **`unknown`** — Flag via AskUserQuestion, don't fix (may be someone else's).
+
+Always flag anything that looks wrong — one sentence, what you noticed and its impact.
+
+## Search Before Building
+
+Before building anything unfamiliar, **search first.** See `~/.claude/skills/gstack/ETHOS.md`.
+- **Layer 1** (tried and true) — don't reinvent. **Layer 2** (new and popular) — scrutinize. **Layer 3** (first principles) — prize above all.
+
+**Eureka:** When first-principles reasoning contradicts conventional wisdom, name it and log:
+```bash
+jq -n --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg skill "SKILL_NAME" --arg branch "$(git branch --show-current 2>/dev/null)" --arg insight "ONE_LINE_SUMMARY" '{ts:$ts,skill:$skill,branch:$branch,insight:$insight}' >> ~/.gstack/analytics/eureka.jsonl 2>/dev/null || true
+```
 
 ## Completion Status Protocol
 
@@ -745,201 +760,154 @@ Replace `SKILL_NAME`, `OUTCOME`, and `USED_BROWSE` before running.
 
 Skills that run plan reviews (`/plan-*-review`, `/codex review`) include the EXIT PLAN MODE GATE blocking checklist at the end of the skill, which verifies the plan file ends with `## GSTACK REVIEW REPORT` before ExitPlanMode is called. Skills that don't run plan reviews (operational skills like `/ship`, `/qa`, `/review`) typically don't operate in plan mode and have no review report to verify; this footer is a no-op for them. Writing the plan file is the one edit allowed in plan mode.
 
-# /setup-deploy — Configure Deployment for gstack
+# /scrape — pull data from a page
 
-You are helping the user configure their deployment so `/land-and-deploy` works
-automatically. Your job is to detect the deploy platform, production URL, health
-checks, and deploy status commands — then persist everything to CLAUDE.md.
+One entry point for getting data off the web. Two paths under the hood:
 
-After this runs once, `/land-and-deploy` reads CLAUDE.md and skips detection entirely.
+1. **Match path** (~200ms) — if the user's intent matches an existing
+   browser-skill's triggers, run it via `$B skill run <name>` and emit
+   the JSON.
+2. **Prototype path** (~30s) — no matching skill yet, so drive the page
+   with `$B` primitives, return the JSON, and suggest `/skillify` so the
+   next call lands on the match path.
 
-## User-invocable
-When the user types `/setup-deploy`, run this skill.
+Read-only by contract. If the intent implies writing (submitting forms,
+clicking buttons that mutate state), refuse and route to `/automate`.
 
-## Instructions
+## Step 1 — Determine intent
 
-### Step 1: Check existing configuration
+The user's request after `/scrape` is the intent. If they did not include
+one, ask once:
+
+> "What do you want to scrape? Describe it in one line, e.g. 'top stories
+> on Hacker News' or 'product names + prices on example.com/products'."
+
+Do not ask multiple clarifying questions up front. Any further questions
+go in the prototype path where they're cheaper.
+
+## Step 2 — Refuse mutating intents
+
+If the intent implies writes — verbs like *submit*, *post*, *send*, *log
+in*, *click X*, *fill the form*, *delete*, *create*, *order*, *book* —
+respond:
+
+> "/scrape is read-only. For mutating flows, use /automate (browser-skills
+> Phase 2 P0 in TODOS.md — not yet shipped). Until then, use $B click /
+> $B fill / $B type directly."
+
+Stop. Do not enter the match or prototype path.
+
+## Step 3 — Match phase
+
+List existing browser-skills:
 
 ```bash
-grep -A 20 "## Deploy Configuration" CLAUDE.md 2>/dev/null || echo "NO_CONFIG"
+$B skill list
 ```
 
-If configuration already exists, show it and ask:
+For each skill, `$B skill show <name>` exposes the full SKILL.md including
+`triggers:`, `description:`, and `host:`. Read these and judge whether the
+user's intent semantically matches one of them.
 
-- **Context:** Deploy configuration already exists in CLAUDE.md.
-- **RECOMMENDATION:** Choose A to update if your setup changed.
-- A) Reconfigure from scratch (overwrite existing)
-- B) Edit specific fields (show current config, let me change one thing)
-- C) Done — configuration looks correct
+A confident match means **all three** are true:
 
-If the user picks C, stop.
+- The intent's domain matches the skill's `host` (or one of its hostnames)
+- A `triggers:` phrase or the `description:` covers the same data the
+  intent asks for
+- The intent does not require args the skill does not declare in `args:`
 
-### Step 2: Detect platform
-
-Run the platform detection from the deploy bootstrap:
+If matched, parse any `--arg key=value` from the intent (or pass none for
+zero-arg skills) and run:
 
 ```bash
-# Platform config files
-[ -f fly.toml ] && echo "PLATFORM:fly" && cat fly.toml
-[ -f render.yaml ] && echo "PLATFORM:render" && cat render.yaml
-[ -f vercel.json ] || [ -d .vercel ] && echo "PLATFORM:vercel"
-[ -f netlify.toml ] && echo "PLATFORM:netlify" && cat netlify.toml
-[ -f Procfile ] && echo "PLATFORM:heroku"
-[ -f railway.json ] || [ -f railway.toml ] && echo "PLATFORM:railway"
-
-# GitHub Actions deploy workflows
-for f in $(find .github/workflows -maxdepth 1 \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null); do
-  [ -f "$f" ] && grep -qiE "deploy|release|production|staging|cd" "$f" 2>/dev/null && echo "DEPLOY_WORKFLOW:$f"
-done
-
-# Project type
-[ -f package.json ] && grep -q '"bin"' package.json 2>/dev/null && echo "PROJECT_TYPE:cli"
-find . -maxdepth 1 -name '*.gemspec' 2>/dev/null | grep -q . && echo "PROJECT_TYPE:library"
+$B skill run <name> [--arg key=value ...]
 ```
 
-### Step 3: Platform-specific setup
+Emit the JSON the skill prints to stdout. Stop.
 
-Based on what was detected, guide the user through platform-specific configuration.
+If matching is ambiguous (two skills could plausibly fit), pick the
+narrower-tier one (project > global > bundled — `$B skill list` shows the
+tier). If still ambiguous, fall through to the prototype path rather than
+guess wrong.
 
-#### Fly.io
+## Step 4 — Prototype phase
 
-If `fly.toml` detected:
+No match. Drive the page using `$B` primitives:
 
-1. Extract app name: `grep -m1 "^app" fly.toml | sed 's/app = "\(.*\)"/\1/'`
-2. Check if `fly` CLI is installed: `which fly 2>/dev/null`
-3. If installed, verify: `fly status --app {app} 2>/dev/null`
-4. Infer URL: `https://{app}.fly.dev`
-5. Set deploy status command: `fly status --app {app}`
-6. Set health check: `https://{app}.fly.dev` (or `/health` if the app has one)
+1. `$B goto <url>` — navigate to the target. The user's intent usually
+   names a host or a URL; use it directly.
+2. `$B snapshot --text` (or `$B text`) — get a clean text view of the
+   page to find selectors.
+3. `$B html` — pull the raw HTML when you need to parse structured data
+   (lists, tables, repeated rows).
+4. `$B links` — when the intent is to gather URLs.
+5. Iterate: try a selector, check the output, refine.
 
-Ask the user to confirm the production URL. Some Fly apps use custom domains.
+Emit the result as JSON on stdout (one document, not pretty-printed).
+Use a stable shape — typically `{ "items": [...], "count": N }` or
+similar — so downstream consumers can treat it as data.
 
-#### Render
+## Step 5 — Skillify nudge
 
-If `render.yaml` detected:
+After a successful prototype, append exactly one line:
 
-1. Extract service name and type from render.yaml
-2. Check for Render API key: `echo $RENDER_API_KEY | head -c 4` (don't expose the full key)
-3. Infer URL: `https://{service-name}.onrender.com`
-4. Render deploys automatically on push to the connected branch — no deploy workflow needed
-5. Set health check: the inferred URL
+> "Say /skillify to make this a permanent skill (200ms on next call)."
 
-Ask the user to confirm. Render uses auto-deploy from the connected git branch — after
-merge to main, Render picks it up automatically. The "deploy wait" in /land-and-deploy
-should poll the Render URL until it responds with the new version.
+That is the entire nudge. Do not nag, do not list pros, do not push.
+Proactive surfacing is a Phase 3 knob (`gstack-config browser_skillify_prompts`),
+not this skill's job.
 
-#### Vercel
+## When the prototype fails
 
-If vercel.json or .vercel detected:
+If the page loads but data extraction does not yield a sensible JSON shape
+after 3-4 selector attempts:
 
-1. Check for `vercel` CLI: `which vercel 2>/dev/null`
-2. If installed: `vercel ls --prod 2>/dev/null | head -3`
-3. Vercel deploys automatically on push — preview on PR, production on merge to main
-4. Set health check: the production URL from vercel project settings
+- Report what you tried, what came back, and what's blocking (lazy-loaded,
+  JS-rendered, paywalled, etc.).
+- Do NOT write a partial result and call it done.
+- Do NOT suggest /skillify on a broken prototype.
+- Ask the user whether they want to (a) try a different selector, (b)
+  switch to a different page, or (c) stop.
 
-#### Netlify
+## What this skill does NOT do
 
-If netlify.toml detected:
+- Mutating actions (use /automate when shipped, or $B primitives directly)
+- Auth flows / cookie import (use /setup-browser-cookies first)
+- Multi-page crawls (this is one-shot per call)
+- Anything that requires the daemon to not be running
 
-1. Extract site info from netlify.toml
-2. Netlify deploys automatically on push
-3. Set health check: the production URL
+## Output discipline
 
-#### GitHub Actions only
+The match path returns whatever JSON the matched skill emits. The
+prototype path returns whatever JSON you construct. In both cases:
 
-If deploy workflows detected but no platform config:
+- One JSON document, on stdout.
+- Stderr (or chat) is for logs and the skillify nudge.
+- Do not embed prose around the JSON in the chat reply unless the user
+  asked for an explanation — many `/scrape` callers pipe the output to
+  `jq`.
 
-1. Read the workflow file to understand what it does
-2. Extract the deploy target (if mentioned)
-3. Ask the user for the production URL
+## Capture Learnings
 
-#### Custom / Manual
+If you discovered a non-obvious pattern, pitfall, or architectural insight during
+this session, log it for future sessions:
 
-If nothing detected:
-
-Use AskUserQuestion to gather the information:
-
-1. **How are deploys triggered?**
-   - A) Automatically on push to main (Fly, Render, Vercel, Netlify, etc.)
-   - B) Via GitHub Actions workflow
-   - C) Via a deploy script or CLI command (describe it)
-   - D) Manually (SSH, dashboard, etc.)
-   - E) This project doesn't deploy (library, CLI, tool)
-
-2. **What's the production URL?** (Free text — the URL where the app runs)
-
-3. **How can gstack check if a deploy succeeded?**
-   - A) HTTP health check at a specific URL (e.g., /health, /api/status)
-   - B) CLI command (e.g., `fly status`, `kubectl rollout status`)
-   - C) Check the GitHub Actions workflow status
-   - D) No automated way — just check the URL loads
-
-4. **Any pre-merge or post-merge hooks?**
-   - Commands to run before merging (e.g., `bun run build`)
-   - Commands to run after merge but before deploy verification
-
-### Step 4: Write configuration
-
-Read CLAUDE.md (or create it). Find and replace the `## Deploy Configuration` section
-if it exists, or append it at the end.
-
-```markdown
-## Deploy Configuration (configured by /setup-deploy)
-- Platform: {platform}
-- Production URL: {url}
-- Deploy workflow: {workflow file or "auto-deploy on push"}
-- Deploy status command: {command or "HTTP health check"}
-- Merge method: {squash/merge/rebase}
-- Project type: {web app / API / CLI / library}
-- Post-deploy health check: {health check URL or command}
-
-### Custom deploy hooks
-- Pre-merge: {command or "none"}
-- Deploy trigger: {command or "automatic on push to main"}
-- Deploy status: {command or "poll production URL"}
-- Health check: {URL or command}
-```
-
-### Step 5: Verify
-
-After writing, verify the configuration works:
-
-1. If a health check URL was configured, try it:
 ```bash
-curl -sf "{health-check-url}" -o /dev/null -w "%{http_code}" 2>/dev/null || echo "UNREACHABLE"
+~/.claude/skills/gstack/bin/gstack-learnings-log '{"skill":"scrape","type":"TYPE","key":"SHORT_KEY","insight":"DESCRIPTION","confidence":N,"source":"SOURCE","files":["path/to/relevant/file"]}'
 ```
 
-2. If a deploy status command was configured, try it:
-```bash
-{deploy-status-command} 2>/dev/null | head -5 || echo "COMMAND_FAILED"
-```
+**Types:** `pattern` (reusable approach), `pitfall` (what NOT to do), `preference`
+(user stated), `architecture` (structural decision), `tool` (library/framework insight),
+`operational` (project environment/CLI/workflow knowledge).
 
-Report results. If anything failed, note it but don't block — the config is still
-useful even if the health check is temporarily unreachable.
+**Sources:** `observed` (you found this in the code), `user-stated` (user told you),
+`inferred` (AI deduction), `cross-model` (both Claude and Codex agree).
 
-### Step 6: Summary
+**Confidence:** 1-10. Be honest. An observed pattern you verified in the code is 8-9.
+An inference you're not sure about is 4-5. A user preference they explicitly stated is 10.
 
-```
-DEPLOY CONFIGURATION — COMPLETE
-════════════════════════════════
-Platform:      {platform}
-URL:           {url}
-Health check:  {health check}
-Status cmd:    {status command}
-Merge method:  {merge method}
+**files:** Include the specific file paths this learning references. This enables
+staleness detection: if those files are later deleted, the learning can be flagged.
 
-Saved to CLAUDE.md. /land-and-deploy will use these settings automatically.
-
-Next steps:
-- Run /land-and-deploy to merge and deploy your current PR
-- Edit the "## Deploy Configuration" section in CLAUDE.md to change settings
-- Run /setup-deploy again to reconfigure
-```
-
-## Important Rules
-
-- **Never expose secrets.** Don't print full API keys, tokens, or passwords.
-- **Confirm with the user.** Always show the detected config and ask for confirmation before writing.
-- **CLAUDE.md is the source of truth.** All configuration lives there — not in a separate config file.
-- **Idempotent.** Running /setup-deploy multiple times overwrites the previous config cleanly.
-- **Platform CLIs are optional.** If `fly` or `vercel` CLI isn't installed, fall back to URL-based health checks.
+**Only log genuine discoveries.** Don't log obvious things. Don't log things the user
+already knows. A good test: would this insight save time in a future session? If yes, log it.
