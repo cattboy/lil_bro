@@ -102,6 +102,36 @@ class _MonitorFixWorker(QObject):
         self.finished.emit()
 
 
+class _MousePollWorker(QObject):
+    """Runs ``check_polling_rate()`` off the GUI thread.
+
+    The polling probe in ``src/agent_tools/mouse.py`` blocks for ~2 seconds
+    while it samples cursor deltas. Calling it from the main thread would
+    freeze the dashboard, so the dashboard's "Test Polling" button
+    dispatches this worker on its own QThread and shows the result once
+    ``finished`` arrives.
+    """
+
+    finished = Signal(dict)
+
+    def run(self) -> None:
+        from src.utils.debug_logger import get_debug_logger
+        log = get_debug_logger()
+        log.info("MousePollWorker: starting 2-second polling measurement")
+        try:
+            from src.agent_tools.mouse import check_polling_rate
+            result = check_polling_rate()
+        except Exception as exc:
+            log.warning("MousePollWorker: failed: %s", exc, exc_info=True)
+            result = {"current_hz": 0, "status": "ERROR", "message": str(exc)}
+        log.info(
+            "MousePollWorker: done hz=%s status=%s",
+            result.get("current_hz"),
+            result.get("status"),
+        )
+        self.finished.emit(result)
+
+
 class RevertWorker(QObject):
     """Wraps run_revert_phase for a QThread."""
 

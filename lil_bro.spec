@@ -90,6 +90,7 @@ a = Analysis(
         'src.gui.widgets.splash',
         'src.gui.widgets.thermal_chart',
         'src.gui.windows.main_window',
+        'src.agent_tools.mouse',
         'src.agent_tools.quick_status',
     ],
     hookspath=[],

@@ -233,7 +233,7 @@ class Dashboard(QWidget):
 
         outer.addWidget(chart_wrap)
 
-        # ── USB polling widget ───────────────────────────────────────────
+        # ── Mouse polling widget ────────────────────────────────────────
         poll_frame = QFrame()
         poll_frame.setObjectName("pollWidget")
         poll_h = QHBoxLayout(poll_frame)
@@ -242,7 +242,7 @@ class Dashboard(QWidget):
         poll_left = QVBoxLayout()
         poll_left.setSpacing(4)
 
-        poll_label = QLabel("USB POLLING RATE")
+        poll_label = QLabel("MOUSE POLLING")
         poll_label.setObjectName("pollLabel")
         poll_left.addWidget(poll_label)
 
@@ -271,6 +271,16 @@ class Dashboard(QWidget):
         poll_h.addWidget(self._poll_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         outer.addWidget(poll_frame)
+
+        # Background QThread holders for the manual mouse-poll dispatch.
+        # check_polling_rate() blocks for ~2s, so it cannot run on the
+        # GUI thread. Reentry-guarded in _manual_poll().
+        self._mouse_poll_thread: QThread | None = None
+        self._mouse_poll_worker = None
+        # Once a manual measurement has run, the periodic snapshot tick
+        # must not clobber the result with "Not measured" (the quick-status
+        # fallback when no live measurement is available).
+        self._mouse_manually_measured: bool = False
 
         # ── Monitor refresh PRE-ALLOCATED slots ───────────────────────
         # Created here during Dashboard.__init__ alongside the stat tiles
@@ -304,19 +314,61 @@ class Dashboard(QWidget):
     # ── USB polling ────────────────────────────────────────────────────
 
     def _manual_poll(self) -> None:
-        """Force an immediate snapshot tick to refresh the polling rate display."""
+        """Dispatch ``check_polling_rate()`` on a background QThread.
+
+        The probe blocks ~2s sampling cursor deltas — calling it on the
+        GUI thread would freeze the dashboard. Reentry-guarded so rapid
+        button clicks don't spawn multiple workers.
+        """
+        from src.utils.debug_logger import get_debug_logger
+        log = get_debug_logger()
+
+        if self._mouse_poll_thread is not None:
+            log.info("Dashboard._manual_poll: already running, ignoring click")
+            return
+
+        log.info("Dashboard._manual_poll: dispatching MousePollWorker")
         self._poll_btn.setEnabled(False)
-        self._poll_status.setText("Measuring…")
-        try:
-            snap = quick_status_snapshot(
-                self._worker._lhm if self._worker else None
+        self._poll_status.setText("Measuring (2s)… MOVE YOUR MOUSE AROUND!")
+
+        from src.gui.worker import _MousePollWorker
+        thread = QThread(self)
+        thread.setObjectName("MousePoll")
+        worker = _MousePollWorker()
+        worker.moveToThread(thread)
+
+        def _on_mouse_done(result: dict) -> None:
+            hz = int(result.get("current_hz", 0) or 0)
+            status = result.get("status", "OK")
+            log.info(
+                "Dashboard._manual_poll: result hz=%d status=%s",
+                hz, status,
             )
-            hz_str = snap.get("mouse_hz", "")
-            self._update_poll_display(hz_str)
-        except Exception:
-            self._poll_status.setText("Measurement failed")
-        finally:
+
+            self._mouse_manually_measured = True
+            self._poll_val.setText(str(hz) if hz else "—")
+            if status == "ERROR":
+                self._poll_status.setText("Measurement failed")
+            elif hz >= 1000:
+                self._poll_status.setText("Excellent — optimal for gaming")
+            elif hz >= 500:
+                self._poll_status.setText("Acceptable — 1000Hz preferred")
+            else:
+                self._poll_status.setText(f"Low ({hz} Hz) — adds input lag")
+
             self._poll_btn.setEnabled(True)
+            thread.quit()
+
+        worker.finished.connect(_on_mouse_done)
+        thread.started.connect(worker.run)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda: setattr(self, "_mouse_poll_thread", None))
+        thread.finished.connect(lambda: setattr(self, "_mouse_poll_worker", None))
+
+        self._mouse_poll_thread = thread
+        self._mouse_poll_worker = worker
+        thread.start()
 
     def _update_poll_display(self, hz_str: str) -> None:
         try:
@@ -385,10 +437,16 @@ class Dashboard(QWidget):
             )
         for key, card in self._cards.items():
             card.set_value(str(snapshot.get(key, "—")))
-        # Update poll display from snapshot data
-        hz_str = snapshot.get("mouse_hz", "")
-        if hz_str and hz_str != "—":
-            self._update_poll_display(hz_str)
+        # Mouse polling tile is owned by the manual "Test Polling" button
+        # (which dispatches _MousePollWorker via _manual_poll). Periodic
+        # quick_status_snapshot only returns "Not measured" / "—" for
+        # mouse_hz, which would clobber a real measurement — so only let
+        # the periodic tick update the tile *before* the first manual
+        # measurement, and only with a parseable Hz value.
+        if not self._mouse_manually_measured:
+            hz_str = snapshot.get("mouse_hz", "")
+            if hz_str and hz_str not in ("—", "Not measured"):
+                self._update_poll_display(hz_str)
         # Feed thermal chart
         cpu_c = snapshot.get("_cpu_c")
         gpu_c = snapshot.get("_gpu_c")
