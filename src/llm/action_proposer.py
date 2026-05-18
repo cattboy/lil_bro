@@ -194,7 +194,7 @@ _FALLBACK: dict[str, dict] = {
         "severity": "MEDIUM",
         "explanation": (
             "Your mouse polling rate is below 500Hz — this adds measurable input lag. "
-            "Open your mouse's driver software and set it to 1000Hz or higher."
+            "Open your mouse's driver software and set it to 1000Hz-2000Hz. 4k is overkill."
         ),
         "proposed_action": "Set polling rate to 1000Hz in mouse driver software (manual)",
         "can_auto_fix": False,

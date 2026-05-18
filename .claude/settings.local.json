@@ -55,7 +55,8 @@
       "Bash(.venv/Scripts/python.exe -m pytest tests/test_spec_dumper.py -q)",
       "Bash(.venv/Scripts/python.exe -m pytest tests/ -k \"fix_dispatch or spec_dumper or display\" -q)",
       "Bash(.venv/Scripts/python.exe -m pytest tests/ -k \"dashboard or gui or monitor or worker\" -q)",
-      "Bash(.venv/Scripts/python.exe -m pytest tests/ -k \"monitor or display or dashboard or spec_dumper\" -q)"
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -k \"monitor or display or dashboard or spec_dumper\" -q)",
+      "Bash(awk NR>=370 && NR<=420 *)"
     ]
   },
   "enabledMcpjsonServers": [
