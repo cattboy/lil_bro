@@ -77,6 +77,7 @@ class MonitorRefreshCard(QFrame):
 
     def set_display(self, d: dict) -> None:
         """Populate the card from one ``DisplayCapabilities`` entry."""
+        from src.llm.action_proposer import propose_for_check
         raw_device = str(d.get("device") or "Display")
         is_wmi = (d.get("source") == "wmi") or raw_device.startswith("WMI:")
         display_name = raw_device[4:] if raw_device.startswith("WMI:") else raw_device
@@ -92,25 +93,31 @@ class MonitorRefreshCard(QFrame):
         if is_wmi:
             # WMI fallback: refresh detection is limited; no Fix button (legacy
             # _fix_display can't target a synthesized WMI: device name).
+            # Diagnostic copy, not a proposal — kept inline (no FALLBACK entry).
             self._status_lbl.setText("Detected via WMI — refresh rate detection limited")
+            self._status_lbl.setToolTip("")
             self._status_lbl.setProperty("sev", "medium")
             self._val_lbl.setProperty("sev", "medium")
             self._fix_btn.setVisible(False)
         else:
             optimal = cur > 0 and mx > 0 and cur >= mx
             if optimal:
+                # Pass state, not a proposal — no FALLBACK entry by design.
                 self._status_lbl.setText(f"✓ Running at max refresh rate ({mx} Hz)")
+                self._status_lbl.setToolTip("")
                 self._status_lbl.setProperty("sev", "low")
                 self._val_lbl.setProperty("sev", "low")
                 self._fix_btn.setVisible(False)
             else:
-                delta = mx - cur if mx > cur else 0
-                extra = f" @ {at_res}" if at_res else ""
-                self._status_lbl.setText(
-                    f"Suboptimal — {mx} Hz available{extra}"
-                    if delta
-                    else "Suboptimal"
+                # FAIL tier — canonical text from FALLBACK_PROPOSALS["display"],
+                # full explanation on hover. Single source of truth shared with
+                # pipeline approval flow.
+                proposal = propose_for_check(
+                    "display",
+                    {"current": cur, "expected": mx, "at_resolution": at_res},
                 )
+                self._status_lbl.setText(proposal["proposed_action"])
+                self._status_lbl.setToolTip(proposal["explanation"])
                 self._status_lbl.setProperty("sev", "medium")
                 self._val_lbl.setProperty("sev", "medium")
                 self._fix_btn.setVisible(True)

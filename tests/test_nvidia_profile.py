@@ -643,9 +643,9 @@ class TestFixDispatchNvidiaProfile:
 
 class TestActionProposerNvidiaProfile:
     def test_fallback_template_exists(self):
-        from src.llm.action_proposer import _FALLBACK
-        assert "nvidia_profile" in _FALLBACK
-        t = _FALLBACK["nvidia_profile"]
+        from src.llm.action_proposer import FALLBACK_PROPOSALS
+        assert "nvidia_profile" in FALLBACK_PROPOSALS
+        t = FALLBACK_PROPOSALS["nvidia_profile"]
         assert t["can_auto_fix"] is True
         assert t["severity"] == "HIGH"
 

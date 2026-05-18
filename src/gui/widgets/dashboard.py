@@ -330,6 +330,7 @@ class Dashboard(QWidget):
         log.info("Dashboard._manual_poll: dispatching MousePollWorker")
         self._poll_btn.setEnabled(False)
         self._poll_status.setText("Measuring (2s)… MOVE YOUR MOUSE AROUND!")
+        self._poll_status.setToolTip("")
         # Clear any prior sev so "Measuring…" doesn't inherit the stale
         # coral/amber/mint of the previous result — would read as a tier
         # indicator that no longer reflects the truth.
@@ -342,6 +343,7 @@ class Dashboard(QWidget):
         worker.moveToThread(thread)
 
         def _on_mouse_done(result: dict) -> None:
+            from src.llm.action_proposer import propose_for_check
             hz = int(result.get("current_hz", 0) or 0)
             status = result.get("status", "OK")
             log.info(
@@ -353,15 +355,26 @@ class Dashboard(QWidget):
             self._poll_val.setText(str(hz) if hz else "—")
             if status == "ERROR":
                 self._poll_status.setText("Measurement failed")
+                self._poll_status.setToolTip("")
                 _sev = "high"
             elif hz >= 1000:
                 self._poll_status.setText("Excellent — optimal for gaming")
+                self._poll_status.setToolTip("")
                 _sev = "low"
             elif hz >= 500:
                 self._poll_status.setText("Acceptable — 1000Hz preferred")
+                self._poll_status.setToolTip("")
                 _sev = "medium"
             else:
-                self._poll_status.setText(f"Low ({hz} Hz) — adds input lag")
+                # FAIL tier — canonical text from FALLBACK_PROPOSALS, full
+                # explanation on hover. OK tiers above keep their live
+                # commentary (no FAIL → no template, by design).
+                proposal = propose_for_check(
+                    "mouse_polling",
+                    {"current_hz": hz, "threshold_hz": 500},
+                )
+                self._poll_status.setText(proposal["proposed_action"])
+                self._poll_status.setToolTip(proposal["explanation"])
                 _sev = "high"
             self._set_poll_sev(_sev)
 
@@ -396,22 +409,33 @@ class Dashboard(QWidget):
         self._poll_status.style().polish(self._poll_status)
 
     def _update_poll_display(self, hz_str: str) -> None:
+        from src.llm.action_proposer import propose_for_check
         try:
             hz = int(float(hz_str.replace(" Hz", "").replace("Hz", "")))
             self._poll_val.setText(str(hz))
             if hz >= 1000:
                 self._poll_status.setText("Excellent")
+                self._poll_status.setToolTip("")
                 _sev = "low"
             elif hz >= 500:
                 self._poll_status.setText("Good")
+                self._poll_status.setToolTip("")
                 _sev = "medium"
             else:
-                self._poll_status.setText("Low")
+                # FAIL tier — pull canonical text from FALLBACK_PROPOSALS
+                # (single source of truth shared with pipeline approval flow).
+                proposal = propose_for_check(
+                    "mouse_polling",
+                    {"current_hz": hz, "threshold_hz": 500},
+                )
+                self._poll_status.setText(proposal["proposed_action"])
+                self._poll_status.setToolTip(proposal["explanation"])
                 _sev = "high"
             self._set_poll_sev(_sev)
         except (ValueError, AttributeError):
             self._poll_val.setText("—")
             self._poll_status.setText("Not measured")
+            self._poll_status.setToolTip("")
             self._set_poll_sev("")
 
     # ── Polling lifecycle ──────────────────────────────────────────────
