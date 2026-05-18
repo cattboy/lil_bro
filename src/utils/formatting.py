@@ -22,9 +22,7 @@ from collections.abc import Callable
 # pipeline modules loaded before the GUI bridge installs its handlers.
 _DEFAULT_SINK: Callable[[str], None] | None = None
 _APPROVAL_HANDLER: Callable[[str], bool] | None = None
-_CONFIRM_HANDLER: Callable[[str], bool] | None = None
-_PAUSE_HANDLER: Callable[[str], None] | None = None
-_BATCH_SELECTION_HANDLER: Callable[[list, int], list[int]] | None = None
+_CONFIRM_HANDLER: Callable[[str, str], bool] | None = None
 _PAUSE_HANDLER: Callable[[str], None] | None = None
 _BATCH_SELECTION_HANDLER: Callable[[list, int], list[int]] | None = None
 
@@ -41,7 +39,7 @@ def set_approval_handler(handler: Callable[[str], bool] | None) -> None:
     _APPROVAL_HANDLER = handler
 
 
-def set_confirm_handler(handler: Callable[[str], bool] | None) -> None:
+def set_confirm_handler(handler: Callable[[str, str], bool] | None) -> None:
     """Install (or clear) the confirm handler. ``None`` restores CLI input()."""
     global _CONFIRM_HANDLER
     _CONFIRM_HANDLER = handler
@@ -181,16 +179,24 @@ def print_proposal(num: int, severity: str, title: str,
     _emit(f"    {Fore.WHITE}{explanation}{Style.RESET_ALL}", sink=output_sink)
     _emit(f"    {Style.DIM}Fix: {action}  {fix_tag}{Style.RESET_ALL}", sink=output_sink)
 
-def prompt_confirm(question: str) -> bool:
+def prompt_confirm(title: str, description: str = "") -> bool:
     """Branded yes/no prompt for non-system decisions (e.g. model download).
 
     Late-lookup: reads ``_CONFIRM_HANDLER`` at call time so a GUI bridge
     swap reaches every caller, including modules imported before the swap.
+
+    ``description`` is optional context shown below the title. CLI mode
+    prints it on a second line when non-empty; the GUI bridge routes both
+    title and description to ``ConfirmDialog``.
     """
     handler = _CONFIRM_HANDLER
     if handler is not None:
-        return handler(question)
-    print(f"{Fore.MAGENTA}{question} [y/n]: {Style.RESET_ALL}", end="", flush=True)
+        return handler(title, description)
+    if description:
+        print(f"{Fore.MAGENTA}{title}{Style.RESET_ALL}")
+        print(f"{Fore.MAGENTA}{description} [y/n]: {Style.RESET_ALL}", end="", flush=True)
+    else:
+        print(f"{Fore.MAGENTA}{title} [y/n]: {Style.RESET_ALL}", end="", flush=True)
     return input().strip().lower() in ("y", "yes")
 
 def prompt_approval(action_description: str) -> bool:

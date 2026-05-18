@@ -246,8 +246,8 @@ def run(debug: bool = False) -> int:
         approved = bool(dialog.exec())
         bridge.deliver_answer(approved)
 
-    def _show_confirm_dialog(question: str) -> None:
-        dialog = ConfirmDialog(question, parent=main)
+    def _show_confirm_dialog(title: str, description: str) -> None:
+        dialog = ConfirmDialog(title, description, parent=main)
         confirmed = bool(dialog.exec())
         bridge.deliver_answer(confirmed)
 
@@ -308,15 +308,18 @@ def run(debug: bool = False) -> int:
         def _on_pipeline_started() -> None:
             log.info("Pipeline: started")
             main.status_bar_widget.set_state("run", "Pipeline running…")
+            main._dashboard.pause_polling()
 
         def _on_pipeline_finished() -> None:
             log.info("Pipeline: finished (PASS)")
             main.status_bar_widget.set_state("ok", "Pipeline finished")
+            main._dashboard.resume_polling()
             pipeline_thread.quit()
 
         def _on_pipeline_failed(exc_type: str, msg: str, tb: str) -> None:
             log.error("Pipeline: failed -- %s: %s\n%s", exc_type, msg, tb)
             main.status_bar_widget.set_state("ok", f"Pipeline failed: {exc_type}")
+            main._dashboard.resume_polling()
             pipeline_thread.quit()
 
         def _on_thread_done() -> None:
@@ -396,6 +399,30 @@ def run(debug: bool = False) -> int:
     # -- Cleanup ----------------------------------------------------------
 
     def _on_about_to_quit() -> None:
+        # Cancel-on-quit: signal the worker, drain any pending dialog loop
+        # to break a potential deadlock (main waits for worker; worker waits
+        # for main to deliver a dialog answer), then wait for the thread to
+        # exit before tearing down LHM. Test plan: "Window close (X) during
+        # running pipeline → triggers cancel signal; LHM sidecar cleaned up
+        # via aboutToQuit."
+        pipeline_worker = runtime.get("pipeline_worker")
+        pipeline_thread = runtime.get("pipeline_thread")
+        if pipeline_worker is not None and pipeline_thread is not None:
+            try:
+                pipeline_worker.request_cancel()
+                bridge.abort_pending()
+                pipeline_thread.wait(5000)
+            except Exception:
+                log.warning("Pipeline cancel-on-quit failed", exc_info=True)
+
+        revert_thread = runtime.get("revert_thread")
+        if revert_thread is not None:
+            try:
+                bridge.abort_pending()
+                revert_thread.wait(5000)
+            except Exception:
+                pass
+
         try:
             main._dashboard.stop_polling()
         except Exception:

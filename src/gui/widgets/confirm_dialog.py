@@ -20,13 +20,13 @@ from PySide6.QtWidgets import QHBoxLayout  # noqa: E402
 class ConfirmDialog(QDialog):
     """V2 confirm dialog: ⚡ accent icon, restore-point context, Yes/Skip buttons."""
 
-    def __init__(self, question: str, parent=None) -> None:
+    def __init__(self, title: str, description: str = "", parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Create Restore Point?")
+        self.setWindowTitle(title)
         self.setModal(True)
         self.setFixedWidth(420)
         self.setAccessibleName("Confirm dialog")
-        self.setAccessibleDescription(question)
+        self.setAccessibleDescription(description or title)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 16)
@@ -45,21 +45,17 @@ class ConfirmDialog(QDialog):
         text_col = QVBoxLayout()
         text_col.setSpacing(6)
 
-        title = QLabel("lil_bro will create a Windows System Restore Point")
-        title.setObjectName("confirmTitle")
-        title.setWordWrap(True)
-        text_col.addWidget(title)
+        title_lbl = QLabel(title)
+        title_lbl.setObjectName("confirmTitle")
+        title_lbl.setWordWrap(True)
+        text_col.addWidget(title_lbl)
 
-        desc_text = (
-            question
-            if question and "restore" not in question.lower()
-            else "Takes ~30 seconds. Lets you roll back any changes if needed. "
-                 "Strongly recommended before applying fixes."
-        )
-        desc = QLabel(desc_text)
-        desc.setObjectName("confirmDesc")
-        desc.setWordWrap(True)
-        text_col.addWidget(desc)
+        self._desc_lbl = QLabel(description)
+        self._desc_lbl.setObjectName("confirmDesc")
+        self._desc_lbl.setWordWrap(True)
+        if not description:
+            self._desc_lbl.hide()
+        text_col.addWidget(self._desc_lbl)
 
         body_row.addLayout(text_col)
         layout.addLayout(body_row)

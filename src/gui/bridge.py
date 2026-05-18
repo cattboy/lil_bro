@@ -88,10 +88,10 @@ class GuiBridge(QObject):
     def _handle_approval(self, action: str) -> bool:
         return self._await_bool_answer(self.signals.approval_requested, action)
 
-    def _handle_confirm(self, question: str) -> bool:
-        return self._await_bool_answer(self.signals.confirm_requested, question)
+    def _handle_confirm(self, title: str, description: str = "") -> bool:
+        return self._await_bool_answer(self.signals.confirm_requested, title, description)
 
-    def _await_bool_answer(self, signal, payload: str) -> bool:
+    def _await_bool_answer(self, signal, *payload) -> bool:
         loop = QEventLoop()
         result = {"value": False}  # safe default = "Deny" / "No"
 
@@ -100,7 +100,7 @@ class GuiBridge(QObject):
             loop.quit()
 
         self._answer_callback = _on_answer
-        signal.emit(payload)
+        signal.emit(*payload)
         QTimer.singleShot(_DIALOG_TIMEOUT_MS, loop.quit)
         loop.exec()
         self._answer_callback = None
@@ -116,6 +116,20 @@ class GuiBridge(QObject):
         cb = self._answer_callback
         if cb is not None:
             cb(value)
+
+    def abort_pending(self) -> None:
+        """Unblock any in-flight ``_await_*_answer`` loop so the worker thread can exit.
+
+        Called from ``_on_about_to_quit`` before ``pipeline_thread.wait()`` to
+        avoid the deadlock where the worker is parked in ``QEventLoop.exec()``
+        waiting for the main thread to deliver a dialog answer that will never
+        come. ``deliver_answer(False)`` is safe for both branches:
+
+        - approval/confirm loops type-check via ``bool()`` → ``False`` = Deny / No.
+        - batch-selection loop normalizes via ``list(answer or [])`` → ``[]`` = skip.
+        """
+        if self._answer_callback is not None:
+            self.deliver_answer(False)
 
 
     # ── Pause + batch-selection handlers ───────────────────────────────

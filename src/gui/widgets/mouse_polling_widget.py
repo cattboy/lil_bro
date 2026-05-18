@@ -119,12 +119,6 @@ class MousePollingWidget(QWidget):
         self._status_lbl.style().unpolish(self._status_lbl)
         self._status_lbl.style().polish(self._status_lbl)
 
-    def _set_hz_sev(self, sev: str) -> None:
-        """Set severity tone on the Hz label and re-polish so QSS applies."""
-        self._hz_label.setProperty("sev", sev)
-        self._hz_label.style().unpolish(self._hz_label)
-        self._hz_label.style().polish(self._hz_label)
-
     # ── Sampling control ───────────────────────────────────────────────
 
     def start_sampling(self) -> None:

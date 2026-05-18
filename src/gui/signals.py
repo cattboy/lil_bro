@@ -16,7 +16,7 @@ class PipelineSignals(QObject):
 
     output_emitted = Signal(str)
     approval_requested = Signal(str)
-    confirm_requested = Signal(str)
+    confirm_requested = Signal(str, str)
     batch_selection_requested = Signal(list)
     mouse_ready_requested = Signal()
     phase_changed = Signal(int, str)
