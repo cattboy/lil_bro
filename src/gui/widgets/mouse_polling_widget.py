@@ -58,8 +58,12 @@ class MousePollingWidget(QWidget):
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
+        # objectName="pollValue" picks up the 36px monospace styling from
+        # theme.py (vs cardValue's 24px) — matches this widget's primary-number
+        # role. Severity tinting (sev=low/medium/high) is applied live in
+        # mouseMoveEvent based on tier; pollValue[sev=…] QSS rules color it.
         self._hz_label = QLabel("---")
-        self._hz_label.setObjectName("cardValue")
+        self._hz_label.setObjectName("pollValue")
         self._hz_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self._hz_label)
 
@@ -84,6 +88,12 @@ class MousePollingWidget(QWidget):
 
         self.start_sampling()
 
+    def _set_hz_sev(self, sev: str) -> None:
+        """Set severity tone on the Hz label and re-polish so QSS applies."""
+        self._hz_label.setProperty("sev", sev)
+        self._hz_label.style().unpolish(self._hz_label)
+        self._hz_label.style().polish(self._hz_label)
+
     # ── Sampling control ───────────────────────────────────────────────
 
     def start_sampling(self) -> None:
@@ -92,6 +102,8 @@ class MousePollingWidget(QWidget):
         self._last_pos = (None, None)
         self._best_hz = 0
         self._hz_label.setText("---")
+        # Reset severity tint to neutral white between sample windows.
+        self._set_hz_sev("")
         self._auto_stop_timer.start(int(_SAMPLE_WINDOW_SEC * 1000))
 
     # ── Mouse capture ──────────────────────────────────────────────────
@@ -111,6 +123,14 @@ class MousePollingWidget(QWidget):
             current_hz = round(self._sample_count / elapsed)
             self._best_hz = max(self._best_hz, current_hz)
             self._hz_label.setText(str(current_hz))
+            # Tier the Hz label color: ≥1000 mint, 500-999 amber, <500 coral.
+            # Matches fixSev convention (low/medium/high severity).
+            if current_hz >= 1000:
+                self._set_hz_sev("low")
+            elif current_hz >= 500:
+                self._set_hz_sev("medium")
+            else:
+                self._set_hz_sev("high")
         super().mouseMoveEvent(event)
 
     # ── Completion ─────────────────────────────────────────────────────
@@ -119,6 +139,8 @@ class MousePollingWidget(QWidget):
         self._auto_stop_timer.stop()
         if self._sample_count == 0:
             self._hz_label.setText("no input detected")
+            # Coral — no input is a problem state, deserves error tinting.
+            self._set_hz_sev("high")
             return
         self.measurement_complete.emit(self._best_hz)
 

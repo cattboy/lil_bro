@@ -403,6 +403,18 @@ def build_stylesheet() -> str:
         color: {c["text_secondary"]};
     }}
 
+    /* Severity tone variants — applied via setProperty("sev", "low" | "medium" | "high")
+       on pollStatus, pollValue, and pollLabel widgets. Matches fixSev convention. */
+    QLabel#pollStatus[sev="low"]    {{ color: {c["success"]}; }}
+    QLabel#pollStatus[sev="medium"] {{ color: {c["warning"]}; }}
+    QLabel#pollStatus[sev="high"]   {{ color: {c["error"]}; }}
+
+    QLabel#pollValue[sev="low"]    {{ color: {c["success"]}; }}
+    QLabel#pollValue[sev="medium"] {{ color: {c["warning"]}; }}
+    QLabel#pollValue[sev="high"]   {{ color: {c["error"]}; }}
+
+    QLabel#pollLabel[sev="high"]   {{ color: {c["error"]}; }}
+
     /* --- Phase row --------------------------------------------------- */
     QFrame#phaseRow {{
         background-color: {c["surface"]};

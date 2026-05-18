@@ -56,9 +56,11 @@ class MonitorRefreshCard(QFrame):
         hz_row.addStretch()
         left.addLayout(hz_row)
 
+        # Severity tinting (sev = low/medium/high) is applied in set_display
+        # based on optimal/suboptimal/WMI state. Theme rules live in
+        # src/gui/theme.py (QLabel#pollStatus[sev=…], QLabel#pollValue[sev=…]).
         self._status_lbl = QLabel("")
         self._status_lbl.setObjectName("pollStatus")
-        self._status_lbl.setProperty("tone", "ok")
         left.addWidget(self._status_lbl)
 
         root.addLayout(left)
@@ -91,13 +93,15 @@ class MonitorRefreshCard(QFrame):
             # WMI fallback: refresh detection is limited; no Fix button (legacy
             # _fix_display can't target a synthesized WMI: device name).
             self._status_lbl.setText("Detected via WMI — refresh rate detection limited")
-            self._status_lbl.setProperty("tone", "warn")
+            self._status_lbl.setProperty("sev", "medium")
+            self._val_lbl.setProperty("sev", "medium")
             self._fix_btn.setVisible(False)
         else:
             optimal = cur > 0 and mx > 0 and cur >= mx
             if optimal:
                 self._status_lbl.setText(f"✓ Running at max refresh rate ({mx} Hz)")
-                self._status_lbl.setProperty("tone", "ok")
+                self._status_lbl.setProperty("sev", "low")
+                self._val_lbl.setProperty("sev", "low")
                 self._fix_btn.setVisible(False)
             else:
                 delta = mx - cur if mx > cur else 0
@@ -107,12 +111,17 @@ class MonitorRefreshCard(QFrame):
                     if delta
                     else "Suboptimal"
                 )
-                self._status_lbl.setProperty("tone", "warn")
+                self._status_lbl.setProperty("sev", "medium")
+                self._val_lbl.setProperty("sev", "medium")
                 self._fix_btn.setVisible(True)
 
-        # Re-polish to pick up property change for QSS
+        # Re-polish unconditionally for both labels — QSS attribute selectors
+        # only re-evaluate when style is repolished. Done at the bottom so
+        # whichever branch ran above gets its sev write picked up.
         self._status_lbl.style().unpolish(self._status_lbl)
         self._status_lbl.style().polish(self._status_lbl)
+        self._val_lbl.style().unpolish(self._val_lbl)
+        self._val_lbl.style().polish(self._val_lbl)
 
     def _on_fix_clicked(self) -> None:
         if self._device:
@@ -145,10 +154,14 @@ class MonitorEmptyCard(QFrame):
 
         title = QLabel("⚠  No displays detected")
         title.setObjectName("pollLabel")
+        # sev=high turns the title coral via the pollLabel[sev="high"] QSS
+        # rule in theme.py. Init-time set, no re-polish needed before first paint.
+        title.setProperty("sev", "high")
         left.addWidget(title)
 
         hint = QLabel("Click Refresh to re-query Windows.")
         hint.setObjectName("pollStatus")
+        # Intentionally no sev — hint stays in default secondary-text color.
         left.addWidget(hint)
 
         root.addLayout(left)
