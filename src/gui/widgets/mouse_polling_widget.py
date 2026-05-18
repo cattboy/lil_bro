@@ -72,6 +72,17 @@ class MousePollingWidget(QWidget):
         unit.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(unit)
 
+        # Tier text: "Low" / "Medium" / "High" / "No input". Colored via
+        # pollStatus[sev=…] QSS to match the Hz number above. Naming maps
+        # tier → Hz quality (Low Hz = poor → coral; High Hz = excellent →
+        # mint). Underlying sev property uses fixSev semantics
+        # (high severity = coral); the text-vs-sev inversion is intentional
+        # so the visible word matches user intuition for performance tiers.
+        self._status_lbl = QLabel("")
+        self._status_lbl.setObjectName("pollStatus")
+        self._status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self._status_lbl)
+
         layout.addStretch(1)
 
         actions = QHBoxLayout()
@@ -94,6 +105,26 @@ class MousePollingWidget(QWidget):
         self._hz_label.style().unpolish(self._hz_label)
         self._hz_label.style().polish(self._hz_label)
 
+    def _set_tier(self, sev: str, label: str) -> None:
+        """Set Hz-label tint AND status-label text+tint together.
+
+        sev: "low" | "medium" | "high" | "" (neutral)
+            — controls color via QSS pollValue[sev]/pollStatus[sev]
+        label: human-readable tier text shown under "Hz"
+            — "Low" / "Medium" / "High" / "No input" / "" (cleared)
+        """
+        self._set_hz_sev(sev)
+        self._status_lbl.setText(label)
+        self._status_lbl.setProperty("sev", sev)
+        self._status_lbl.style().unpolish(self._status_lbl)
+        self._status_lbl.style().polish(self._status_lbl)
+
+    def _set_hz_sev(self, sev: str) -> None:
+        """Set severity tone on the Hz label and re-polish so QSS applies."""
+        self._hz_label.setProperty("sev", sev)
+        self._hz_label.style().unpolish(self._hz_label)
+        self._hz_label.style().polish(self._hz_label)
+
     # ── Sampling control ───────────────────────────────────────────────
 
     def start_sampling(self) -> None:
@@ -102,8 +133,8 @@ class MousePollingWidget(QWidget):
         self._last_pos = (None, None)
         self._best_hz = 0
         self._hz_label.setText("---")
-        # Reset severity tint to neutral white between sample windows.
-        self._set_hz_sev("")
+        # Clear tier + neutral white tint between sample windows.
+        self._set_tier("", "")
         self._auto_stop_timer.start(int(_SAMPLE_WINDOW_SEC * 1000))
 
     # ── Mouse capture ──────────────────────────────────────────────────
@@ -123,14 +154,15 @@ class MousePollingWidget(QWidget):
             current_hz = round(self._sample_count / elapsed)
             self._best_hz = max(self._best_hz, current_hz)
             self._hz_label.setText(str(current_hz))
-            # Tier the Hz label color: ≥1000 mint, 500-999 amber, <500 coral.
-            # Matches fixSev convention (low/medium/high severity).
+            # Tier the Hz label + status text. Text labels match Hz tier
+            # ("Low" = low Hz = poor); underlying sev matches fixSev
+            # severity (high sev = coral) so QSS colors align.
             if current_hz >= 1000:
-                self._set_hz_sev("low")
+                self._set_tier("low", "High")
             elif current_hz >= 500:
-                self._set_hz_sev("medium")
+                self._set_tier("medium", "Medium")
             else:
-                self._set_hz_sev("high")
+                self._set_tier("high", "Low")
         super().mouseMoveEvent(event)
 
     # ── Completion ─────────────────────────────────────────────────────
@@ -139,8 +171,8 @@ class MousePollingWidget(QWidget):
         self._auto_stop_timer.stop()
         if self._sample_count == 0:
             self._hz_label.setText("no input detected")
-            # Coral — no input is a problem state, deserves error tinting.
-            self._set_hz_sev("high")
+            # Coral — no input is a problem state.
+            self._set_tier("high", "No input")
             return
         self.measurement_complete.emit(self._best_hz)
 

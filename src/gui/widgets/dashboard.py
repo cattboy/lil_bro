@@ -330,6 +330,10 @@ class Dashboard(QWidget):
         log.info("Dashboard._manual_poll: dispatching MousePollWorker")
         self._poll_btn.setEnabled(False)
         self._poll_status.setText("Measuring (2s)… MOVE YOUR MOUSE AROUND!")
+        # Clear any prior sev so "Measuring…" doesn't inherit the stale
+        # coral/amber/mint of the previous result — would read as a tier
+        # indicator that no longer reflects the truth.
+        self._set_poll_sev("")
 
         from src.gui.worker import _MousePollWorker
         thread = QThread(self)
@@ -349,12 +353,17 @@ class Dashboard(QWidget):
             self._poll_val.setText(str(hz) if hz else "—")
             if status == "ERROR":
                 self._poll_status.setText("Measurement failed")
+                _sev = "high"
             elif hz >= 1000:
                 self._poll_status.setText("Excellent — optimal for gaming")
+                _sev = "low"
             elif hz >= 500:
                 self._poll_status.setText("Acceptable — 1000Hz preferred")
+                _sev = "medium"
             else:
                 self._poll_status.setText(f"Low ({hz} Hz) — adds input lag")
+                _sev = "high"
+            self._set_poll_sev(_sev)
 
             self._poll_btn.setEnabled(True)
             thread.quit()
@@ -370,15 +379,40 @@ class Dashboard(QWidget):
         self._mouse_poll_worker = worker
         thread.start()
 
+    def _set_poll_sev(self, sev: str) -> None:
+        """Set severity tone on the mouse-poll Hz value AND status label.
+
+        Both labels use objectNames `pollValue` / `pollStatus` which have
+        `[sev="low|medium|high"]` QSS rules in theme.py. Re-polish both
+        unconditionally so attribute selectors re-evaluate.
+
+        sev: "low" (mint) | "medium" (amber) | "high" (coral) | "" (neutral)
+        """
+        self._poll_val.setProperty("sev", sev)
+        self._poll_status.setProperty("sev", sev)
+        self._poll_val.style().unpolish(self._poll_val)
+        self._poll_val.style().polish(self._poll_val)
+        self._poll_status.style().unpolish(self._poll_status)
+        self._poll_status.style().polish(self._poll_status)
+
     def _update_poll_display(self, hz_str: str) -> None:
         try:
             hz = int(float(hz_str.replace(" Hz", "").replace("Hz", "")))
             self._poll_val.setText(str(hz))
-            quality = "Excellent" if hz >= 1000 else "Good" if hz >= 500 else "Low"
-            self._poll_status.setText(quality)
+            if hz >= 1000:
+                self._poll_status.setText("Excellent")
+                _sev = "low"
+            elif hz >= 500:
+                self._poll_status.setText("Good")
+                _sev = "medium"
+            else:
+                self._poll_status.setText("Low")
+                _sev = "high"
+            self._set_poll_sev(_sev)
         except (ValueError, AttributeError):
             self._poll_val.setText("—")
             self._poll_status.setText("Not measured")
+            self._set_poll_sev("")
 
     # ── Polling lifecycle ──────────────────────────────────────────────
 
