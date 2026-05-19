@@ -143,7 +143,7 @@ class MainWindow(QMainWindow):
 
         # Primary nav
         self._run_button = self._nav_btn("▶  Start Optimization", accent=True)
-        self._stop_button = self._nav_btn("■  Stop", state="danger")
+        self._stop_button = self._nav_btn("■  Stop (Esc)", state="danger")
         self._stop_button.setVisible(False)
         self._nav_dashboard = self._nav_btn("◆  Dashboard")
         col.addWidget(self._nav_dashboard)
