@@ -63,6 +63,8 @@ _CINEBENCH_SEARCH_PATHS = [
 _CINEBENCH_TIMEOUT = _cfg.benchmark.cinebench_timeout  # max seconds for a single run
 
 
+from ..utils.formatting import notify_benchmark_started
+
 def _keyboard_abort_watcher(abort_event: threading.Event) -> None:
     """
     Background thread -- sets abort_event when Q, q, or Enter is pressed.
@@ -217,9 +219,10 @@ class BenchmarkRunner:
             }
 
         mode = "All Tests" if full_suite else "CPU Single-Core"
-        if not prompt_approval(f"Run Cinebench ({mode})?"):
+        if not prompt_approval(f"Run Cinebench ({mode})? This will take 10+ minutes, do NOT use the PC while it's running."):
             return {"status": "skipped", "benchmark": "cinebench", "message": "User declined benchmark."}
 
+        notify_benchmark_started()
         return self._run_cinebench(full_suite, lhm_available)
 
     # -- Cinebench ------------------------------------------------------------

@@ -1,0 +1,258 @@
+{
+  "CollectionTime": "2026-05-19T10:59:32.462211",
+  "WMI": {
+    "OS": [
+      {
+        "Name": "Microsoft Windows 11 Pro",
+        "Version": "10.0.26200"
+      }
+    ],
+    "CPU": [
+      {
+        "Name": "Intel(R) Core(TM) i5-10310U CPU @ 1.70GHz",
+        "Cores": 4,
+        "Speed_MHz": 2208
+      }
+    ],
+    "RAM": [
+      {
+        "Capacity_GB": 8.6,
+        "Speed_MHz": 2667,
+        "Configured_MHz": 2667
+      },
+      {
+        "Capacity_GB": 8.6,
+        "Speed_MHz": 2667,
+        "Configured_MHz": 2667
+      }
+    ],
+    "Motherboard": [
+      {
+        "Make": "Dell Inc.",
+        "Model": "04J6CM"
+      }
+    ],
+    "BIOS": [
+      {
+        "Version": "1.26.0"
+      }
+    ],
+    "VideoController": [
+      {
+        "Name": "Intel(R) UHD Graphics",
+        "VRAM_MB": 1024.0,
+        "RefreshRate": 60
+      }
+    ],
+    "DiskDrive": [
+      {
+        "Model": "Micron 2300 NVMe 256GB",
+        "Size_GB": 256.1
+      }
+    ],
+    "ReBAR": {
+      "enabled": true,
+      "max_range_mb": 737.0
+    }
+  },
+  "NVIDIA": {
+    "error": "nvidia-smi executable not found in PATH."
+  },
+  "AMD": "amdsmi Python module not installed and CLI not found",
+  "LibreHardwareMonitor": {
+    "Text": "Sensor",
+    "Value": "",
+    "RawValue": 0,
+    "Children": [
+      {
+        "Text": "Dell 04J6CM",
+        "Value": "",
+        "RawValue": 0,
+        "Children": []
+      },
+      {
+        "Text": "Intel Core i5-10310U",
+        "Value": "",
+        "RawValue": 0,
+        "Children": [
+          {
+            "Text": "Temperatures",
+            "Value": "",
+            "RawValue": 0,
+            "Children": [
+              {
+                "Text": "Core Max",
+                "Value": "82.0 \u00b0C",
+                "RawValue": 82,
+                "Children": []
+              },
+              {
+                "Text": "Core Average",
+                "Value": "75.5 \u00b0C",
+                "RawValue": 75.5,
+                "Children": []
+              },
+              {
+                "Text": "CPU Core #1",
+                "Value": "73.0 \u00b0C",
+                "RawValue": 73,
+                "Children": []
+              },
+              {
+                "Text": "CPU Core #2",
+                "Value": "82.0 \u00b0C",
+                "RawValue": 82,
+                "Children": []
+              },
+              {
+                "Text": "CPU Core #3",
+                "Value": "74.0 \u00b0C",
+                "RawValue": 74,
+                "Children": []
+              },
+              {
+                "Text": "CPU Core #4",
+                "Value": "73.0 \u00b0C",
+                "RawValue": 73,
+                "Children": []
+              },
+              {
+                "Text": "CPU Package",
+                "Value": "82.0 \u00b0C",
+                "RawValue": 82,
+                "Children": []
+              },
+              {
+                "Text": "CPU Core #1 Distance to TjMax",
+                "Value": "27.0 \u00b0C",
+                "RawValue": 27,
+                "Children": []
+              },
+              {
+                "Text": "CPU Core #2 Distance to TjMax",
+                "Value": "18.0 \u00b0C",
+                "RawValue": 18,
+                "Children": []
+              },
+              {
+                "Text": "CPU Core #3 Distance to TjMax",
+                "Value": "26.0 \u00b0C",
+                "RawValue": 26,
+                "Children": []
+              },
+              {
+                "Text": "CPU Core #4 Distance to TjMax",
+                "Value": "27.0 \u00b0C",
+                "RawValue": 27,
+                "Children": []
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "Text": "Intel(R) UHD Graphics",
+        "Value": "",
+        "RawValue": 0,
+        "Children": []
+      }
+    ]
+  },
+  "DisplayCapabilities": [
+    {
+      "max_refresh_hz": 60,
+      "at_resolution": "1920x1080",
+      "current_refresh_hz": 60,
+      "all_refresh_rates": [
+        60
+      ],
+      "device": "\\\\.\\DISPLAY1",
+      "source": "winapi"
+    }
+  ],
+  "PowerPlan": {
+    "guid": "381b4222-f694-41f0-9685-ff5bb260df2e",
+    "name": "Balanced"
+  },
+  "GameMode": {
+    "enabled": true
+  },
+  "TempFolders": {
+    "total_bytes": 50306369,
+    "details": {
+      "User Temp": {
+        "path": "C:\\Users\\Owner\\AppData\\Local\\Temp",
+        "size_bytes": 50306369,
+        "file_count": 275
+      },
+      "Windows Temp": {
+        "path": "C:\\WINDOWS\\Temp",
+        "size_bytes": 0,
+        "file_count": 0
+      },
+      "Update Cache": {
+        "path": "C:\\WINDOWS\\SoftwareDistribution\\Download",
+        "size_bytes": 0,
+        "file_count": 0
+      },
+      "NVIDIA Shader Cache": {
+        "path": "C:\\ProgramData\\NVIDIA Corporation\\NV_Cache",
+        "size_bytes": 0,
+        "file_count": 0
+      },
+      "NVIDIA GL Cache": {
+        "path": "C:\\Users\\Owner\\AppData\\Local\\NVIDIA\\GLCache",
+        "size_bytes": 0,
+        "file_count": 0
+      },
+      "NVIDIA DX Cache": {
+        "path": "C:\\Users\\Owner\\AppData\\Local\\NVIDIA\\DXCache",
+        "size_bytes": 0,
+        "file_count": 0
+      },
+      "NVIDIA Compute Cache": {
+        "path": "C:\\Users\\Owner\\AppData\\Roaming\\NVIDIA\\ComputeCache",
+        "size_bytes": 0,
+        "file_count": 0
+      },
+      "D3D Cache": {
+        "path": "C:\\Users\\Owner\\AppData\\Local\\D3DSCache",
+        "size_bytes": 0,
+        "file_count": 0
+      },
+      "NVIDIA Per Driver Version DX Cache": {
+        "path": "C:\\Users\\Owner\\AppData\\LocalLow\\NVIDIA\\PerDriverVersion\\DXCache",
+        "size_bytes": 0,
+        "file_count": 0
+      },
+      "AMD DX Cache": {
+        "path": "C:\\Users\\Owner\\AppData\\Local\\AMD\\DxCache",
+        "size_bytes": 0,
+        "file_count": 0
+      },
+      "AMD DX9 Cache": {
+        "path": "C:\\Users\\Owner\\AppData\\Local\\AMD\\DX9Cache",
+        "size_bytes": 0,
+        "file_count": 0
+      },
+      "AMD Dxc Cache": {
+        "path": "C:\\Users\\Owner\\AppData\\Local\\AMD\\DxcCache",
+        "size_bytes": 0,
+        "file_count": 0
+      },
+      "AMD Ogl Cache": {
+        "path": "C:\\Users\\Owner\\AppData\\Local\\OglCache",
+        "size_bytes": 0,
+        "file_count": 0
+      },
+      "Intel D3D Cache": {
+        "path": "C:\\Users\\Owner\\AppData\\Local\\Microsoft\\D3DSCache",
+        "size_bytes": 0,
+        "file_count": 0
+      }
+    }
+  },
+  "NVIDIAProfile": {
+    "error": "[WinError 740] The requested operation requires elevation"
+  }
+}

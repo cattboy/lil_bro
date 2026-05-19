@@ -59,6 +59,8 @@ class GuiBridge(QObject):
         formatting.set_confirm_handler(self._handle_confirm)
         formatting.set_pause_handler(self._handle_pause)
         formatting.set_batch_selection_handler(self._handle_batch_selection)
+        formatting.set_benchmark_score_sink(self._emit_benchmark_score)
+        formatting.set_benchmark_started_sink(self._emit_benchmark_started)
         progress_bar.set_progress_sink(self._emit_progress)
         self._installed = True
 
@@ -68,6 +70,8 @@ class GuiBridge(QObject):
         formatting.set_confirm_handler(None)
         formatting.set_pause_handler(None)
         formatting.set_batch_selection_handler(None)
+        formatting.set_benchmark_score_sink(None)
+        formatting.set_benchmark_started_sink(None)
         progress_bar.set_progress_sink(None)
         self._installed = False
 
@@ -82,6 +86,12 @@ class GuiBridge(QObject):
 
     def _emit_progress(self, percent: int, label: str) -> None:
         self.signals.progress_changed.emit(int(percent), str(label))
+
+    def _emit_benchmark_score(self, phase: str, scores: dict, cpu_peak: "float | None") -> None:
+        self.signals.benchmark_score_ready.emit(phase, scores, cpu_peak)
+
+    def _emit_benchmark_started(self) -> None:
+        self.signals.benchmark_started.emit()
 
     # ── Bool-answer handlers (worker thread blocks until main answers) ──
 

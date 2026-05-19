@@ -80,6 +80,9 @@ class ConfigPhase:
             if ctx.llm is not None:
                 print_dim("Generating AI-powered recommendations...")
             else:
+                print_dim("==================================\n")
+                print_dim("")
+                print_dim("")
                 print_dim("Generating recommendations...")
             proposals = propose_actions(hardware, findings, ctx.llm)
 

@@ -18,6 +18,7 @@ def test_install_swaps_handlers_and_sinks(qtbot):
         assert formatting._DEFAULT_SINK == bridge._emit_output
         assert formatting._APPROVAL_HANDLER == bridge._handle_approval
         assert formatting._CONFIRM_HANDLER == bridge._handle_confirm
+        assert formatting._BENCHMARK_SCORE_SINK == bridge._emit_benchmark_score
         assert progress_bar._PROGRESS_SINK == bridge._emit_progress
     finally:
         bridge.restore()
@@ -32,6 +33,7 @@ def test_restore_clears_handlers_and_sinks(qtbot):
     assert formatting._DEFAULT_SINK is None
     assert formatting._APPROVAL_HANDLER is None
     assert formatting._CONFIRM_HANDLER is None
+    assert formatting._BENCHMARK_SCORE_SINK is None
     assert progress_bar._PROGRESS_SINK is None
 
 

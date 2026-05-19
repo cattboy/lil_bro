@@ -170,7 +170,7 @@ class MainWindow(QMainWindow):
     def _build_content(self) -> QStackedWidget:
         from src.gui.widgets.dashboard import Dashboard
         from src.gui.widgets.output_panel import OutputPanel
-        from src.gui.widgets.phase_row import PhaseRow
+        from src.gui.widgets.benchmark_row import BenchmarkRow
 
         stack = QStackedWidget()
         stack.setAccessibleName("Content area")
@@ -203,9 +203,9 @@ class MainWindow(QMainWindow):
 
         output_layout.addWidget(output_header)
 
-        # Phase row
-        self._phase_row = PhaseRow()
-        output_layout.addWidget(self._phase_row)
+        # Benchmark score row
+        self._benchmark_row = BenchmarkRow()
+        output_layout.addWidget(self._benchmark_row)
 
         # Progress bar (hidden until pipeline emits progress_changed)
         self._progress_label = QLabel("")
@@ -244,12 +244,13 @@ class MainWindow(QMainWindow):
 
     # ── Phase row proxy (wired by app.py via phase_changed signal) ─────
 
-    def update_phase(self, name: str, status: str) -> None:
-        self._phase_row.update_phase(name, status)
-        if status == "active":
-            self._phase_pill.setText(f"● {name}")
-        elif status == "done":
-            self._phase_pill.setText(f"✓ {name}")
+    def update_benchmark_score(self, phase: str, scores: dict, cpu_peak: float | None) -> None:
+        if phase == "baseline":
+            self._benchmark_row.set_baseline(scores, cpu_peak)
+            self._phase_pill.setText("● Benchmark")
+        elif phase == "final":
+            self._benchmark_row.set_final(scores)
+            self._phase_pill.setText("✓ Complete")
 
     # ── Nav "working" indicator for Run button ─────────────────────────
 

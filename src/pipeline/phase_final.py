@@ -44,4 +44,7 @@ class FinalBenchPhase:
             print_success("Final Benchmark Complete!")
             print_info(f"After:  {final.get('scores', {})}")
             print_info(f"Before: {ctx.baseline_result.get('scores', {})}")
+            from src.utils.formatting import notify_benchmark_score
+            notify_benchmark_score("final", final.get("scores", {}), None)
+
         return PhaseResult("completed", "Final benchmark complete")

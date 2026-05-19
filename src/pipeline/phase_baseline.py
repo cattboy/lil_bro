@@ -53,14 +53,15 @@ class BaselineBenchPhase:
             print_info(f"Scores: {ctx.baseline_result.get('scores', {})}")
 
         ctx.peak_temps = ctx.thermal.get_peak_temps()
+        cpu_peak = ctx.thermal.get_cpu_peak()
+        gpu_peak = ctx.thermal.get_gpu_peak()
+
         if ctx.peak_temps:
-            cpu_peak = ctx.thermal.get_cpu_peak()
-            gpu_peak = ctx.thermal.get_gpu_peak()
             parts = []
             if cpu_peak is not None:
-                parts.append(f"CPU: {cpu_peak:.1f}\u00b0C")
+                parts.append(f"CPU: {cpu_peak:.1f}°C")
             if gpu_peak is not None:
-                parts.append(f"GPU: {gpu_peak:.1f}\u00b0C")
+                parts.append(f"GPU: {gpu_peak:.1f}°C")
             if parts:
                 print_info(
                     f"Peak temps during benchmark: {', '.join(parts)} "
@@ -68,4 +69,13 @@ class BaselineBenchPhase:
                 )
         else:
             print_warning("Thermal monitor ran but captured no temperature data.")
+
+        if ctx.baseline_result.get("status") == "success":
+            from src.utils.formatting import notify_benchmark_score
+            notify_benchmark_score(
+                "baseline",
+                ctx.baseline_result.get("scores", {}),
+                cpu_peak,
+            )
+
         return PhaseResult("completed", "Baseline benchmark complete")

@@ -64,6 +64,34 @@ def get_batch_selection_handler() -> Callable[[list, int], list[int]] | None:
     return _BATCH_SELECTION_HANDLER
 
 
+_BENCHMARK_SCORE_SINK: Callable[[str, dict, "float | None"], None] | None = None
+
+
+def set_benchmark_score_sink(sink: "Callable[[str, dict, float | None], None] | None") -> None:
+    global _BENCHMARK_SCORE_SINK
+    _BENCHMARK_SCORE_SINK = sink
+
+
+def notify_benchmark_score(phase: str, scores: dict, cpu_peak: "float | None" = None) -> None:
+    """Deliver benchmark score data to the GUI sink (no-op in terminal mode)."""
+    if _BENCHMARK_SCORE_SINK is not None:
+        _BENCHMARK_SCORE_SINK(phase, scores, cpu_peak)
+
+
+_BENCHMARK_STARTED_SINK: "Callable[[], None] | None" = None
+
+
+def set_benchmark_started_sink(sink: "Callable[[], None] | None") -> None:
+    global _BENCHMARK_STARTED_SINK
+    _BENCHMARK_STARTED_SINK = sink
+
+
+def notify_benchmark_started() -> None:
+    """Signal that Cinebench is now actively running (no-op in terminal mode)."""
+    if _BENCHMARK_STARTED_SINK is not None:
+        _BENCHMARK_STARTED_SINK()
+
+
 def _emit(text: str, sink: Callable[[str], None] | None = None, end: str = "\n") -> None:
     """Route a formatted string. Per-call ``sink`` wins, else ``_DEFAULT_SINK``, else print()."""
     chosen = sink if sink is not None else _DEFAULT_SINK
@@ -142,7 +170,11 @@ def print_audit_summary(ok: int, warnings: int, unknowns: int,
                         output_sink: Callable[[str], None] | None = None):
     """Prints a compound-colored audit result line."""
     _emit(
-        f"{Style.DIM}Audit complete:{Style.RESET_ALL}  "
+        f"{Style.DIM}================================\n{Style.RESET_ALL}"
+        f"{Fore.GREEN}========= R E A D === H E R E =========\n{Style.RESET_ALL}"
+        f"{Style.DIM}================================\n{Style.RESET_ALL}"
+        f"{Style.DIM}\n\n{Style.RESET_ALL}"
+        f"{Style.DIM}Audit complete:{Style.RESET_ALL}"
         f"{Fore.GREEN}{ok} OK{Style.RESET_ALL}"
         f"{Style.DIM}  —  {Style.RESET_ALL}"
         f"{Fore.YELLOW}{warnings} need attention{Style.RESET_ALL}"

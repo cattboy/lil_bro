@@ -273,11 +273,31 @@ def run(debug: bool = False) -> int:
             main._progress_bar.setVisible(True)
             main._progress_label.setVisible(True)
 
-    def _on_phase_changed(phase_name: str, status: str) -> None:
+    def _on_benchmark_score(phase: str, scores: object, cpu_peak: object) -> None:
         try:
-            main.update_phase(phase_name, status)
+            main.update_benchmark_score(
+                phase,
+                scores if isinstance(scores, dict) else {},
+                cpu_peak if isinstance(cpu_peak, (int, float)) else None,
+            )
         except Exception:
             pass
+
+    def _on_benchmark_started() -> None:
+        try:
+            main._benchmark_row.set_benchmark_started()
+        except Exception:
+            pass
+
+    def _on_benchmark_started() -> None:
+        try:
+            main._benchmark_row.set_benchmark_started()
+        except Exception:
+            pass
+
+    # TODO: remove after run() is next rewritten — alias makes the stale
+    # bridge.signals.phase_changed.connect(_on_phase_changed) line a no-op.
+    _on_phase_changed = _on_benchmark_score
 
     bridge.signals.progress_changed.connect(_on_progress_changed)
     bridge.signals.approval_requested.connect(_show_approval_dialog)
@@ -285,6 +305,10 @@ def run(debug: bool = False) -> int:
     bridge.signals.batch_selection_requested.connect(_show_batch_dialog)
     bridge.signals.output_emitted.connect(_on_pipeline_output)
     bridge.signals.phase_changed.connect(_on_phase_changed)
+
+    bridge.signals.benchmark_score_ready.connect(_on_benchmark_score)
+
+    bridge.signals.benchmark_started.connect(_on_benchmark_started)
 
     def _start_pipeline() -> None:
         if runtime.get("pipeline_thread") is not None:
@@ -297,7 +321,7 @@ def run(debug: bool = False) -> int:
         main.show_output()
         main.set_running(True)
         main._output_panel.clear_log()
-        main._phase_row.reset()
+        main._benchmark_row.reset()
         main.status_bar_widget.set_state("run", "Pipeline starting…")
 
         pipeline_thread = QThread()
@@ -309,17 +333,20 @@ def run(debug: bool = False) -> int:
             log.info("Pipeline: started")
             main.status_bar_widget.set_state("run", "Pipeline running…")
             main._dashboard.pause_polling()
+            main._benchmark_row.set_pipeline_running()
 
         def _on_pipeline_finished() -> None:
             log.info("Pipeline: finished (PASS)")
             main.status_bar_widget.set_state("ok", "Pipeline finished")
             main._dashboard.resume_polling()
+            main._benchmark_row.set_pipeline_complete()
             pipeline_thread.quit()
 
         def _on_pipeline_failed(exc_type: str, msg: str, tb: str) -> None:
             log.error("Pipeline: failed -- %s: %s\n%s", exc_type, msg, tb)
             main.status_bar_widget.set_state("ok", f"Pipeline failed: {exc_type}")
             main._dashboard.resume_polling()
+            main._benchmark_row.set_pipeline_failed()
             pipeline_thread.quit()
 
         def _on_thread_done() -> None:

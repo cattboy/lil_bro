@@ -19,9 +19,13 @@ class PipelineSignals(QObject):
     confirm_requested = Signal(str, str)
     batch_selection_requested = Signal(list)
     mouse_ready_requested = Signal()
-    phase_changed = Signal(int, str)
+    benchmark_started = Signal()
+    benchmark_score_ready = Signal(str, object, object)
     progress_changed = Signal(int, str)
     pipeline_started = Signal()
     pipeline_finished = Signal()
     pipeline_failed = Signal(str, str, str)
     init_step = Signal(str, str)
+    # TODO: remove after run() is next rewritten — gravestone keeps the stale
+    # bridge.signals.phase_changed.connect(_on_phase_changed) line from crashing.
+    phase_changed = Signal(int, str)
