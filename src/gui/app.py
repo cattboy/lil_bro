@@ -261,10 +261,10 @@ def run(debug: bool = False) -> int:
             line = ansi_re.sub("", raw).strip()
             if line:
                 main.status_bar_widget.set_state("run", line[:80])
-                try:
-                    main._output_panel.append_line(raw)
-                except Exception:
-                    pass
+            try:
+                main._output_panel.append_line(raw)
+            except Exception:
+                pass
 
     def _on_progress_changed(percent: int, label: str) -> None:
         main._progress_bar.setValue(percent)

@@ -78,10 +78,13 @@ class ConfigPhase:
             print()
             hardware = extract_hardware_summary(ctx.specs)
             if ctx.llm is not None:
+                print_dim("")
+                print_dim("==================================")
+                print_dim("")
                 print_dim("Generating AI-powered recommendations...")
             else:
-                print_dim("==================================\n")
                 print_dim("")
+                print_dim("==================================")
                 print_dim("")
                 print_dim("Generating recommendations...")
             proposals = propose_actions(hardware, findings, ctx.llm)

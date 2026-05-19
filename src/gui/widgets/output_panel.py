@@ -144,7 +144,8 @@ class OutputPanel(QWidget):
 
     def append_line(self, text: str) -> None:
         """Append a text line, honoring \\r as a last-line replace."""
-        if not text:
+        if not text.strip():
+            self._append_html("")
             return
         if "\r" in text:
             head, _, tail = text.rpartition("\r")

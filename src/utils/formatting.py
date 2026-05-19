@@ -169,11 +169,15 @@ def print_section_divider(label: str = None, output_sink: Callable[[str], None] 
 def print_audit_summary(ok: int, warnings: int, unknowns: int,
                         output_sink: Callable[[str], None] | None = None):
     """Prints a compound-colored audit result line."""
+    _emit("", sink=output_sink)
     _emit(
         f"{Style.DIM}================================\n{Style.RESET_ALL}"
         f"{Fore.GREEN}========= R E A D === H E R E =========\n{Style.RESET_ALL}"
-        f"{Style.DIM}================================\n{Style.RESET_ALL}"
-        f"{Style.DIM}\n\n{Style.RESET_ALL}"
+        f"{Style.DIM}================================{Style.RESET_ALL}",
+        sink=output_sink,
+    )
+    _emit("", sink=output_sink)
+    _emit(
         f"{Style.DIM}Audit complete:{Style.RESET_ALL}"
         f"{Fore.GREEN}{ok} OK{Style.RESET_ALL}"
         f"{Style.DIM}  —  {Style.RESET_ALL}"
