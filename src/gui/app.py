@@ -28,6 +28,27 @@ from src.gui.bridge import GuiBridge
 from src.gui.signals import PipelineSignals
 
 
+from PySide6.QtCore import QObject as _QObject, Slot as _Slot
+
+
+class _StartupCompleter(_QObject):
+    """Hosts the orchestrator.finished slot on the main thread.
+
+    PySide6 cannot reliably route a QueuedConnection to a bare callable -- the
+    queued event needs a QObject receiver to anchor it to a thread's event
+    loop. Wrapping the slot in a QObject parented to ``main`` guarantees
+    main-thread delivery.
+    """
+
+    def __init__(self, on_done, parent=None) -> None:
+        super().__init__(parent)
+        self._on_done = on_done
+
+    @_Slot(object)
+    def on_finished(self, startup_lhm) -> None:
+        self._on_done(startup_lhm)
+
+
 def run(debug: bool = False) -> int:
     """Boot the GUI. Returns the QApplication exit code."""
     import logging
@@ -147,6 +168,8 @@ def run(debug: bool = False) -> int:
             "yes" if startup_lhm else "no",
         )
         runtime["startup_done"] = True
+        # Idempotent: _on_lhm_ready set this earlier in the success path; here
+        # it covers the LHM-failed case where _on_lhm_ready was never called.
         runtime["lhm"] = startup_lhm
 
         # Load pre-collected specs (written by StartupOrchestrator Step 3)
@@ -160,13 +183,6 @@ def run(debug: bool = False) -> int:
                 pass
         runtime["preloaded_specs"] = preloaded_specs
 
-        # Monitor card wiring is deliberately NOT done here. In the bundled
-        # PyInstaller exe, work scheduled from inside splash.exec()'s nested
-        # event loop and expected to fire after that loop ends (either via
-        # QTimer.singleShot or any cross-loop event hop) is silently
-        # dropped. The wiring is performed directly after main.show() in
-        # run() — see the block right before `return app.exec()`.
-
         try:
             if runtime.get("pipeline_thread") is None and runtime.get("revert_thread") is None:
                 _set_flow_controls(True)
@@ -174,17 +190,38 @@ def run(debug: bool = False) -> int:
             pass
         try:
             main.status_bar_widget.set_state("ok", "Idle")
-            # Start dashboard polling now that LHM is ready
-            log.info(
-                "GUI Startup: invoking dashboard.start_polling(lhm=%s)",
-                "yes" if startup_lhm else "no",
-            )
-            main._dashboard.start_polling(lhm=startup_lhm)
-            chart = main._dashboard.thermal_chart
+
+            # Defensive fallback: polling normally starts from _on_lhm_ready
+            # several seconds earlier. If that QueuedConnection didn't deliver
+            # for any reason, _on_finished is the safety net. start_polling()
+            # guards against double-call internally (returns if _worker is set),
+            # so this is harmless when the normal path already fired.
+            if startup_lhm is not None and main._dashboard._worker is None:
+                log.warning(
+                    "GUI Startup: lhm_ready slot never delivered -- "
+                    "falling back to start_polling from _on_finished"
+                )
+                main._dashboard.start_polling(lhm=startup_lhm)
+
             if startup_lhm is None:
-                chart.set_offline("Thermal monitor unavailable")
+                main._dashboard.thermal_chart.set_offline("Thermal monitor unavailable")
         except Exception as exc:
             log.error("_on_finished EXC: %s: %r", type(exc).__name__, exc, exc_info=True)
+
+        # Late-fire monitor wiring: if main.show() already ran before this slot
+        # fired (slow-path on iGPU machines), wire here. The post-splash block
+        # in run() wires on the fast-path. _monitor_wired prevents double-wire.
+        if main.isVisible() and not runtime.get("_monitor_wired", False):
+            try:
+                _specs = runtime.get("preloaded_specs", {}) or {}
+                main._dashboard.set_monitor_data(_specs.get("DisplayCapabilities", []))
+                main._dashboard.monitor_fix_requested.connect(_on_monitor_fix_requested)
+                main._dashboard.monitor_refresh_requested.connect(_refresh_monitor_card)
+                runtime["_monitor_wired"] = True
+                log.info("GUI Startup: monitor card wired (late-fire path)")
+            except Exception as exc:
+                log.warning("Could not wire monitor card (late path): %s", exc, exc_info=True)
+
         log.info("GUI Startup: _on_finished exit")
 
     def _refresh_monitor_card() -> None:
@@ -469,27 +506,45 @@ def run(debug: bool = False) -> int:
 
     app.aboutToQuit.connect(_on_about_to_quit)
     orchestrator.init_step.connect(_on_step, Qt.ConnectionType.QueuedConnection)
-    orchestrator.finished.connect(_on_finished, Qt.ConnectionType.QueuedConnection)
+
+    # Start dashboard polling the moment LHM is ready (Step 1 of the
+    # orchestrator), instead of after the whole startup completes. This
+    # gives the worker ~5-10s of "free" polling time while the splash is
+    # still showing later steps, so cards are populated by splash close.
+    # See plan `when-starting-lil-bro-exe-sometimes-smooth-puzzle.md`.
+    def _on_lhm_ready(lhm) -> None:
+        log.info("GUI Startup: lhm_ready received, starting dashboard polling early")
+        runtime["lhm"] = lhm
+        try:
+            main._dashboard.start_polling(lhm=lhm)
+        except Exception as exc:
+            log.error("_on_lhm_ready EXC: %s: %r", type(exc).__name__, exc, exc_info=True)
+
+    completer_lhm = _StartupCompleter(_on_lhm_ready, parent=main)
+    runtime["_lhm_completer"] = completer_lhm
+    orchestrator.lhm_ready.connect(completer_lhm.on_finished, Qt.ConnectionType.QueuedConnection)
+
+    # Route orchestrator.finished through a QObject helper parented to main so
+    # the QueuedConnection has a guaranteed main-thread receiver. Same pattern
+    # as completer_lhm above.
+    completer_done = _StartupCompleter(_on_finished, parent=main)
+    runtime["_startup_completer"] = completer_done
+    orchestrator.finished.connect(completer_done.on_finished, Qt.ConnectionType.QueuedConnection)
     thread.start()
 
     # Splash runs first; main window appears only after startup completes
     splash.exec()
     main.show()
 
-    # Wire monitor card AFTER main.show() returns. In the bundled exe,
-    # QTimer.singleShot scheduled during splash.exec()'s nested event loop
-    # is dropped when the loop ends — the timer event does not survive the
-    # splash.exec() -> app.exec() handoff (worker-thread QTimers are fine
-    # because they never bridge event loops). Pump the queue once so the
-    # show event propagates before set_monitor_data inspects layout state,
-    # and guard on startup_done in case the user dismissed splash before
-    # the orchestrator finished. _refresh_monitor_card and
-    # _on_monitor_fix_requested are nested closures of run() defined
-    # earlier and remain in scope here.
+    # Pump the queue once so the show event propagates and any already-queued
+    # completer.on_finished event is delivered before we check startup_done.
     app.processEvents()
 
     if not runtime.get("startup_done"):
-        log.info("GUI Startup: skipping monitor wiring (startup did not complete)")
+        # Slow-path: _on_finished has not fired yet. It will wire the monitor
+        # card itself when it does (see the late-fire block at the end of
+        # _on_finished). Cards stay in their loading state until then.
+        log.info("GUI Startup: monitor wiring deferred (orchestrator still finishing)")
     else:
         log.info("GUI Startup: wiring monitor card (after main.show())")
         _specs = runtime.get("preloaded_specs", {}) or {}
@@ -497,6 +552,7 @@ def run(debug: bool = False) -> int:
             main._dashboard.set_monitor_data(_specs.get("DisplayCapabilities", []))
             main._dashboard.monitor_fix_requested.connect(_on_monitor_fix_requested)
             main._dashboard.monitor_refresh_requested.connect(_refresh_monitor_card)
+            runtime["_monitor_wired"] = True
         except Exception as exc:
             log.warning("Could not wire monitor card: %s", exc, exc_info=True)
 

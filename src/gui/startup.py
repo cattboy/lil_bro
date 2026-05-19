@@ -20,6 +20,7 @@ class StartupOrchestrator(QObject):
     """Runs LHM init + font registration + (future) warm-up steps."""
 
     init_step = Signal(str, str)  # step_name, "running" | "ok" | "fail"
+    lhm_ready = Signal(object)    # emitted from worker thread after Step 1 succeeds
     finished = Signal(object)     # startup_lhm tuple or None on partial failure
 
     def run(self) -> None:
@@ -41,6 +42,10 @@ class StartupOrchestrator(QObject):
                 self.init_step.emit("LHM Monitor", "done" if lhm_available else "fail")
                 if lhm_available:
                     startup_lhm = lhm
+                    # Trigger dashboard polling now so by splash-close the cards
+                    # are already populated. See plan
+                    # `when-starting-lil-bro-exe-sometimes-smooth-puzzle.md`.
+                    self.lhm_ready.emit(lhm)
             except Exception:
                 self.init_step.emit("LHM Monitor", "fail")
 
