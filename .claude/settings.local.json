@@ -57,7 +57,8 @@
       "Bash(.venv/Scripts/python.exe -m pytest tests/ -k \"dashboard or gui or monitor or worker\" -q)",
       "Bash(.venv/Scripts/python.exe -m pytest tests/ -k \"monitor or display or dashboard or spec_dumper\" -q)",
       "Bash(awk NR>=370 && NR<=420 *)",
-      "mcp__claude_ai_Context7__resolve-library-id"
+      "mcp__claude_ai_Context7__resolve-library-id",
+      "Bash(gh pr *)"
     ]
   },
   "enabledMcpjsonServers": [
