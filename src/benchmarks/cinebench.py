@@ -33,6 +33,8 @@ log = get_debug_logger()
 
 # -- Cinebench discovery ------------------------------------------------------
 
+from ..pipeline import _state
+
 _REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
 
 _CINEBENCH_SEARCH_PATHS = [
@@ -61,6 +63,10 @@ _CINEBENCH_SEARCH_PATHS = [
 ]
 
 _CINEBENCH_TIMEOUT = _cfg.benchmark.cinebench_timeout  # max seconds for a single run
+
+# Win32 ShowWindow nCmdShow codes used by _minimize_cinebench_window.
+SW_HIDE = 0
+SW_MINIMIZE = 6
 
 
 from ..utils.formatting import notify_benchmark_started
@@ -92,7 +98,12 @@ def _benchmark_progress_printer(abort_event: threading.Event, start_time: float)
         print_info(f"Still running... [{mins}m {secs:02d}s elapsed]  Press Q or Enter to abort.")
 
 
-def _minimize_cinebench_window(cb_exe: str, timeout: float, abort_event: threading.Event) -> None:
+def _minimize_cinebench_window(
+    cb_exe: str,
+    timeout: float,
+    abort_event: threading.Event,
+    cmd_parent_pid: int,
+) -> None:
     """Minimize the Cinebench GUI once after launch, then leave the user alone.
 
     Identifies windows by their owning process executable name (e.g.
@@ -101,10 +112,17 @@ def _minimize_cinebench_window(cb_exe: str, timeout: float, abort_event: threadi
     so title matching misses the splash and only catches the main window
     much later. Process matching catches both within seconds of launch.
 
+    Also hides the helper ``cmd.exe`` process spawned by ``_run_cinebench``
+    (identified by ``cmd_parent_pid``) as a belt-and-suspenders fallback in
+    case ``STARTUPINFO``/``SW_HIDE`` ever fails to suppress its console
+    window at spawn time. cmd windows are SW_HIDE'd (not minimized) so they
+    disappear entirely rather than landing in the taskbar.
+
     Polls every second for up to ``timeout`` to tolerate slow systems. On
-    the first match, minimizes the windows and returns -- never touches
-    focus again. The OS pops whatever was behind Cinebench (typically
-    lil_bro) to the foreground naturally when its windows minimize.
+    the first match, hides/minimizes the windows and returns -- never
+    touches focus again. The OS pops whatever was behind Cinebench
+    (typically lil_bro) to the foreground naturally when its windows
+    minimize.
     """
     import ctypes
 
@@ -119,14 +137,20 @@ def _minimize_cinebench_window(cb_exe: str, timeout: float, abort_event: threadi
     PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
     cb_exe_lower = cb_exe.lower()
     own_pid = kernel32.GetCurrentProcessId()
-    found = []
+    # Each entry: (hwnd, show_cmd). show_cmd is SW_MINIMIZE for Cinebench
+    # windows and SW_HIDE for our spawned cmd window.
+    found: list[tuple[int, int]] = []
 
-    def _belongs_to_cinebench(hwnd):
+    def _window_pid(hwnd) -> int:
         pid = ctypes.c_ulong()
         user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-        if pid.value == 0 or pid.value == own_pid:
+        return pid.value
+
+    def _belongs_to_cinebench(hwnd):
+        pid = _window_pid(hwnd)
+        if pid == 0 or pid == own_pid:
             return False
-        h = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+        h = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
         if not h:
             return False
         try:
@@ -138,13 +162,21 @@ def _minimize_cinebench_window(cb_exe: str, timeout: float, abort_event: threadi
         finally:
             kernel32.CloseHandle(h)
 
+    def _belongs_to_our_cmd(hwnd) -> bool:
+        # The outer cmd.exe spawned by subprocess.Popen has pid == cmd_parent_pid.
+        # Match windows owned by exactly that pid, regardless of image name.
+        pid = _window_pid(hwnd)
+        return pid != 0 and pid == cmd_parent_pid
+
     WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_size_t, ctypes.c_size_t)
 
     def _callback(hwnd, _):
         if not user32.IsWindowVisible(hwnd):
             return True
-        if _belongs_to_cinebench(hwnd):
-            found.append(hwnd)
+        if _belongs_to_our_cmd(hwnd):
+            found.append((hwnd, SW_HIDE))
+        elif _belongs_to_cinebench(hwnd):
+            found.append((hwnd, SW_MINIMIZE))
         return True
 
     callback = WNDENUMPROC(_callback)
@@ -153,8 +185,8 @@ def _minimize_cinebench_window(cb_exe: str, timeout: float, abort_event: threadi
         found.clear()
         user32.EnumWindows(callback, 0)
         if found:
-            for hwnd in found:
-                user32.ShowWindow(hwnd, 6)  # SW_MINIMIZE
+            for hwnd, show_cmd in found:
+                user32.ShowWindow(hwnd, show_cmd)
             return  # one-shot -- never meddle with the user's session again
         time.sleep(1)
 
@@ -278,23 +310,37 @@ class BenchmarkRunner:
             watchdog = ThermalWatchdog(abort_event)
             watchdog.start()
 
+        # Hide the outer cmd.exe console window in GUI mode. STARTUPINFO+SW_HIDE
+        # keeps a real console alive for Cinebench's vendor-required
+        # 'start /b /wait "parentconsole"' redirect; CREATE_NO_WINDOW would strip
+        # the console entirely and risk silent output loss.
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = SW_HIDE
+
         try:
-            proc = subprocess.Popen(["cmd.exe", "/C", str(batch_file)])
+            proc = subprocess.Popen(
+                ["cmd.exe", "/C", str(batch_file)],
+                startupinfo=si,
+            )
 
             # One-shot minimize of the Cinebench GUI on launch. 60 s grace window
             # so slow systems still have time to finish launching it. Matched by
             # process executable, not title -- the splash screen has no 'cinebench'
-            # in its title for the first ~100 s of the run.
+            # in its title for the first ~100 s of the run. Also hides the cmd.exe
+            # window spawned above as a belt-and-suspenders fallback if STARTUPINFO
+            # ever fails to suppress it.
             threading.Thread(
                 target=_minimize_cinebench_window,
-                args=(cb_exe, 60.0, abort_event),
+                args=(cb_exe, 60.0, abort_event, proc.pid),
                 daemon=True,
             ).start()
 
             start = time.monotonic()
             try:
                 while proc.poll() is None:
-                    if abort_event.is_set():
+                    if abort_event.is_set() or _state.is_cancelled():
+                        gui_cancelled = _state.is_cancelled() and not abort_event.is_set()
                         proc.kill()
                         # /T kills the batch cmd.exe tree; /IM kills Cinebench itself
                         # which is detached from proc's tree by 'start /b /wait'.
@@ -307,11 +353,12 @@ class BenchmarkRunner:
                             capture_output=True,
                         )
                         proc.communicate()
-                        reason = (
-                            watchdog.abort_reason
-                            if watchdog and watchdog.abort_reason
-                            else "Aborted by user (Q or Enter)."
-                        )
+                        if watchdog and watchdog.abort_reason:
+                            reason = watchdog.abort_reason
+                        elif gui_cancelled:
+                            reason = "Cancelled from GUI."
+                        else:
+                            reason = "Aborted by user (Q or Enter)."
                         print_step_done(False)
                         print_warning(f"Benchmark aborted: {reason}")
                         log.warning("Cinebench: Benchmark aborted -- %s", reason)

@@ -393,6 +393,12 @@ def run(debug: bool = False) -> int:
             runtime["pipeline_worker"] = None
             main._progress_bar.setVisible(False)
             main._progress_label.setVisible(False)
+            try:
+                main.stop_requested.disconnect(pipeline_worker.request_cancel)
+            except (RuntimeError, TypeError):
+                # Disconnect raises if the connection was already broken
+                # (e.g. worker was deleted). Safe to ignore on teardown.
+                pass
             pipeline_worker.deleteLater()
             pipeline_thread.deleteLater()
 
@@ -400,6 +406,19 @@ def run(debug: bool = False) -> int:
         pipeline_worker.pipeline_finished.connect(_on_pipeline_finished)
         pipeline_worker.pipeline_failed.connect(_on_pipeline_failed)
         pipeline_thread.finished.connect(_on_thread_done)
+        # Cancel signal from MainWindow Stop button / Esc / Q / Enter hotkeys.
+        # MUST be DirectConnection -- the worker thread's event loop is
+        # blocked inside the synchronous run_optimization_pipeline call,
+        # so a QueuedConnection slot would sit in the queue until run()
+        # returned (which is what we're trying to cancel: deadlock).
+        # DirectConnection runs request_cancel on the GUI thread, writing
+        # _cancel_requested from there. The worker's polling loop reads
+        # the bool on its next iteration. Same mechanism the existing
+        # closeEvent path below uses (direct call, no signal).
+        main.stop_requested.connect(
+            pipeline_worker.request_cancel,
+            Qt.ConnectionType.DirectConnection,
+        )
 
         runtime["pipeline_thread"] = pipeline_thread
         runtime["pipeline_worker"] = pipeline_worker

@@ -35,6 +35,10 @@ if TYPE_CHECKING:
 
 from PySide6.QtWidgets import QProgressBar
 
+from PySide6.QtCore import Signal
+from PySide6.QtGui import QKeySequence, QShortcut
+
+
 _PHASE_NAMES = (
     "1. Bootstrap",
     "2. Scan",
@@ -49,6 +53,12 @@ class MainWindow(QMainWindow):
 
     DASHBOARD_INDEX = 0
     OUTPUT_INDEX = 1
+
+    # Emitted when the user requests cancellation of the running pipeline.
+    # Connected to PipelineWorker.request_cancel in app.py. Fires from the
+    # Stop button, the Esc/Q hotkeys (when pipeline is running), or
+    # programmatic _on_stop_clicked() calls when the button is visible.
+    stop_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None,
                  settings: Settings | None = None) -> None:
@@ -82,6 +92,26 @@ class MainWindow(QMainWindow):
         self.status_bar_widget = StatusBarWidget()
         self._inject_status_bar(self.status_bar_widget)
 
+        # Cancel hotkeys: Esc, Q, Return (main Enter), Enter (numpad).
+        # Q + Return mirror the CLI's b"q"/b"Q"/b"\r" mapping in
+        # _keyboard_abort_watcher; Esc is added because dialogs already
+        # bind it to dismiss; Key_Enter is the numpad Enter, distinct from
+        # Key_Return on Qt. Qt.WindowShortcut (the default) fires only when
+        # MainWindow is the active window -- NOT when a modal ApprovalDialog
+        # has focus -- so dialog Esc/Enter handlers stay intact.
+        # _on_stop_clicked gates on _stop_button.isVisible(), so all four
+        # keys are no-ops while the pipeline is idle.
+        self._stop_shortcuts = []
+        for key in (
+            Qt.Key.Key_Escape,
+            Qt.Key.Key_Q,
+            Qt.Key.Key_Return,
+            Qt.Key.Key_Enter,
+        ):
+            shortcut = QShortcut(QKeySequence(key), self)
+            shortcut.activated.connect(self._on_stop_clicked)
+            self._stop_shortcuts.append(shortcut)
+
     def _inject_status_bar(self, widget) -> None:
         """Pin the custom status bar widget to the bottom of the main window."""
         from PySide6.QtWidgets import QVBoxLayout
@@ -113,9 +143,12 @@ class MainWindow(QMainWindow):
 
         # Primary nav
         self._run_button = self._nav_btn("▶  Start Optimization", accent=True)
+        self._stop_button = self._nav_btn("■  Stop", state="danger")
+        self._stop_button.setVisible(False)
         self._nav_dashboard = self._nav_btn("◆  Dashboard")
         col.addWidget(self._nav_dashboard)
         col.addWidget(self._run_button)
+        col.addWidget(self._stop_button)
 
         col.addStretch(1)
 
@@ -140,6 +173,7 @@ class MainWindow(QMainWindow):
         # Wire built-in nav actions
         self._nav_dashboard.clicked.connect(self.show_dashboard)
         self._run_button.clicked.connect(self.show_output)
+        self._stop_button.clicked.connect(self._on_stop_clicked)
         self._nav_log.clicked.connect(self._open_debug_log)
         self._nav_exit.clicked.connect(self.close)
 
@@ -255,7 +289,11 @@ class MainWindow(QMainWindow):
     # ── Nav "working" indicator for Run button ─────────────────────────
 
     def set_running(self, running: bool) -> None:
-        """Toggle the Run nav button between normal and 'working' states."""
+        """Toggle the Run nav button between normal and 'working' states.
+
+        Also flips the Stop button's visibility so the cancel control only
+        appears while a pipeline run is in progress.
+        """
         if running:
             self._run_button.setText("▣  Working…")
             self._run_button.setProperty("navState", "active")
@@ -264,6 +302,19 @@ class MainWindow(QMainWindow):
             self._run_button.setProperty("navState", "")
         self._run_button.style().unpolish(self._run_button)
         self._run_button.style().polish(self._run_button)
+        self._stop_button.setVisible(running)
+
+
+    def _on_stop_clicked(self) -> None:
+        """Emit ``stop_requested`` only while the pipeline is running.
+
+        The Stop button is hidden during idle, but Esc/Q QShortcuts fire
+        regardless of button visibility. Gating on ``_stop_button.isVisible()``
+        keeps the hotkeys silent when no pipeline is running, so users don't
+        get phantom cancel events while idle.
+        """
+        if self._stop_button.isVisible():
+            self.stop_requested.emit()
 
     # ── Debug log ──────────────────────────────────────────────────────
 
