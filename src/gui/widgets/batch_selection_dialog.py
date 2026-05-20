@@ -90,7 +90,8 @@ class _FixItem(QFrame):
     def is_selected(self) -> bool:
         return self._selected
 
-    def mousePressEvent(self, event) -> None:  # noqa: N802
+    def toggle(self) -> None:
+        """Flip selection state and refresh the row's QSS + checkbox glyph."""
         self._selected = not self._selected
         self.setProperty("selected", "true" if self._selected else "false")
         self._check_lbl.setText("✓" if self._selected else "")
@@ -98,6 +99,9 @@ class _FixItem(QFrame):
         repolish(self._check_lbl)
         repolish(self)
         self.toggled.emit()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        self.toggle()
         super().mousePressEvent(event)
 
 
@@ -169,16 +173,16 @@ class BatchSelectionDialog(QDialog):
         foot_row.setSpacing(8)
         foot_row.addStretch()
 
-        skip_btn = QPushButton("Skip All")
-        skip_btn.setObjectName("secondary")
-        skip_btn.clicked.connect(self._on_cancel)
+        self._skip_btn = QPushButton("Skip All")
+        self._skip_btn.setObjectName("secondary")
+        self._skip_btn.clicked.connect(self._on_cancel)
 
         self._apply_btn = QPushButton(f"Apply {count} Selected")
         self._apply_btn.setObjectName("primary")
         self._apply_btn.setDefault(True)
         self._apply_btn.clicked.connect(self._on_apply_selected)
 
-        foot_row.addWidget(skip_btn)
+        foot_row.addWidget(self._skip_btn)
         foot_row.addWidget(self._apply_btn)
 
         layout.addWidget(foot)

@@ -275,7 +275,7 @@ class MainWindow(QMainWindow):
         self._content.setCurrentIndex(self.OUTPUT_INDEX)
         self._set_nav_active(self._run_button)
 
-    # ── Phase row proxy (wired by app.py via phase_changed signal) ─────
+    # ── Benchmark score proxy (wired by app.py via benchmark_score_ready) ──
 
     def update_benchmark_score(self, phase: str, scores: dict, cpu_peak: float | None) -> None:
         if phase == "baseline":

@@ -331,7 +331,6 @@ def run(debug: bool = False) -> int:
     bridge.signals.confirm_requested.connect(_show_confirm_dialog)
     bridge.signals.batch_selection_requested.connect(_show_batch_dialog)
     bridge.signals.output_emitted.connect(_on_pipeline_output)
-    bridge.signals.phase_changed.connect(_on_benchmark_score)
 
     bridge.signals.benchmark_score_ready.connect(_on_benchmark_score)
 

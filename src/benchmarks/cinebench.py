@@ -268,7 +268,7 @@ class BenchmarkRunner:
             "This will take several minutes. NO TOUCHY /afk a bit while lil_bro runs the benchmark. "
             "Your PC will be under high load, set fans to WARP SPEED."
         )
-        print_info("Press Q or Enter to abort the benchmark at any time.")
+        print_info("Press Esc, Q or Enter to abort the benchmark at any time.")
 
         # Build CLI args per docs/vendor-supplied/cinebench.md
         cb_flag = "g_CinebenchAllTests=true" if full_suite else "g_CinebenchCpu1Test=true"

@@ -59,16 +59,6 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
-### T-014 — Reconcile `phase_changed` signal naming and dual-signal handler
-**Priority:** P3
-**Effort:** S human / S with CC
-**Why:** During the cleanup PR (2026-05-20), the stale `_on_phase_changed` alias was inlined so `bridge.signals.phase_changed.connect(_on_benchmark_score)` is now wired directly. Two semantic concerns survive: (1) the signal name `phase_changed` (carries `(int, str)` phase index + label) does not match the handler name `_on_benchmark_score` (designed for benchmark scores); (2) `_on_benchmark_score` is now wired to BOTH `phase_changed` AND `benchmark_score_ready` — the same handler for two semantically distinct events. Likely a symptom of an incomplete refactor where phase-change rows were repurposed into benchmark-score cards.
-**Fix:** decide whether `phase_changed` should be emitting at all (if benchmark cards now own the entire status flow, the signal may be dead); if it stays, give it its own handler and drop the dual wiring. Verify by tracing all `phase_changed.emit(...)` callers (e.g., `src/gui/worker.py`, `src/pipeline/phases.py`).
-**Blocked by:** Nothing. Best done alongside any `run()` flattening (Phase C1 in cleanup plan).
-**Added:** 2026-05-20 (from PR #22 cleanup, A6 follow-up)
-
----
-
 ### T-015 — Wire dxdiag sound device extraction for volume mixer settings
 **Priority:** P4 (nice-to-have)
 **Effort:** S human / S with CC
@@ -80,6 +70,12 @@ Format: Priority | Effort (human / CC) | Context
 ---
 
 ## Completed
+
+### T-014 — Reconcile `phase_changed` signal naming and dual-signal handler
+**Completed**: 2026-05-20
+Investigation confirmed `phase_changed` had zero `emit()` call sites repo-wide — a true gravestone. Removed the `phase_changed = Signal(int, str)` definition from `src/gui/signals.py` and the dead `bridge.signals.phase_changed.connect(_on_benchmark_score)` wiring from `src/gui/app.py`. Both original concerns dissolve: `_on_benchmark_score` is now wired only to `benchmark_score_ready` (name matches purpose; no dual wiring). The phase-row UI was already superseded by `BenchmarkRow`.
+
+---
 
 ### T-010 — `status_bar_widget` + `benchmark_row` hiddenimports verified in lil_bro.spec
 **Completed**: 2026-05-20

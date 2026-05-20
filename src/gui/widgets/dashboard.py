@@ -70,7 +70,7 @@ class DashboardWorker(QObject):
             self._timer.timeout.connect(self._tick)
             self._timer.start(_POLL_INTERVAL_MS)
         log.info("DashboardWorker.start: timer armed, firing first tick now")
-        self._tick()  # immediate first sample  # immediate first sample  # immediate first sample
+        self._tick()  # immediate first sample
 
     def stop(self) -> None:
         if self._timer is not None:

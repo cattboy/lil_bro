@@ -26,4 +26,3 @@ class PipelineSignals(QObject):
     pipeline_finished = Signal()
     pipeline_failed = Signal(str, str, str)
     init_step = Signal(str, str)
-    phase_changed = Signal(int, str)

@@ -22,7 +22,7 @@ All notable changes to lil_bro are documented here.
 
 ### Removed
 - Duplicate `_on_benchmark_started` function definition in `src/gui/app.py` (signal binding selected the second copy; first was dead code).
-- Stale "`_on_phase_changed = _on_benchmark_score`" alias + gravestone TODO comments in `src/gui/app.py` and `src/gui/signals.py`. The `phase_changed` signal now connects directly to `_on_benchmark_score`.
+- Stale "`_on_phase_changed = _on_benchmark_score`" alias and the dead `phase_changed` signal (`src/gui/signals.py`, `src/gui/app.py`). The signal was defined and connected to `_on_benchmark_score` but emitted by zero call sites: a gravestone left when `PhaseRow` was superseded by `BenchmarkRow` (driven by `benchmark_score_ready`). The signal and its `.connect()` wiring are removed; `_on_benchmark_score` now serves `benchmark_score_ready` alone.
 - Redundant local `from PySide6.QtCore import QTimer` inside `Dashboard.set_monitor_data` (`QTimer` already imported at module scope).
 - Duplicate inline comment in `DashboardWorker.start`.
 
