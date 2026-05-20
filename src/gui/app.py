@@ -201,7 +201,7 @@ def run(debug: bool = False) -> int:
                     "GUI Startup: lhm_ready slot never delivered -- "
                     "falling back to start_polling from _on_finished"
                 )
-                main._dashboard.start_polling(lhm=startup_lhm)
+                main._dashboard.start_polling()
 
             if startup_lhm is None:
                 main._dashboard.thermal_chart.set_offline("Thermal monitor unavailable")
@@ -336,6 +336,10 @@ def run(debug: bool = False) -> int:
 
     bridge.signals.benchmark_started.connect(_on_benchmark_started)
 
+    # Mirror every Dashboard poll snapshot onto the optimization view's
+    # LiveStatRow so both views render the identical system stats.
+    main._dashboard.stats_ready.connect(main._live_stat_row.apply_snapshot)
+
     def _start_pipeline() -> None:
         if runtime.get("pipeline_thread") is not None:
             return
@@ -358,20 +362,17 @@ def run(debug: bool = False) -> int:
         def _on_pipeline_started() -> None:
             log.info("Pipeline: started")
             main.status_bar_widget.set_state("run", "Pipeline running…")
-            main._dashboard.pause_polling()
             main._benchmark_row.set_pipeline_running()
 
         def _on_pipeline_finished() -> None:
             log.info("Pipeline: finished (PASS)")
             main.status_bar_widget.set_state("ok", "Pipeline finished")
-            main._dashboard.resume_polling()
             main._benchmark_row.set_pipeline_complete()
             pipeline_thread.quit()
 
         def _on_pipeline_failed(exc_type: str, msg: str, tb: str) -> None:
             log.error("Pipeline: failed -- %s: %s\n%s", exc_type, msg, tb)
             main.status_bar_widget.set_state("ok", f"Pipeline failed: {exc_type}")
-            main._dashboard.resume_polling()
             main._benchmark_row.set_pipeline_failed()
             pipeline_thread.quit()
 
@@ -524,7 +525,7 @@ def run(debug: bool = False) -> int:
         log.info("GUI Startup: lhm_ready received, starting dashboard polling early")
         runtime["lhm"] = lhm
         try:
-            main._dashboard.start_polling(lhm=lhm)
+            main._dashboard.start_polling()
         except Exception as exc:
             log.error("_on_lhm_ready EXC: %s: %r", type(exc).__name__, exc, exc_info=True)
 

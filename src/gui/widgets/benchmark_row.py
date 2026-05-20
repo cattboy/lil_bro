@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout
 from src.gui.theme import repolish
+from src.gui.widgets.dashboard import _CARDS, _DashboardCard
 
 
 class _BenchmarkCard(QFrame):
@@ -127,3 +128,33 @@ class BenchmarkRow(QFrame):
         sign = "+" if delta_pct >= 0 else ""
         tone = "ok" if delta_pct >= 0 else "warn"
         self._delta.set_value(f"{sign}{delta_pct:.1f}%", tone)
+
+
+class LiveStatRow(QFrame):
+    """Realtime CPU / GPU / RAM cards shown at the top of the optimization view.
+
+    A pure view: it builds four cards (identical to the Dashboard's, via the
+    shared ``_DashboardCard`` / ``_CARDS``) and renders whatever snapshot it is
+    handed. It is fed by the Dashboard's shared ``SystemStatsWorker`` -- wired in
+    app.py as ``dashboard.stats_ready -> live_stat_row.apply_snapshot`` -- so the
+    optimization view and the dashboard always display identical values.
+    """
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setAccessibleName("Live system stats")
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(20, 12, 20, 12)
+        layout.setSpacing(12)
+
+        self._cards: dict[str, _DashboardCard] = {}
+        for key, label, tone in _CARDS:
+            card = _DashboardCard(label, tone)
+            card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            self._cards[key] = card
+            layout.addWidget(card)
+
+    def apply_snapshot(self, snapshot: dict) -> None:
+        for key, card in self._cards.items():
+            card.set_value(str(snapshot.get(key, "—")))

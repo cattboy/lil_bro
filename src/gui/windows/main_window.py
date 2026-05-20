@@ -40,14 +40,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 
 
-_PHASE_NAMES = (
-    "1. Bootstrap",
-    "2. Scan",
-    "3. Baseline",
-    "4. Configure",
-    "5. Verify",
-)
-
 
 class MainWindow(QMainWindow):
     """The lil_bro GUI shell — V2 layout."""
@@ -203,7 +195,7 @@ class MainWindow(QMainWindow):
     def _build_content(self) -> QStackedWidget:
         from src.gui.widgets.dashboard import Dashboard
         from src.gui.widgets.output_panel import OutputPanel
-        from src.gui.widgets.benchmark_row import BenchmarkRow
+        from src.gui.widgets.benchmark_row import BenchmarkRow, LiveStatRow
 
         stack = QStackedWidget()
         stack.setAccessibleName("Content area")
@@ -235,6 +227,11 @@ class MainWindow(QMainWindow):
         hdr_row.addWidget(self._phase_pill)
 
         output_layout.addWidget(output_header)
+
+        # Live system stats — realtime CPU/GPU/RAM cards, updated while
+        # (and after) the pipeline runs by LiveStatRow's own poll thread.
+        self._live_stat_row = LiveStatRow()
+        output_layout.addWidget(self._live_stat_row)
 
         # Benchmark score row
         self._benchmark_row = BenchmarkRow()

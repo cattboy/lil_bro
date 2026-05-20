@@ -1,13 +1,14 @@
-"""6-card glance dashboard for the home view.
+"""Glance dashboard for the home view.
 
-Cards: power plan, Game Mode, primary refresh rate, mouse Hz, CPU
-temp, GPU temp. Polls ``quick_status_snapshot`` every 5 seconds via a
-QTimer in a dedicated worker QThread (separate from the pipeline
-worker so polling cadence isn't coupled to pipeline lifecycle).
+Stat cards (CPU usage, CPU temp, GPU temp, RAM used), a temperature
+chart and a USB-polling widget. ``SystemStatsWorker`` polls system
+stats every 5 seconds on a dedicated QThread and feeds both this view
+and the optimization view's ``LiveStatRow`` (via the ``stats_ready``
+signal), so both always display identical values.
 
-Polling pauses between ``pipeline_started`` and ``pipeline_finished``
-signals so the home view doesn't compete with the pipeline for
-registry / WMI access while a fix is mid-flight.
+The worker uses only the pipeline-safe data subset (psutil + a single
+LHM read), so polling runs continuously -- it is not paused during the
+optimization pipeline.
 """
 
 from __future__ import annotations
@@ -22,7 +23,6 @@ from PySide6.QtWidgets import (
 )
 
 from src.gui.theme import repolish
-from src.agent_tools.quick_status import quick_status_snapshot
 
 
 _POLL_INTERVAL_MS = 5000
@@ -41,24 +41,26 @@ _CARDS = (
 )
 
 
-class DashboardWorker(QObject):
-    """Polls quick_status_snapshot at 5-sec cadence on its own QThread."""
+class SystemStatsWorker(QObject):
+    """Polls system stats at 5-sec cadence on its own QThread.
+
+    Single shared poller for both the Dashboard and the optimization view's
+    ``LiveStatRow``. Uses only the pipeline-safe data subset -- psutil, a single
+    ``fetch_snapshot()`` LHM read, and a light QSettings mouse-Hz read -- so it
+    runs continuously (including during the optimization pipeline) without
+    contending for registry / WMI / subprocess access.
+    """
 
     snapshot_ready = Signal(dict)
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self._timer: QTimer | None = None
-        self._lhm = None
-        self._paused = False
-
-    def set_lhm(self, lhm) -> None:
-        self._lhm = lhm
 
     def start(self) -> None:
         from src.utils.debug_logger import get_debug_logger
         log = get_debug_logger()
-        log.info("DashboardWorker.start: entering on thread %s",
+        log.info("SystemStatsWorker.start: entering on thread %s",
                  QThread.currentThread().objectName() or "<unnamed>")
         try:
             import psutil
@@ -69,32 +71,15 @@ class DashboardWorker(QObject):
             self._timer = QTimer()
             self._timer.timeout.connect(self._tick)
             self._timer.start(_POLL_INTERVAL_MS)
-        log.info("DashboardWorker.start: timer armed, firing first tick now")
+        log.info("SystemStatsWorker.start: timer armed, firing first tick now")
         self._tick()  # immediate first sample
 
-    def stop(self) -> None:
-        if self._timer is not None:
-            self._timer.stop()
-            self._timer = None
-
-    def pause(self) -> None:
-        self._paused = True
-
-    def resume(self) -> None:
-        self._paused = False
-        self._tick()
-
     def _tick(self) -> None:
-        if self._paused:
-            return
         from src.utils.debug_logger import get_debug_logger
         log = get_debug_logger()
-        try:
-            snap = dict(quick_status_snapshot(self._lhm))
-        except Exception:
-            snap = {}
+        snap: dict = {}
 
-        # Augment with cpu_usage and ram_used via psutil
+        # CPU% + RAM via psutil -- fast, non-blocking, no registry/WMI contention.
         try:
             import psutil
             snap["cpu_usage"] = f"{psutil.cpu_percent(interval=None):.0f}%"
@@ -104,9 +89,17 @@ class DashboardWorker(QObject):
             snap.setdefault("cpu_usage", "—")
             snap.setdefault("ram_used", "—")
 
-        # Thermal data from fetch_snapshot — same source the chart uses, so always accurate.
-        # Also overrides cpu_temp/gpu_temp from quick_status_snapshot (which calls
-        # lhm.read_latest(), a method LHMSidecar does not implement).
+        # Last-measured mouse Hz -- a light QSettings read (no system registry
+        # or subprocess), safe to run concurrently with the pipeline.
+        try:
+            from src.agent_tools.quick_status import _read_mouse_hz
+            snap["mouse_hz"] = _read_mouse_hz()
+        except Exception:
+            pass  # safe: mouse-Hz read is best-effort; tile keeps its own fallback
+
+        # Thermal data from fetch_snapshot -- the same source the chart uses, so
+        # always accurate. fetch_snapshot() returns {} when LHM is unreachable,
+        # leaving the temp cards at "—".
         therm: dict = {}
         try:
             from src.agent_tools.thermal_guidance import derive_cpu_temp, derive_gpu_temp
@@ -122,16 +115,16 @@ class DashboardWorker(QObject):
                     snap["_gpu_c"] = gpu_c_f
                     snap["gpu_temp"] = f"{int(round(gpu_c_f))}°C"
         except Exception as exc:
-            log.warning("DashboardWorker._tick: thermal fetch failed: %s", exc, exc_info=True)
+            log.warning("SystemStatsWorker._tick: thermal fetch failed: %s", exc, exc_info=True)
 
-        # Diagnostic INFO on first 3 ticks and every 12th (≈ 1 min) — keeps
+        # Diagnostic INFO on first 3 ticks and every 12th (≈ 1 min) -- keeps
         # the log compact but proves the polling loop is alive and surfaces
-        # what fetch_snapshot is returning vs. what derive_*_temp extracted.
+        # what fetch_snapshot returned vs. what derive_*_temp extracted.
         self._tick_count = getattr(self, "_tick_count", 0) + 1
         if self._tick_count <= 3 or self._tick_count % 12 == 0:
             sample_keys = list(therm.keys())[:3] if therm else []
             log.info(
-                "DashboardWorker._tick #%d: therm_keys=%d sample=%s cpu_c=%s gpu_c=%s cpu_temp=%s",
+                "SystemStatsWorker._tick #%d: therm_keys=%d sample=%s cpu_c=%s gpu_c=%s cpu_temp=%s",
                 self._tick_count,
                 len(therm),
                 sample_keys,
@@ -175,6 +168,10 @@ class Dashboard(QWidget):
 
     monitor_fix_requested = Signal(str)  # = Signal()
     monitor_refresh_requested = Signal()
+
+    # Re-broadcast of each poll snapshot — lets other views (the optimization
+    # view's LiveStatRow) render the identical system stats as the dashboard.
+    stats_ready = Signal(dict)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -310,7 +307,7 @@ class Dashboard(QWidget):
         outer.addStretch(1)
 
         self._worker_thread: QThread | None = None
-        self._worker: DashboardWorker | None = None
+        self._worker: SystemStatsWorker | None = None
 
     # ── USB polling ────────────────────────────────────────────────────
 
@@ -438,20 +435,16 @@ class Dashboard(QWidget):
 
     # ── Polling lifecycle ──────────────────────────────────────────────
 
-    def start_polling(self, lhm=None) -> None:
+    def start_polling(self) -> None:
         from src.utils.debug_logger import get_debug_logger
         log = get_debug_logger()
         if self._worker is not None:
             log.info("Dashboard.start_polling: already running, skipping")
             return
-        log.info(
-            "Dashboard.start_polling: spawning worker thread (lhm=%s)",
-            "yes" if lhm else "no",
-        )
+        log.info("Dashboard.start_polling: spawning shared system-stats worker thread")
         self._worker_thread = QThread(self)
-        self._worker_thread.setObjectName("DashboardPoll")
-        self._worker = DashboardWorker()
-        self._worker.set_lhm(lhm)
+        self._worker_thread.setObjectName("SystemStatsPoll")
+        self._worker = SystemStatsWorker()
         self._worker.moveToThread(self._worker_thread)
         self._worker.snapshot_ready.connect(self.apply_snapshot)
         self._worker_thread.started.connect(self._worker.start)
@@ -462,19 +455,14 @@ class Dashboard(QWidget):
     def stop_polling(self) -> None:
         if self._worker is None or self._worker_thread is None:
             return
-        self._worker.stop()
+        # Stop by ending the worker thread's event loop — that halts the
+        # worker's QTimer on its own thread. Stopping the timer directly from
+        # here (the GUI thread) would be a cross-thread violation, so the
+        # worker exposes no stop() and we deliberately do not call one.
         self._worker_thread.quit()
         self._worker_thread.wait(1000)
         self._worker = None
         self._worker_thread = None
-
-    def pause_polling(self) -> None:
-        if self._worker is not None:
-            self._worker.pause()
-
-    def resume_polling(self) -> None:
-        if self._worker is not None:
-            self._worker.resume()
 
     # ── Render slot ────────────────────────────────────────────────────
 
@@ -494,11 +482,11 @@ class Dashboard(QWidget):
         for key, card in self._cards.items():
             card.set_value(str(snapshot.get(key, "—")))
         # Mouse polling tile is owned by the manual "Test Polling" button
-        # (which dispatches _MousePollWorker via _manual_poll). Periodic
-        # quick_status_snapshot only returns "Not measured" / "—" for
-        # mouse_hz, which would clobber a real measurement — so only let
-        # the periodic tick update the tile *before* the first manual
-        # measurement, and only with a parseable Hz value.
+        # (which dispatches _MousePollWorker via _manual_poll). The periodic
+        # snapshot only carries a cached last-measurement for mouse_hz, which
+        # would clobber a real measurement — so only let the periodic tick
+        # update the tile *before* the first manual measurement, and only
+        # with a parseable Hz value.
         if not self._mouse_manually_measured:
             hz_str = snapshot.get("mouse_hz", "")
             if hz_str and hz_str not in ("—", "Not measured"):
@@ -508,6 +496,9 @@ class Dashboard(QWidget):
         gpu_c = snapshot.get("_gpu_c")
         if cpu_c is not None or gpu_c is not None:
             self.thermal_chart.append_sample(cpu_c, gpu_c)
+        # Re-broadcast to any extra subscriber views (the optimization view's
+        # LiveStatRow) so every view renders the identical snapshot.
+        self.stats_ready.emit(snapshot)
 
     def set_monitor_data(self, displays: list[dict]) -> None:
         """Show/hide pre-allocated slots; dynamically build extras for 2+ monitors.
