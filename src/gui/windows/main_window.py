@@ -120,6 +120,8 @@ class MainWindow(QMainWindow):
     # ── Sidebar ────────────────────────────────────────────────────────
 
     def _build_sidebar(self) -> QFrame:
+        from src.gui.theme import COLORS
+
         frame = QFrame()
         frame.setObjectName("sidebar")
         frame.setFixedWidth(220)
@@ -129,9 +131,11 @@ class MainWindow(QMainWindow):
         col.setContentsMargins(0, 20, 0, 16)
         col.setSpacing(2)
 
-        # Brand
-        brand = QLabel("lil_bro")
+        # Brand — "lil" stays primary text, "_bro" gets the accent cyan.
+        # One rich-text label keeps letter-spacing uniform across the wordmark.
+        brand = QLabel(f'lil<span style="color: {COLORS["accent"]};">_bro</span>')
         brand.setObjectName("sidebarBrand")
+        brand.setTextFormat(Qt.TextFormat.RichText)
         col.addWidget(brand)
 
         # Primary nav
