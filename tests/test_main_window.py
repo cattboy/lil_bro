@@ -2,39 +2,46 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QPushButton, QStackedWidget, QStatusBar
+from PySide6.QtWidgets import QPushButton, QStackedWidget
 
 from src.gui.windows.main_window import MainWindow
+from src.gui.widgets.status_bar_widget import StatusBarWidget
 
 
 def test_main_window_builds_with_minimum_size(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
     assert window.windowTitle() == "lil_bro"
-    assert window.minimumSize().width() == 1024
-    assert window.minimumSize().height() == 720
+    assert window.minimumSize().width() == 1280
+    assert window.minimumSize().height() == 800
 
 
 def test_main_window_has_status_bar(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
-    assert isinstance(window.statusBar(), QStatusBar)
-    assert "lil_bro" in window.statusBar().currentMessage()
+    assert isinstance(window.status_bar_widget, StatusBarWidget)
 
 
-def test_main_window_run_button_uses_primary_object_name(qtbot):
+def test_main_window_run_button_uses_active_nav_state(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
     assert isinstance(window._run_button, QPushButton)
-    assert window._run_button.objectName() == "primary"
+    assert window._run_button.property("navRole") == "nav"
+    # navState is dynamic — the run button gets the highlighted "active"
+    # nav treatment when its (output) view is shown.
+    window.show_output()
+    assert window._run_button.property("navState") == "active"
+    window.show_dashboard()
+    assert window._run_button.property("navState") == ""
 
 
 def test_main_window_actions_wired(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
-    for attr in ("action_run_pipeline", "action_ai_setup",
-                 "action_revert", "action_exit"):
-        assert hasattr(window, attr), f"missing menu action: {attr}"
+    for attr in ("_run_button", "_revert_button",
+                 "_ai_setup_button", "_nav_exit"):
+        assert isinstance(getattr(window, attr), QPushButton), \
+            f"missing sidebar button: {attr}"
 
 
 def test_main_window_view_toggle(qtbot):
