@@ -76,7 +76,7 @@ def run_revert_phase() -> None:
             from src.utils.paths import get_session_backup_path
             get_session_backup_path().unlink(missing_ok=True)
         except Exception:
-            pass
+            pass  # safe: backup unlink is best-effort cleanup
         return
 
     print_warning(f"\n{len(succeeded)} of {len(results)} changes reverted.")

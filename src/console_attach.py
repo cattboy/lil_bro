@@ -60,7 +60,7 @@ def attach() -> None:
         from colorama import init
         init(autoreset=True)
     except Exception:
-        pass
+        pass  # safe: colorama optional; raw stdout still works without ANSI translation
 
 
 def _rebind_stdio() -> None:

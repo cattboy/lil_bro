@@ -24,11 +24,9 @@ from PySide6.QtWidgets import (
 )
 
 
+from src.gui.theme import repolish
 from PySide6.QtCore import Signal  # noqa: E402
 from PySide6.QtWidgets import QFrame, QWidget  # noqa: E402
-
-_SEV_COLORS = {"high": "#FF6B6B", "medium": "#FFB547", "low": "#4ADE80"}
-
 
 class _FixItem(QFrame):
     """One clickable fix row: checkbox, sev badge, title/desc, AUTO/MANUAL tag."""
@@ -64,12 +62,10 @@ class _FixItem(QFrame):
         info_col = QVBoxLayout()
         info_col.setSpacing(2)
 
-        sev_color = _SEV_COLORS.get(sev, "#9B9AA0")
         sev_text = f"{sev.upper()}" + (f"  ·  {tag}" if tag else "")
         sev_lbl = QLabel(sev_text)
         sev_lbl.setObjectName("fixSev")
         sev_lbl.setProperty("sev", sev)
-        sev_lbl.setStyleSheet(f"color: {sev_color};")
         info_col.addWidget(sev_lbl)
 
         title_lbl = QLabel(title)
@@ -99,10 +95,8 @@ class _FixItem(QFrame):
         self.setProperty("selected", "true" if self._selected else "false")
         self._check_lbl.setText("✓" if self._selected else "")
         self._check_lbl.setProperty("checked", "true" if self._selected else "false")
-        self._check_lbl.style().unpolish(self._check_lbl)
-        self._check_lbl.style().polish(self._check_lbl)
-        self.style().unpolish(self)
-        self.style().polish(self)
+        repolish(self._check_lbl)
+        repolish(self)
         self.toggled.emit()
         super().mousePressEvent(event)
 

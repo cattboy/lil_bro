@@ -179,15 +179,15 @@ def run(debug: bool = False) -> int:
                 import json as _json
                 with open(orchestrator.specs_path, encoding="utf-8") as _f:
                     preloaded_specs = _json.load(_f)
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("preloaded specs load failed: %s", e)
         runtime["preloaded_specs"] = preloaded_specs
 
         try:
             if runtime.get("pipeline_thread") is None and runtime.get("revert_thread") is None:
                 _set_flow_controls(True)
         except Exception:
-            pass
+            pass  # safe: flow-control restore is best-effort; runtime keys may be missing during shutdown
         try:
             main.status_bar_widget.set_state("ok", "Idle")
 
@@ -300,8 +300,8 @@ def run(debug: bool = False) -> int:
                 main.status_bar_widget.set_state("run", line[:80])
             try:
                 main._output_panel.append_line(raw)
-            except Exception:
-                pass
+            except Exception as e:
+                log.debug("output panel append failed: %s", e)
 
     def _on_progress_changed(percent: int, label: str) -> None:
         main._progress_bar.setValue(percent)
@@ -317,31 +317,21 @@ def run(debug: bool = False) -> int:
                 scores if isinstance(scores, dict) else {},
                 cpu_peak if isinstance(cpu_peak, (int, float)) else None,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            log.debug("benchmark score notify failed: %s", e)
 
     def _on_benchmark_started() -> None:
         try:
             main._benchmark_row.set_benchmark_started()
         except Exception:
-            pass
-
-    def _on_benchmark_started() -> None:
-        try:
-            main._benchmark_row.set_benchmark_started()
-        except Exception:
-            pass
-
-    # TODO: remove after run() is next rewritten — alias makes the stale
-    # bridge.signals.phase_changed.connect(_on_phase_changed) line a no-op.
-    _on_phase_changed = _on_benchmark_score
+            pass  # safe: benchmark_row may not exist yet on early signal arrival
 
     bridge.signals.progress_changed.connect(_on_progress_changed)
     bridge.signals.approval_requested.connect(_show_approval_dialog)
     bridge.signals.confirm_requested.connect(_show_confirm_dialog)
     bridge.signals.batch_selection_requested.connect(_show_batch_dialog)
     bridge.signals.output_emitted.connect(_on_pipeline_output)
-    bridge.signals.phase_changed.connect(_on_phase_changed)
+    bridge.signals.phase_changed.connect(_on_benchmark_score)
 
     bridge.signals.benchmark_score_ready.connect(_on_benchmark_score)
 
@@ -504,12 +494,12 @@ def run(debug: bool = False) -> int:
                 bridge.abort_pending()
                 revert_thread.wait(5000)
             except Exception:
-                pass
+                pass  # safe: revert-on-quit best-effort; thread may already be done
 
         try:
             main._dashboard.stop_polling()
         except Exception:
-            pass
+            pass  # safe: polling worker may already be stopped or never started
         try:
             from src.pipeline.post_run_cleanup import post_run_cleanup
             post_run_cleanup(
@@ -517,11 +507,11 @@ def run(debug: bool = False) -> int:
                 pawnio_was_preinstalled=pawnio_was_preinstalled,
             )
         except Exception:
-            pass
+            pass  # safe: cleanup is best-effort on quit; failures should not block shutdown
         try:
             settings.save_geometry(main)
         except Exception:
-            pass
+            pass  # safe: QSettings write failure should not block window close
 
     app.aboutToQuit.connect(_on_about_to_quit)
     orchestrator.init_step.connect(_on_step, Qt.ConnectionType.QueuedConnection)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
+from src.gui.theme import repolish
 
 
 class StatusBarWidget(QWidget):
@@ -49,8 +50,7 @@ class StatusBarWidget(QWidget):
         """Update the status dot and state label. state is 'idle' or 'run'."""
         dot_state = "run" if state == "run" else "ok"
         self._dot.setProperty("dotState", dot_state)
-        self._dot.style().unpolish(self._dot)
-        self._dot.style().polish(self._dot)
+        repolish(self._dot)
         self._state_label.setText(label)
 
     def set_model(self, name: str) -> None:

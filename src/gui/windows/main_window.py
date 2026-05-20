@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 
+from src.gui.theme import repolish
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -196,9 +197,7 @@ class MainWindow(QMainWindow):
         for btn in (self._nav_dashboard, self._run_button):
             state = "active" if btn is active_btn else ""
             btn.setProperty("navState", state)
-            btn.style().unpolish(btn)
-            btn.style().polish(btn)
-
+            repolish(btn)
     # ── Content ────────────────────────────────────────────────────────
 
     def _build_content(self) -> QStackedWidget:
@@ -300,8 +299,7 @@ class MainWindow(QMainWindow):
         else:
             self._run_button.setText("▶  Start Optimization")
             self._run_button.setProperty("navState", "")
-        self._run_button.style().unpolish(self._run_button)
-        self._run_button.style().polish(self._run_button)
+        repolish(self._run_button)
         self._stop_button.setVisible(running)
 
 

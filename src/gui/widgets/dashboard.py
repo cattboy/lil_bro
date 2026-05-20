@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.gui.theme import repolish
 from src.agent_tools.quick_status import quick_status_snapshot
 
 
@@ -63,13 +64,13 @@ class DashboardWorker(QObject):
             import psutil
             psutil.cpu_percent(interval=None)  # prime baseline so first real tick isn't 0%
         except Exception:
-            pass
+            pass  # safe: psutil prime is best-effort; first tick will just report 0%
         if self._timer is None:
             self._timer = QTimer()
             self._timer.timeout.connect(self._tick)
             self._timer.start(_POLL_INTERVAL_MS)
         log.info("DashboardWorker.start: timer armed, firing first tick now")
-        self._tick()  # immediate first sample  # immediate first sample
+        self._tick()  # immediate first sample  # immediate first sample  # immediate first sample
 
     def stop(self) -> None:
         if self._timer is not None:
@@ -403,11 +404,8 @@ class Dashboard(QWidget):
         """
         self._poll_val.setProperty("sev", sev)
         self._poll_status.setProperty("sev", sev)
-        self._poll_val.style().unpolish(self._poll_val)
-        self._poll_val.style().polish(self._poll_val)
-        self._poll_status.style().unpolish(self._poll_status)
-        self._poll_status.style().polish(self._poll_status)
-
+        repolish(self._poll_val)
+        repolish(self._poll_status)
     def _update_poll_display(self, hz_str: str) -> None:
         from src.llm.action_proposer import propose_for_check
         try:
@@ -520,7 +518,6 @@ class Dashboard(QWidget):
         defers this until after main.show().
         """
         from src.utils.debug_logger import get_debug_logger
-        from PySide6.QtCore import QTimer
         log = get_debug_logger()
         log.info("Dashboard.set_monitor_data: %d display(s) received", len(displays or []))
 

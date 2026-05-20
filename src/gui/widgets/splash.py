@@ -12,6 +12,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import QSplashScreen
+from src.gui.theme import repolish
 
 
 _SPLASH_W = 480
@@ -187,13 +188,10 @@ class SplashDialog(QDialog):
         result = self._step_results[idx]
         icon.setText(icons.get(state, "○"))
         icon.setProperty("stepState", state)
-        icon.style().unpolish(icon)
-        icon.style().polish(icon)
+        repolish(icon)
         result.setText(results.get(state, ""))
         result.setProperty("stepState", state)
-        result.style().unpolish(result)
-        result.style().polish(result)
-
+        repolish(result)
     def on_init_step(self, name: str, status: str) -> None:
         """Slot wired to StartupOrchestrator.init_step signal."""
         try:

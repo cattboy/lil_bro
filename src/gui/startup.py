@@ -59,7 +59,7 @@ class StartupOrchestrator(QObject):
                             break
                         sleep(_SENSOR_RETRY_DELAY)
                 except Exception:
-                    pass
+                    pass  # safe: thermal probe retry loop tolerates transient sidecar errors
             self.init_step.emit("Sensors", "done")
 
             # ── Step 3: System Specs — collect full hardware profile ─────────

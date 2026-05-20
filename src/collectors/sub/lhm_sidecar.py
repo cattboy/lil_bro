@@ -69,7 +69,7 @@ def _find_elevated_pid(exe_name: str) -> Optional[int]:
             if parts and parts[0].lower() == exe_name.lower():
                 return int(parts[1])
     except Exception:
-        pass
+        pass  # safe: tasklist parse fallback; caller treats None as "not running"
     return None
 
 
@@ -370,7 +370,7 @@ class LHMSidecar:
                         timeout=5,
                     )
                 except Exception:
-                    pass
+                    pass  # safe: subprocess cleanup is best-effort
                 # taskkill /F is fire-and-forget -- wait for the process to
                 # actually disappear so the PawnIO driver handle is released
                 # before downstream cleanup attempts to delete the service.
@@ -398,7 +398,7 @@ class LHMSidecar:
             try:
                 self._process.kill()
             except Exception:
-                pass
+                pass  # safe: process may already be dead
             try:
                 subprocess.run(
                     ["taskkill", "/F", "/T", "/PID", str(pid)],
@@ -406,7 +406,7 @@ class LHMSidecar:
                     timeout=5,
                 )
             except Exception:
-                pass
+                pass  # safe: taskkill fallback is best-effort
         finally:
             log.info("LHM Sidecar: Stopped")
             self._process = None

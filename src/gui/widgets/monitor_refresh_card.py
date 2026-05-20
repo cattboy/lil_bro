@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 
+from src.gui.theme import repolish
 class MonitorRefreshCard(QFrame):
     """Always-visible per-monitor card. Emits ``fix_requested(device)``."""
 
@@ -25,10 +26,7 @@ class MonitorRefreshCard(QFrame):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        # Reuse the USB-polling widget's QSS chrome (theme.py: QFrame#pollWidget).
-        # No QSS exists for #monitorCard, so the frame would otherwise render
-        # as a transparent rectangle.
-        self.setObjectName("pollWidget")
+        self.setObjectName("monitorCard")
         self.setAccessibleName("Monitor refresh rate card")
 
         self._device: str = ""
@@ -125,11 +123,8 @@ class MonitorRefreshCard(QFrame):
         # Re-polish unconditionally for both labels — QSS attribute selectors
         # only re-evaluate when style is repolished. Done at the bottom so
         # whichever branch ran above gets its sev write picked up.
-        self._status_lbl.style().unpolish(self._status_lbl)
-        self._status_lbl.style().polish(self._status_lbl)
-        self._val_lbl.style().unpolish(self._val_lbl)
-        self._val_lbl.style().polish(self._val_lbl)
-
+        repolish(self._status_lbl)
+        repolish(self._val_lbl)
     def _on_fix_clicked(self) -> None:
         if self._device:
             self.fix_requested.emit(self._device)
@@ -148,8 +143,7 @@ class MonitorEmptyCard(QFrame):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        # Reuse the USB-polling widget's QSS chrome — see MonitorRefreshCard above.
-        self.setObjectName("pollWidget")
+        self.setObjectName("monitorEmptyCard")
         self.setAccessibleName("Monitor refresh rate — no displays detected")
 
         root = QHBoxLayout(self)

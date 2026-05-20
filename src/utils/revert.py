@@ -61,7 +61,7 @@ def append_fix_to_manifest(entry: dict) -> None:
                     old_id = old_data.get("session_id", "unknown")
                     old_path.rename(old_path.parent / f"session_{old_id}.json")
                 except Exception:
-                    pass
+                    pass  # safe: old manifest archive rename is best-effort
         else:
             manifest = _read_raw_manifest()
         if manifest is None:

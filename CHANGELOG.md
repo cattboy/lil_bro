@@ -2,6 +2,36 @@
 
 All notable changes to lil_bro are documented here.
 
+## [Unreleased]
+
+### Added
+- **PySide6 desktop GUI** (PR #22, ~5,000 LOC under `src/gui/`). Replaces the prior CLI-only experience with a windowed app: dashboard with live thermals/mouse polling/monitor refresh tiles, optimization pipeline with phase-card progress, batch fix selection dialog, approval/confirm dialogs, AI Setup dialog with model download, animated splash screen. Five startup steps (theme/fonts → settings → bridge → LLM → spec dump) run before the main window appears. CLI mode is preserved via `lil_bro.exe --terminal`.
+- **Stop button + global hotkeys** to cancel long-running benchmarks (Esc / Q / Return / Enter). Cancel signal routes through `Qt.DirectConnection` for reliable worker-thread wakeup, and the pipeline polls `_state.is_cancelled()` between phases.
+- **GUI-mode output sinks** for `formatting.py` (`set_output_sink`), `progress_bar.py` (`set_progress_sink`), and approval/confirm handler registries. CLI mode falls back to direct stdout writes; GUI mode routes through Qt signals into the output panel.
+- **`src/agent_tools/quick_status.py`** — fast registry/QSettings reads for dashboard tile initialization without a full pipeline run.
+- **`src/console_attach.py`** — Win32 console attach helper so `--terminal` cleanly attaches to the parent console or allocates a new one.
+
+### Fixed
+- **LHM sidecar startup on slow PCs and iGPUs** — readiness polling extended; partial-load conditions no longer flag as failures.
+- **Cinebench cancellation under GUI mode** — the worker thread now honors `_state.is_cancelled()` mid-run, matching CLI cancel behavior.
+- **Bundled-exe widget loading** — `'src.gui.widgets.status_bar_widget'` was missing from `lil_bro.spec` hiddenimports, causing the status bar to silently disappear in the bundled exe (the `try/except` in `app.py._on_finished` swallowed the `ImportError`).
+
+### Changed
+- **Terminal output formatting in the GUI output panel** — ANSI color codes are mapped to theme-aware hex colors; dividers and headers render at full panel width.
+- **`src/llm/action_proposer.py`** — `_FALLBACK` renamed to public `FALLBACK_PROPOSALS`; new `propose_for_check()` helper. Dashboard tiles consume the same proposal templates as the CLI pipeline, so fix descriptions stay consistent across surfaces.
+
+### Removed
+- Duplicate `_on_benchmark_started` function definition in `src/gui/app.py` (signal binding selected the second copy; first was dead code).
+- Stale "`_on_phase_changed = _on_benchmark_score`" alias + gravestone TODO comments in `src/gui/app.py` and `src/gui/signals.py`. The `phase_changed` signal now connects directly to `_on_benchmark_score`.
+- Redundant local `from PySide6.QtCore import QTimer` inside `Dashboard.set_monitor_data` (`QTimer` already imported at module scope).
+- Duplicate inline comment in `DashboardWorker.start`.
+
+### For contributors
+- See `docs/lil_bro Design System/` for the design system, font/color preview pages, and the React/HTML/CSS kit the PySide6 QSS is modeled after.
+- `lil_bro.spec` hiddenimports list now covers every module under `src/gui/widgets/`; per CLAUDE.md any new widget MUST be added there to avoid silent bundled-exe regressions.
+
+---
+
 ## [0.1.1.0] - 2026-05-03
 
 ### Fixed

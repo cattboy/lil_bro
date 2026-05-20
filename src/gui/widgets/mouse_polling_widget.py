@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 
+from src.gui.theme import repolish
 _SAMPLE_WINDOW_SEC = 5.0
 
 
@@ -102,9 +103,7 @@ class MousePollingWidget(QWidget):
     def _set_hz_sev(self, sev: str) -> None:
         """Set severity tone on the Hz label and re-polish so QSS applies."""
         self._hz_label.setProperty("sev", sev)
-        self._hz_label.style().unpolish(self._hz_label)
-        self._hz_label.style().polish(self._hz_label)
-
+        repolish(self._hz_label)
     def _set_tier(self, sev: str, label: str) -> None:
         """Set Hz-label tint AND status-label text+tint together.
 
@@ -116,9 +115,7 @@ class MousePollingWidget(QWidget):
         self._set_hz_sev(sev)
         self._status_lbl.setText(label)
         self._status_lbl.setProperty("sev", sev)
-        self._status_lbl.style().unpolish(self._status_lbl)
-        self._status_lbl.style().polish(self._status_lbl)
-
+        repolish(self._status_lbl)
     # ── Sampling control ───────────────────────────────────────────────
 
     def start_sampling(self) -> None:

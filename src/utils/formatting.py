@@ -320,4 +320,4 @@ def resize_console_window() -> None:
         # Re-acquire keyboard focus after the position change.
         user32.SetForegroundWindow(hwnd)
     except Exception:
-        pass
+        pass  # safe: ctypes user32 call may fail on non-Windows or restricted contexts

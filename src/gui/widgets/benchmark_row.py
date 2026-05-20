@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout
+from src.gui.theme import repolish
 
 
 class _BenchmarkCard(QFrame):
@@ -31,10 +32,7 @@ class _BenchmarkCard(QFrame):
     def set_value(self, value: str, tone: str = "norm") -> None:
         self._value.setText(value)
         self._value.setProperty("statTone", tone)
-        self._value.style().unpolish(self._value)
-        self._value.style().polish(self._value)
-
-
+        repolish(self._value)
 class BenchmarkRow(QFrame):
     """5-card strip showing Cinebench before/after scores in the output view.
 

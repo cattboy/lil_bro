@@ -26,6 +26,4 @@ class PipelineSignals(QObject):
     pipeline_finished = Signal()
     pipeline_failed = Signal(str, str, str)
     init_step = Signal(str, str)
-    # TODO: remove after run() is next rewritten — gravestone keeps the stale
-    # bridge.signals.phase_changed.connect(_on_phase_changed) line from crashing.
     phase_changed = Signal(int, str)

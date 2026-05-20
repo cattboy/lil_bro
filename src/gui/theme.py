@@ -319,7 +319,24 @@ def build_stylesheet() -> str:
         margin: 4px 12px;
     }}
 
-    /* --- Stat card tone variants ------------------------------------- */
+    /* --- Stat card tone variants -------------------------------------
+     * IMPORTANT: ''statTone'' and ''sev'' are distinct dynamic properties
+     * with non-overlapping purposes — do NOT merge them.
+     *
+     *   statTone in {{norm, warn, ok, cyan}}
+     *     Applied to dashboard stat cards (#dashboardCard, #cardValue).
+     *     Encodes value identity tone (the *kind* of stat the card shows),
+     *     not severity. ''norm'' = baseline border, ''cyan'' = accent identity,
+     *     ''warn''/''ok'' = visual emphasis.
+     *
+     *   sev in {{low, medium, high}}
+     *     Applied to polling widgets, fixSev badge, and severity-coded
+     *     status text. Encodes user-facing severity from the audit
+     *     pipeline (matches the fixSev / DESIGN.md semantic-color system).
+     *
+     * If a widget needs both (e.g. a card whose VALUE is severity-coded),
+     * use statTone for the card chrome and sev for the inner label.
+     */
     QFrame#dashboardCard[statTone="norm"] {{
         border: 1px solid {c["border_default"]};
     }}
@@ -374,7 +391,13 @@ def build_stylesheet() -> str:
     }}
 
     /* --- USB Polling widget ------------------------------------------ */
-    QFrame#pollWidget {{
+    /* Shared chrome — same border, background, padding for poll/monitor/empty cards.
+     * Inner labels (#pollLabel, #pollValue, #pollUnit, #pollStatus) are reused
+     * by both MonitorRefreshCard and the original polling widget, so only the
+     * frame selector needs widening. */
+    QFrame#pollWidget,
+    QFrame#monitorCard,
+    QFrame#monitorEmptyCard {{
         background-color: {c["surface"]};
         border: 1px solid {c["border_default"]};
         border-radius: 8px;
@@ -704,6 +727,18 @@ def build_stylesheet() -> str:
         color: {c["accent"]};
     }}
     """
+
+
+def repolish(widget) -> None:
+    """Re-apply QSS to a widget after a dynamic property change.
+
+    Qt does not refresh the stylesheet automatically when a property used in a
+    QSS selector (e.g. ``[sev="high"]``) changes at runtime — callers must ask
+    the style to re-evaluate. This wraps the unpolish/polish dance so widget
+    code can stay a single line.
+    """
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
 
 
 def load_fonts() -> None:

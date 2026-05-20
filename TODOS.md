@@ -7,16 +7,6 @@ Format: Priority | Effort (human / CC) | Context
 
 ## Open
 
-### T-001 — Future-proof formatting.py API for rich/GUI backend
-**Priority:** P2
-**Effort:** L human / M with CC
-**Why:** All `print_*` functions in `formatting.py` call `print()` directly and are tightly coupled to colorama. When the PyQt GUI arrives (planned, deferred), a GUI layer would need to intercept terminal output and display it in a widget instead. A `return_str=False` default param on each function enables this without changing any call sites.
-**How to apply:** Add `return_str: bool = False` param to all print_* functions. When `True`, return the formatted string instead of printing. The GUI backend calls them with `return_str=True`; the terminal path stays unchanged.
-**Blocked by:** PyQt GUI architecture decision (Phase 5).
-**Added:** 2026-03-24 (from /plan-ceo-review, Week 6 terminal UI redesign)
-
----
-
 ### T-006 — Observability & Instrumentation
 **Priority:** P3
 **Effort:** L human / L with CC
@@ -24,26 +14,6 @@ Format: Priority | Effort (human / CC) | Context
 **Fix:** Optional metric collection via `@instrument` decorator or a metrics registry.
 **Blocked by:** Nothing. Defer until codebase or team grows.
 **Added:** 2026-04-11 (merged from todo.md Issue 3.3)
-
----
-
-### T-009 — Decide: wire phase-row progress cards in GUI output view, or remove them
-**Priority:** P2 — **RESOLVED 2026-05-19**
-**Decision:** Remove PhaseRow, replace with live benchmark score cards.
-**What shipped:** `BenchmarkRow` (5 cards: BASELINE | POST-OPT | DELTA | CPU PEAK | STATUS) replaces `PhaseRow` in the output view. Cards update live via `benchmark_score_ready` signal emitted by `notify_benchmark_score()` after each Cinebench run. `phase_row.py`, `phase_card.py`, `test_phase_card.py` deleted. `test_benchmark_row.py` added (12 tests). STATUS flow: Pending → Running (pipeline starts) → Benchmarking (Cinebench subprocess active, via `benchmark_started` signal from `notify_benchmark_started()` in `cinebench.py`) → Running (score arrives) → Complete (pipeline finishes).
-**Cleanup debt:** `phase_changed = Signal(int, str)` remains in `PipelineSignals` and `_on_phase_changed` alias in `app.py` as deprecation gravestones (keep stale standalone connection line harmless). Remove both when `run()` is next rewritten.
-
----
-
-### T-010 — Verify `status_bar_widget` + `benchmark_row` hiddenimports in lil_bro.spec
-**Priority:** P3 (verification task)
-**Effort:** XS human / XS with CC
-**Why:** Per `CLAUDE.md`, modules under `src/gui/widgets/` lazily imported inside method bodies must be in `hiddenimports`. `benchmark_row` was added (replaced `phase_card`). `status_bar_widget` remains absent. T-009 is now resolved — `phase_row` question is moot.
-**Fix:** Run `python build.py` and smoke-test `dist/lil_bro.exe`. If BenchmarkRow or StatusBarWidget fails to render in the bundled exe, add the missing entry to `lil_bro.spec` hiddenimports:
-- `'src.gui.widgets.status_bar_widget',` after `splash`
-
-**Blocked by:** Nothing.
-**Added:** 2026-05-18 (updated 2026-05-19 after T-009 resolved)
 
 ---
 
@@ -89,7 +59,39 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
+### T-014 — Reconcile `phase_changed` signal naming and dual-signal handler
+**Priority:** P3
+**Effort:** S human / S with CC
+**Why:** During the cleanup PR (2026-05-20), the stale `_on_phase_changed` alias was inlined so `bridge.signals.phase_changed.connect(_on_benchmark_score)` is now wired directly. Two semantic concerns survive: (1) the signal name `phase_changed` (carries `(int, str)` phase index + label) does not match the handler name `_on_benchmark_score` (designed for benchmark scores); (2) `_on_benchmark_score` is now wired to BOTH `phase_changed` AND `benchmark_score_ready` — the same handler for two semantically distinct events. Likely a symptom of an incomplete refactor where phase-change rows were repurposed into benchmark-score cards.
+**Fix:** decide whether `phase_changed` should be emitting at all (if benchmark cards now own the entire status flow, the signal may be dead); if it stays, give it its own handler and drop the dual wiring. Verify by tracing all `phase_changed.emit(...)` callers (e.g., `src/gui/worker.py`, `src/pipeline/phases.py`).
+**Blocked by:** Nothing. Best done alongside any `run()` flattening (Phase C1 in cleanup plan).
+**Added:** 2026-05-20 (from PR #22 cleanup, A6 follow-up)
+
+---
+
+### T-015 — Wire dxdiag sound device extraction for volume mixer settings
+**Priority:** P4 (nice-to-have)
+**Effort:** S human / S with CC
+**Why:** `src/collectors/sub/dxdiag_dumper.py:38` has an orphan `## TODO` comment about extracting `SoundDevices` from the dxdiag XML for future Windows volume-mixer settings work. The XPath snippet is already drafted inline in the comment; the work is wiring it into the spec dict and adding downstream agent_tool support if/when volume mixer optimizations are scoped.
+**Fix:** uncomment the `"SoundDevices": [...]` line at `dxdiag_dumper.py:38`; thread the new key through `spec_dumper.get_dxdiag()`; add a downstream check or leave as a passive collector. Surface in `full_specs.json` for now; consumers can pick it up later.
+**Blocked by:** No agent_tools currently target Windows volume mixer; defer until that scope arrives.
+**Added:** 2026-05-20 (surfaced from inline TODO during PR #22 cleanup)
+
+---
+
 ## Completed
+
+### T-010 — `status_bar_widget` + `benchmark_row` hiddenimports verified in lil_bro.spec
+**Completed**: 2026-05-20
+`benchmark_row` was already present; `status_bar_widget` was missing — added to `lil_bro.spec` hiddenimports list alphabetically between `splash` and `thermal_chart` during PR #22 cleanup. Without this, the bundled exe silently dropped the status bar because `app.py._on_finished` swallowed the `ImportError`.
+
+---
+
+### T-001 — Future-proof formatting.py API for rich/GUI backend
+**Completed**: 2026-05-10 (during PR #22 — different solution shipped)
+The original proposal was `return_str=False` param on every `print_*` function. PR #22 implemented a different pattern with equivalent effect: a module-level **output sink registry** in `src/utils/formatting.py` (`set_output_sink`, `notify_*` handlers) plus a parallel progress sink in `src/utils/progress_bar.py`. When the GUI installs a sink, all `print_*` calls route through it into Qt signals → output panel. When no sink is installed (CLI mode), behavior is unchanged. No call sites needed updating — handlers are looked up at call time. Closes the underlying need.
+
+---
 
 ### T-008 — Wire `--debug` flag through to GUI + add structured GUI debug logger
 **Completed**: 2026-05-10

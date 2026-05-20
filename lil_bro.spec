@@ -85,6 +85,7 @@ a = Analysis(
         'src.gui.widgets.output_panel',
         'src.gui.widgets.benchmark_row',
         'src.gui.widgets.splash',
+        'src.gui.widgets.status_bar_widget',
         'src.gui.widgets.thermal_chart',
         'src.gui.windows.main_window',
         'src.agent_tools.mouse',
