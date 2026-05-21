@@ -51,55 +51,46 @@
 
 ## Serena MCP Tools
 
-Serena is started manually by the user before each session. **Using built-in tools (Read, Grep, Glob, Edit) on code files when Serena is available is a mistake.** Treat it as a hard rule, not a preference.
+Serena is started manually by the user before each session. A PreToolUse hook (`.claude/hooks/serena_guard.py`) **enforces** the split below: structural edits go through Serena's symbol tools; the built-in tools handle what Serena can't target. A blocked call always means "wrong tool — switch."
 
-### Decision gate — run this check before every tool call on a `.py` file:
+### Decision gate — before any tool call on a `.py` file
 
-> **"Does a Serena tool cover this task?"**
-> If YES → use Serena. STOP. Do not call Read/Grep/Glob/Edit.
-> If NO → proceed with the built-in tool.
+| What you're doing | Use | Hook |
+|---|---|---|
+| Edit a function / class / method body | `mcp__serena__replace_symbol_body`, `insert_after_symbol`, `insert_before_symbol`, `rename_symbol` | **blocks** built-in `Edit` |
+| Edit a module-level line — import, constant, `__all__`, module docstring | built-in **`Edit`** | allows it (not a symbol) |
+| Search code / find a symbol / find callers | `mcp__serena__search_for_pattern`, `find_symbol`, `find_referencing_symbols` | **blocks** `Grep`/`Glob` on `.py` |
+| Module or symbol overview (exploring) | `mcp__serena__get_symbols_overview`, `find_symbol` | guidance only |
+| Read exact text / whole-file context | built-in **`Read`** | allows it |
+| Create a new `.py` file | built-in **`Write`** | allows it |
+| Overwrite an existing `.py` wholesale | edit it instead | **blocks** `Write` on existing `.py` |
+| Refactor via the shell (`sed -i`, redirects) | Serena symbol tools | **blocks** in-place `.py` shell edits |
+| Persist project knowledge | `mcp__serena__write_memory` / `read_memory` | — |
 
-| Task | MUST use Serena | NEVER use |
-|------|----------------|-----------|
-| Find a function / class / symbol | `mcp__serena__find_symbol` | Grep |
-| Search code by pattern | `mcp__serena__search_for_pattern` | Grep |
-| Get file/module overview | `mcp__serena__get_symbols_overview` | Read |
-| Browse project structure | `mcp__serena__list_dir` | Glob |
-| Locate a file | `mcp__serena__find_file` | Glob |
-| Edit a symbol body | `mcp__serena__replace_symbol_body` | Edit |
-| Cross-file refactoring | Serena symbol tools | Grep + Edit |
-| Find all callers of a symbol | `mcp__serena__find_referencing_symbols` | Grep |
-| Rename a symbol project-wide | `mcp__serena__rename_symbol` | sed / Edit |
-| Persist project knowledge | `mcp__serena__write_memory` / `read_memory` | Memory files |
+**Rule of thumb:** is the target a *symbol* (function, class, method)? → Serena. Is it a *non-symbol line* (import, module constant) or plain-text / whole-file work? → built-in `Edit`/`Read`/`Write`. The hook draws the same line with `ast`, so it and this table never disagree.
+
+### Editing — symbol vs. module level
+
+- **Symbol body** (anything inside a `def`/`class`): `mcp__serena__replace_symbol_body`, or `insert_after_symbol` / `insert_before_symbol` to add adjacent code. The hook blocks the built-in `Edit` here.
+- **Module level** (imports, module constants, `__all__`, the module docstring): built-in `Edit`. Serena's symbol tools target whole symbols, not individual lines, so non-symbol edits use `Edit`. The hook classifies the edit site with `ast` and lets `Edit` through.
+
+### Reading code
+
+Built-in `Read` on `.py` is allowed — and is required before any built-in `Edit` (the Edit tool refuses to run on an unread file, and the `claude-code` context excludes Serena's `read_file`). For *exploring* code, still prefer Serena: `get_symbols_overview` for a module's shape, `find_symbol` (with `include_body`) for one symbol, `search_for_pattern` for everything else. Don't `Read` a whole file just to locate one function.
 
 ### Creating new Python files
 
-Use the built-in **Write** tool for new `.py` files. Serena's `claude-code` context deliberately excludes `create_text_file` by upstream design — "tools that would duplicate Claude Code's built-in capabilities." The guard hook carves out `Write` on paths that do not yet exist.
-
-Flow: `Write` creates the file → switch to Serena symbol tools for all subsequent reads and edits.
+Use the built-in **Write** tool for new `.py` files — the `claude-code` context excludes `create_text_file` ("tools that would duplicate Claude Code's built-in capabilities"). The hook carves out `Write` on paths that do not yet exist and blocks it on existing `.py` files (a whole-file overwrite can't be scoped to a symbol).
 
 ### When NOT to use Serena
 
-Serena's backend here (Pyright via SolidLSP) indexes **only Python**. For markdown, JSON, YAML, TOML, XML, `.txt`, config, logs, images — use built-ins (`Read`, `Grep`, `Glob`, `Edit`, `Write`, `Bash`) directly. Routing a `.md` read through `mcp__serena__search_for_pattern` works but is wasted effort.
-
-Quick check before any tool call: does the target file end in `.py`?
-- No → built-ins.
-- Yes, creating new → `Write`.
-- Yes, existing → Serena (see table above).
+Serena's backend here (Pyright via SolidLSP) indexes **only Python**. For markdown, JSON, YAML, TOML, XML, `.txt`, config, logs, images — use built-ins directly. Same for any `.py` under `.claude/` (hooks, skills): Serena doesn't index that tree, and the hook carves it out.
 
 ### Schema loading
 Serena tools are deferred — their schemas are not pre-loaded. Before calling any `mcp__serena__*` tool, load its schema first:
 ```
 ToolSearch: select:mcp__serena__find_symbol   (or whichever tool you need)
 ```
-
-### The only valid exceptions
-Built-in tools are allowed **only** when:
-1. The file is non-code: markdown, config, logs, XML, `.txt`, `.json`, `.toml`
-2. Serena is confirmed not running (note this explicitly before falling back)
-3. The target file is outside the project root
-
-If you catch yourself reaching for Read/Grep/Glob on a `.py` file — stop and use Serena instead.
 
 ---
 
