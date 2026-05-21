@@ -11,8 +11,10 @@ panel (Step 6), the dashboard (Step 10), and the thermal chart (Step
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices
+from typing import TYPE_CHECKING
+
+from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -26,19 +28,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-
 from src.gui.theme import repolish
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.gui.settings import Settings
-
-
-from PySide6.QtWidgets import QProgressBar
-
-from PySide6.QtCore import Signal
-from PySide6.QtGui import QKeySequence, QShortcut
-
 
 
 class MainWindow(QMainWindow):
@@ -194,12 +187,12 @@ class MainWindow(QMainWindow):
             state = "active" if btn is active_btn else ""
             btn.setProperty("navState", state)
             repolish(btn)
+
     # ── Content ────────────────────────────────────────────────────────
 
     def _build_content(self) -> QStackedWidget:
         from src.gui.widgets.dashboard import Dashboard
-        from src.gui.widgets.output_panel import OutputPanel
-        from src.gui.widgets.benchmark_row import BenchmarkRow, LiveStatRow
+        from src.gui.widgets.output_view import OutputView
 
         stack = QStackedWidget()
         stack.setAccessibleName("Content area")
@@ -209,60 +202,19 @@ class MainWindow(QMainWindow):
         stack.addWidget(self._dashboard)
 
         # ── Output / Pipeline view ───────────────────────────────────
-        output_page = QWidget()
-        output_page.setObjectName("outputView")
-        output_layout = QVBoxLayout(output_page)
-        output_layout.setContentsMargins(0, 0, 0, 0)
-        output_layout.setSpacing(0)
+        self._output_view = OutputView()
+        # Re-export the sub-widgets app.py and update_benchmark_score drive,
+        # so external access (main._benchmark_row, main._output_panel, …)
+        # stays unchanged after the OutputView extraction.
+        self._output_title = self._output_view._output_title
+        self._phase_pill = self._output_view._phase_pill
+        self._live_stat_row = self._output_view._live_stat_row
+        self._benchmark_row = self._output_view._benchmark_row
+        self._progress_label = self._output_view._progress_label
+        self._progress_bar = self._output_view._progress_bar
+        self._output_panel = self._output_view._output_panel
+        stack.addWidget(self._output_view)
 
-        # Header row
-        output_header = QFrame()
-        output_header.setObjectName("outputHeader")
-        hdr_row = QHBoxLayout(output_header)
-        hdr_row.setContentsMargins(20, 12, 20, 12)
-
-        self._output_title = QLabel("Pipeline")
-        self._output_title.setObjectName("outputTitle")
-        hdr_row.addWidget(self._output_title)
-        hdr_row.addStretch()
-
-        self._phase_pill = QLabel("○ Idle")
-        self._phase_pill.setObjectName("sbLabel")
-        hdr_row.addWidget(self._phase_pill)
-
-        output_layout.addWidget(output_header)
-
-        # Live system stats — realtime CPU/GPU/RAM cards, updated while
-        # (and after) the pipeline runs by LiveStatRow's own poll thread.
-        self._live_stat_row = LiveStatRow()
-        output_layout.addWidget(self._live_stat_row)
-
-        # Benchmark score row
-        self._benchmark_row = BenchmarkRow()
-        output_layout.addWidget(self._benchmark_row)
-
-        # Progress bar (hidden until pipeline emits progress_changed)
-        self._progress_label = QLabel("")
-        self._progress_label.setObjectName("progressLabel")
-        self._progress_label.setVisible(False)
-        self._progress_label.setContentsMargins(20, 4, 20, 0)
-        output_layout.addWidget(self._progress_label)
-
-        self._progress_bar = QProgressBar()
-        self._progress_bar.setRange(0, 100)
-        self._progress_bar.setValue(0)
-        self._progress_bar.setTextVisible(False)
-        self._progress_bar.setFixedHeight(4)
-        self._progress_bar.setAccessibleName("Pipeline progress")
-        self._progress_bar.setVisible(False)
-        self._progress_bar.setContentsMargins(20, 0, 20, 0)
-        output_layout.addWidget(self._progress_bar)
-
-        # Output panel with toolbar
-        self._output_panel = OutputPanel()
-        output_layout.addWidget(self._output_panel, stretch=1)
-
-        stack.addWidget(output_page)
         stack.setCurrentIndex(self.DASHBOARD_INDEX)
         return stack
 
@@ -303,7 +255,6 @@ class MainWindow(QMainWindow):
         repolish(self._run_button)
         self._stop_button.setVisible(running)
 
-
     def _on_stop_clicked(self) -> None:
         """Emit ``stop_requested`` only while the pipeline is running.
 
@@ -335,11 +286,3 @@ class MainWindow(QMainWindow):
         if self._settings is not None:
             self._settings.save_geometry(self)
         super().closeEvent(event)
-
-
-def _status_text() -> str:
-    try:
-        from src._version import __version__ as version
-    except Exception:
-        version = "?"
-    return f"lil_bro v{version}  ·  ready"
