@@ -1,9 +1,9 @@
 """Glance dashboard for the home view.
 
 Stat cards (CPU usage, CPU temp, GPU temp, RAM used), a temperature
-chart and a USB-polling widget. ``SystemStatsWorker`` polls system
-stats every 5 seconds on a dedicated QThread and feeds both this view
-and the optimization view's ``LiveStatRow`` (via the ``stats_ready``
+chart and a USB-polling widget. ``SystemStatsWorker`` (in ``src/gui/worker.py``)
+polls system stats every 5 seconds on a dedicated QThread and feeds both this
+view and the optimization view's ``LiveStatRow`` (via the ``stats_ready``
 signal), so both always display identical values.
 
 The worker uses only the pipeline-safe data subset (psutil + a single
@@ -13,154 +13,19 @@ optimization pipeline.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal
+from PySide6.QtCore import QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QVBoxLayout,
     QWidget,
 )
 
-from src.gui.theme import repolish
-
-
-_POLL_INTERVAL_MS = 5000
-from PySide6.QtWidgets import QHBoxLayout, QPushButton  # noqa: E402
-
-# Top-level import so PyInstaller's static analyzer picks up both card classes
-# (the previous lazy import inside set_monitor_data could be missed by modulegraph).
-from src.gui.widgets.monitor_refresh_card import MonitorRefreshCard, MonitorEmptyCard  # noqa: E402
-
-
-_CARDS = (
-    ("cpu_usage", "CPU USAGE", "norm"),
-    ("cpu_temp",  "CPU TEMP",  "warn"),
-    ("gpu_temp",  "GPU TEMP",  "ok"),
-    ("ram_used",  "RAM USED",  "cyan"),
-)
-
-
-class SystemStatsWorker(QObject):
-    """Polls system stats at 5-sec cadence on its own QThread.
-
-    Single shared poller for both the Dashboard and the optimization view's
-    ``LiveStatRow``. Uses only the pipeline-safe data subset -- psutil, a single
-    ``fetch_snapshot()`` LHM read, and a light QSettings mouse-Hz read -- so it
-    runs continuously (including during the optimization pipeline) without
-    contending for registry / WMI / subprocess access.
-    """
-
-    snapshot_ready = Signal(dict)
-
-    def __init__(self, parent: QObject | None = None) -> None:
-        super().__init__(parent)
-        self._timer: QTimer | None = None
-
-    def start(self) -> None:
-        from src.utils.debug_logger import get_debug_logger
-        log = get_debug_logger()
-        log.info("SystemStatsWorker.start: entering on thread %s",
-                 QThread.currentThread().objectName() or "<unnamed>")
-        try:
-            import psutil
-            psutil.cpu_percent(interval=None)  # prime baseline so first real tick isn't 0%
-        except Exception:
-            pass  # safe: psutil prime is best-effort; first tick will just report 0%
-        if self._timer is None:
-            self._timer = QTimer()
-            self._timer.timeout.connect(self._tick)
-            self._timer.start(_POLL_INTERVAL_MS)
-        log.info("SystemStatsWorker.start: timer armed, firing first tick now")
-        self._tick()  # immediate first sample
-
-    def _tick(self) -> None:
-        from src.utils.debug_logger import get_debug_logger
-        log = get_debug_logger()
-        snap: dict = {}
-
-        # CPU% + RAM via psutil -- fast, non-blocking, no registry/WMI contention.
-        try:
-            import psutil
-            snap["cpu_usage"] = f"{psutil.cpu_percent(interval=None):.0f}%"
-            vm = psutil.virtual_memory()
-            snap["ram_used"] = f"{vm.used / 1_073_741_824:.1f} GB"
-        except Exception:
-            snap.setdefault("cpu_usage", "—")
-            snap.setdefault("ram_used", "—")
-
-        # Last-measured mouse Hz -- a light QSettings read (no system registry
-        # or subprocess), safe to run concurrently with the pipeline.
-        try:
-            from src.agent_tools.quick_status import _read_mouse_hz
-            snap["mouse_hz"] = _read_mouse_hz()
-        except Exception:
-            pass  # safe: mouse-Hz read is best-effort; tile keeps its own fallback
-
-        # Thermal data from fetch_snapshot -- the same source the chart uses, so
-        # always accurate. fetch_snapshot() returns {} when LHM is unreachable,
-        # leaving the temp cards at "—".
-        therm: dict = {}
-        try:
-            from src.agent_tools.thermal_guidance import derive_cpu_temp, derive_gpu_temp
-            from src.benchmarks.thermal_monitor import fetch_snapshot
-            therm = fetch_snapshot()
-            if therm:
-                cpu_c_f = derive_cpu_temp(therm)
-                gpu_c_f = derive_gpu_temp(therm)
-                if cpu_c_f is not None:
-                    snap["_cpu_c"] = cpu_c_f
-                    snap["cpu_temp"] = f"{int(round(cpu_c_f))}°C"
-                if gpu_c_f is not None:
-                    snap["_gpu_c"] = gpu_c_f
-                    snap["gpu_temp"] = f"{int(round(gpu_c_f))}°C"
-        except Exception as exc:
-            log.warning("SystemStatsWorker._tick: thermal fetch failed: %s", exc, exc_info=True)
-
-        # Diagnostic INFO on first 3 ticks and every 12th (≈ 1 min) -- keeps
-        # the log compact but proves the polling loop is alive and surfaces
-        # what fetch_snapshot returned vs. what derive_*_temp extracted.
-        self._tick_count = getattr(self, "_tick_count", 0) + 1
-        if self._tick_count <= 3 or self._tick_count % 12 == 0:
-            sample_keys = list(therm.keys())[:3] if therm else []
-            log.info(
-                "SystemStatsWorker._tick #%d: therm_keys=%d sample=%s cpu_c=%s gpu_c=%s cpu_temp=%s",
-                self._tick_count,
-                len(therm),
-                sample_keys,
-                snap.get("_cpu_c"),
-                snap.get("_gpu_c"),
-                snap.get("cpu_temp"),
-            )
-
-        self.snapshot_ready.emit(snap)
-
-
-class _DashboardCard(QFrame):
-    """One tile in the 4-col stat grid. Supports tone variants."""
-
-    def __init__(self, label: str, tone: str = "norm", parent=None) -> None:
-        super().__init__(parent)
-        self.setObjectName("dashboardCard")
-        self.setProperty("statTone", tone)
-        self.setAccessibleName(f"Dashboard card: {label}")
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(4)
-
-        self._label = QLabel(label)
-        self._label.setObjectName("cardLabel")
-        layout.addWidget(self._label)
-
-        self._value = QLabel("—")
-        self._value.setObjectName("cardValue")
-        self._value.setProperty("statTone", tone)
-        self._value.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        layout.addWidget(self._value)
-
-    def set_value(self, text: str) -> None:
-        self._value.setText(text)
+from src.gui.widgets.monitor_refresh_card import MonitorEmptyCard, MonitorRefreshCard
+from src.gui.widgets.mouse_poll_card import MousePollCard
+from src.gui.widgets.stat_card import STAT_CARDS, StatCard
 
 
 class Dashboard(QWidget):
@@ -190,9 +55,9 @@ class Dashboard(QWidget):
         grid.setHorizontalSpacing(12)
         grid.setVerticalSpacing(12)
 
-        self._cards: dict[str, _DashboardCard] = {}
-        for col, (key, label, tone) in enumerate(_CARDS):
-            card = _DashboardCard(label, tone)
+        self._cards: dict[str, StatCard] = {}
+        for col, (key, label, tone) in enumerate(STAT_CARDS):
+            card = StatCard(label, tone)
             self._cards[key] = card
             grid.addWidget(card, 0, col)
 
@@ -231,54 +96,9 @@ class Dashboard(QWidget):
 
         outer.addWidget(chart_wrap)
 
-        # ── Mouse polling widget ────────────────────────────────────────
-        poll_frame = QFrame()
-        poll_frame.setObjectName("pollWidget")
-        poll_h = QHBoxLayout(poll_frame)
-        poll_h.setContentsMargins(20, 16, 20, 16)
-
-        poll_left = QVBoxLayout()
-        poll_left.setSpacing(4)
-
-        poll_label = QLabel("MOUSE POLLING")
-        poll_label.setObjectName("pollLabel")
-        poll_left.addWidget(poll_label)
-
-        hz_row = QHBoxLayout()
-        hz_row.setSpacing(4)
-        self._poll_val = QLabel("—")
-        self._poll_val.setObjectName("pollValue")
-        self._poll_unit = QLabel("Hz")
-        self._poll_unit.setObjectName("pollUnit")
-        hz_row.addWidget(self._poll_val)
-        hz_row.addWidget(self._poll_unit)
-        hz_row.addStretch()
-        poll_left.addLayout(hz_row)
-
-        self._poll_status = QLabel("Not measured")
-        self._poll_status.setObjectName("pollStatus")
-        poll_left.addWidget(self._poll_status)
-
-        poll_h.addLayout(poll_left)
-        poll_h.addStretch()
-
-        self._poll_btn = QPushButton("Test Polling")
-        self._poll_btn.setObjectName("secondary")
-        self._poll_btn.setFixedWidth(120)
-        self._poll_btn.clicked.connect(self._manual_poll)
-        poll_h.addWidget(self._poll_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
-
-        outer.addWidget(poll_frame)
-
-        # Background QThread holders for the manual mouse-poll dispatch.
-        # check_polling_rate() blocks for ~2s, so it cannot run on the
-        # GUI thread. Reentry-guarded in _manual_poll().
-        self._mouse_poll_thread: QThread | None = None
-        self._mouse_poll_worker = None
-        # Once a manual measurement has run, the periodic snapshot tick
-        # must not clobber the result with "Not measured" (the quick-status
-        # fallback when no live measurement is available).
-        self._mouse_manually_measured: bool = False
+        # ── Mouse polling card ──────────────────────────────────────────
+        self._mouse_poll_card = MousePollCard(parent=self)
+        outer.addWidget(self._mouse_poll_card)
 
         # ── Monitor refresh PRE-ALLOCATED slots ───────────────────────
         # Created here during Dashboard.__init__ alongside the stat tiles
@@ -307,136 +127,13 @@ class Dashboard(QWidget):
         outer.addStretch(1)
 
         self._worker_thread: QThread | None = None
-        self._worker: SystemStatsWorker | None = None
-
-    # ── USB polling ────────────────────────────────────────────────────
-
-    def _manual_poll(self) -> None:
-        """Dispatch ``check_polling_rate()`` on a background QThread.
-
-        The probe blocks ~2s sampling cursor deltas — calling it on the
-        GUI thread would freeze the dashboard. Reentry-guarded so rapid
-        button clicks don't spawn multiple workers.
-        """
-        from src.utils.debug_logger import get_debug_logger
-        log = get_debug_logger()
-
-        if self._mouse_poll_thread is not None:
-            log.info("Dashboard._manual_poll: already running, ignoring click")
-            return
-
-        log.info("Dashboard._manual_poll: dispatching MousePollWorker")
-        self._poll_btn.setEnabled(False)
-        self._poll_status.setText("Measuring (2s)… MOVE YOUR MOUSE AROUND!")
-        self._poll_status.setToolTip("")
-        # Clear any prior sev so "Measuring…" doesn't inherit the stale
-        # coral/amber/mint of the previous result — would read as a tier
-        # indicator that no longer reflects the truth.
-        self._set_poll_sev("")
-
-        from src.gui.worker import _MousePollWorker
-        thread = QThread(self)
-        thread.setObjectName("MousePoll")
-        worker = _MousePollWorker()
-        worker.moveToThread(thread)
-
-        def _on_mouse_done(result: dict) -> None:
-            from src.llm.action_proposer import propose_for_check
-            hz = int(result.get("current_hz", 0) or 0)
-            status = result.get("status", "OK")
-            log.info(
-                "Dashboard._manual_poll: result hz=%d status=%s",
-                hz, status,
-            )
-
-            self._mouse_manually_measured = True
-            self._poll_val.setText(str(hz) if hz else "—")
-            if status == "ERROR":
-                self._poll_status.setText("Measurement failed")
-                self._poll_status.setToolTip("")
-                _sev = "high"
-            elif hz >= 1000:
-                self._poll_status.setText("Excellent — optimal for gaming")
-                self._poll_status.setToolTip("")
-                _sev = "low"
-            elif hz >= 500:
-                self._poll_status.setText("Acceptable — 1000Hz preferred")
-                self._poll_status.setToolTip("")
-                _sev = "medium"
-            else:
-                # FAIL tier — canonical text from FALLBACK_PROPOSALS, full
-                # explanation on hover. OK tiers above keep their live
-                # commentary (no FAIL → no template, by design).
-                proposal = propose_for_check(
-                    "mouse_polling",
-                    {"current_hz": hz, "threshold_hz": 500},
-                )
-                self._poll_status.setText(proposal["proposed_action"])
-                self._poll_status.setToolTip(proposal["explanation"])
-                _sev = "high"
-            self._set_poll_sev(_sev)
-
-            self._poll_btn.setEnabled(True)
-            thread.quit()
-
-        worker.finished.connect(_on_mouse_done)
-        thread.started.connect(worker.run)
-        thread.finished.connect(worker.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(lambda: setattr(self, "_mouse_poll_thread", None))
-        thread.finished.connect(lambda: setattr(self, "_mouse_poll_worker", None))
-
-        self._mouse_poll_thread = thread
-        self._mouse_poll_worker = worker
-        thread.start()
-
-    def _set_poll_sev(self, sev: str) -> None:
-        """Set severity tone on the mouse-poll Hz value AND status label.
-
-        Both labels use objectNames `pollValue` / `pollStatus` which have
-        `[sev="low|medium|high"]` QSS rules in theme.py. Re-polish both
-        unconditionally so attribute selectors re-evaluate.
-
-        sev: "low" (mint) | "medium" (amber) | "high" (coral) | "" (neutral)
-        """
-        self._poll_val.setProperty("sev", sev)
-        self._poll_status.setProperty("sev", sev)
-        repolish(self._poll_val)
-        repolish(self._poll_status)
-    def _update_poll_display(self, hz_str: str) -> None:
-        from src.llm.action_proposer import propose_for_check
-        try:
-            hz = int(float(hz_str.replace(" Hz", "").replace("Hz", "")))
-            self._poll_val.setText(str(hz))
-            if hz >= 1000:
-                self._poll_status.setText("Excellent")
-                self._poll_status.setToolTip("")
-                _sev = "low"
-            elif hz >= 500:
-                self._poll_status.setText("Good")
-                self._poll_status.setToolTip("")
-                _sev = "medium"
-            else:
-                # FAIL tier — pull canonical text from FALLBACK_PROPOSALS
-                # (single source of truth shared with pipeline approval flow).
-                proposal = propose_for_check(
-                    "mouse_polling",
-                    {"current_hz": hz, "threshold_hz": 500},
-                )
-                self._poll_status.setText(proposal["proposed_action"])
-                self._poll_status.setToolTip(proposal["explanation"])
-                _sev = "high"
-            self._set_poll_sev(_sev)
-        except (ValueError, AttributeError):
-            self._poll_val.setText("—")
-            self._poll_status.setText("Not measured")
-            self._poll_status.setToolTip("")
-            self._set_poll_sev("")
+        self._worker = None  # SystemStatsWorker — lazily created in start_polling()
 
     # ── Polling lifecycle ──────────────────────────────────────────────
 
     def start_polling(self) -> None:
         from src.utils.debug_logger import get_debug_logger
+        from src.gui.worker import SystemStatsWorker
         log = get_debug_logger()
         if self._worker is not None:
             log.info("Dashboard.start_polling: already running, skipping")
@@ -481,16 +178,8 @@ class Dashboard(QWidget):
             )
         for key, card in self._cards.items():
             card.set_value(str(snapshot.get(key, "—")))
-        # Mouse polling tile is owned by the manual "Test Polling" button
-        # (which dispatches _MousePollWorker via _manual_poll). The periodic
-        # snapshot only carries a cached last-measurement for mouse_hz, which
-        # would clobber a real measurement — so only let the periodic tick
-        # update the tile *before* the first manual measurement, and only
-        # with a parseable Hz value.
-        if not self._mouse_manually_measured:
-            hz_str = snapshot.get("mouse_hz", "")
-            if hz_str and hz_str not in ("—", "Not measured"):
-                self._update_poll_display(hz_str)
+        # Mouse polling tile owns its own manual-measurement guard.
+        self._mouse_poll_card.apply_snapshot(snapshot)
         # Feed thermal chart
         cpu_c = snapshot.get("_cpu_c")
         gpu_c = snapshot.get("_gpu_c")
@@ -520,6 +209,23 @@ class Dashboard(QWidget):
             self.layout() is self._outer_layout,
         )
 
+        self._rebuild_monitor_cards(displays)
+
+        # Force layout + style recompute (belt-and-suspenders)
+        self.updateGeometry()
+        if self.layout() is not None:
+            self.layout().activate()
+        self._monitor_card_slot.ensurePolished()
+        self._monitor_empty_slot.ensurePolished()
+
+        self._log_geometry("immediate")
+        QTimer.singleShot(500, self, lambda: self._log_geometry("deferred"))
+
+    def _rebuild_monitor_cards(self, displays: list[dict]) -> None:
+        """Show/hide the pre-allocated slots and (re)build extras for 2+ monitors."""
+        from src.utils.debug_logger import get_debug_logger
+        log = get_debug_logger()
+
         # Tear down extras from prior calls (slots survive)
         for extra in self._monitor_cards:
             self._outer_layout.removeWidget(extra)
@@ -530,57 +236,51 @@ class Dashboard(QWidget):
             self._monitor_card_slot.hide()
             self._monitor_empty_slot.show()
             log.info("Dashboard: showing pre-allocated MonitorEmptyCard slot")
-        else:
-            self._monitor_empty_slot.hide()
-            self._monitor_card_slot.set_display(displays[0])
-            self._monitor_card_slot.show()
-            log.info("Dashboard: showing pre-allocated MonitorRefreshCard slot for %s",
-                     displays[0].get("device"))
+            return
 
-            # Extras (displays 2..N) — dynamic. Use indexOf(slot) so we're
-            # position-independent even if other widgets shift around.
-            base_idx = self._outer_layout.indexOf(self._monitor_card_slot)
-            for offset, d in enumerate(displays[1:], start=1):
-                card = MonitorRefreshCard(parent=self)
-                card.set_display(d)
-                card.fix_requested.connect(self.monitor_fix_requested)
-                self._outer_layout.insertWidget(base_idx + offset, card)
-                if card.parentWidget() is not self:
-                    card.setParent(self)
-                self._monitor_cards.append(card)
-                log.info("Dashboard: extra card[%d] %s parent=%s",
-                         offset, d.get("device"),
-                         type(card.parentWidget()).__name__ if card.parentWidget() else "None")
+        self._monitor_empty_slot.hide()
+        self._monitor_card_slot.set_display(displays[0])
+        self._monitor_card_slot.show()
+        log.info("Dashboard: showing pre-allocated MonitorRefreshCard slot for %s",
+                 displays[0].get("device"))
 
-        # Force layout + style recompute (belt-and-suspenders)
-        self.updateGeometry()
-        if self.layout() is not None:
-            self.layout().activate()
-        self._monitor_card_slot.ensurePolished()
-        self._monitor_empty_slot.ensurePolished()
+        # Extras (displays 2..N) — dynamic. Use indexOf(slot) so we're
+        # position-independent even if other widgets shift around.
+        base_idx = self._outer_layout.indexOf(self._monitor_card_slot)
+        for offset, d in enumerate(displays[1:], start=1):
+            card = MonitorRefreshCard(parent=self)
+            card.set_display(d)
+            card.fix_requested.connect(self.monitor_fix_requested)
+            self._outer_layout.insertWidget(base_idx + offset, card)
+            if card.parentWidget() is not self:
+                card.setParent(self)
+            self._monitor_cards.append(card)
+            log.info("Dashboard: extra card[%d] %s parent=%s",
+                     offset, d.get("device"),
+                     type(card.parentWidget()).__name__ if card.parentWidget() else "None")
 
-        def _log_geometry(tag: str) -> None:
-            try:
-                for slot_name, c in (("slot_card", self._monitor_card_slot),
-                                     ("slot_empty", self._monitor_empty_slot)):
-                    log.info(
-                        "Dashboard[%s]: %s sz=%dx%d hint=%dx%d visible=%s hidden=%s parent=%s",
-                        tag, slot_name,
-                        c.size().width(), c.size().height(),
-                        c.sizeHint().width(), c.sizeHint().height(),
-                        c.isVisible(), c.isHidden(),
-                        type(c.parentWidget()).__name__ if c.parentWidget() else "None",
-                    )
-                for i, c in enumerate(self._monitor_cards):
-                    log.info(
-                        "Dashboard[%s]: extra[%d] %s sz=%dx%d visible=%s parent=%s",
-                        tag, i, type(c).__name__,
-                        c.size().width(), c.size().height(),
-                        c.isVisible(),
-                        type(c.parentWidget()).__name__ if c.parentWidget() else "None",
-                    )
-            except Exception as exc:
-                log.warning("Dashboard: geometry-log[%s] failed: %s", tag, exc)
-
-        _log_geometry("immediate")
-        QTimer.singleShot(500, self, lambda: _log_geometry("deferred"))
+    def _log_geometry(self, tag: str) -> None:
+        """Diagnostic dump of monitor-card geometry / parenting state."""
+        from src.utils.debug_logger import get_debug_logger
+        log = get_debug_logger()
+        try:
+            for slot_name, c in (("slot_card", self._monitor_card_slot),
+                                 ("slot_empty", self._monitor_empty_slot)):
+                log.info(
+                    "Dashboard[%s]: %s sz=%dx%d hint=%dx%d visible=%s hidden=%s parent=%s",
+                    tag, slot_name,
+                    c.size().width(), c.size().height(),
+                    c.sizeHint().width(), c.sizeHint().height(),
+                    c.isVisible(), c.isHidden(),
+                    type(c.parentWidget()).__name__ if c.parentWidget() else "None",
+                )
+            for i, c in enumerate(self._monitor_cards):
+                log.info(
+                    "Dashboard[%s]: extra[%d] %s sz=%dx%d visible=%s parent=%s",
+                    tag, i, type(c).__name__,
+                    c.size().width(), c.size().height(),
+                    c.isVisible(),
+                    type(c.parentWidget()).__name__ if c.parentWidget() else "None",
+                )
+        except Exception as exc:
+            log.warning("Dashboard: geometry-log[%s] failed: %s", tag, exc)

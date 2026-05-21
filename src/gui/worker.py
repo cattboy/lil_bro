@@ -29,7 +29,10 @@ from __future__ import annotations
 import traceback
 from typing import Any
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QThread, QTimer, Signal
+
+# SystemStatsWorker poll cadence — the shared dashboard / LiveStatRow stats feed.
+_POLL_INTERVAL_MS = 5000
 
 
 class PipelineWorker(QObject):
@@ -150,3 +153,98 @@ class RevertWorker(QObject):
             self.revert_failed.emit(type(exc).__name__, str(exc), traceback.format_exc())
             return
         self.revert_finished.emit()
+
+
+class SystemStatsWorker(QObject):
+    """Polls system stats at 5-sec cadence on its own QThread.
+
+    Single shared poller for both the Dashboard and the optimization view's
+    ``LiveStatRow``. Uses only the pipeline-safe data subset -- psutil, a single
+    ``fetch_snapshot()`` LHM read, and a light QSettings mouse-Hz read -- so it
+    runs continuously (including during the optimization pipeline) without
+    contending for registry / WMI / subprocess access.
+    """
+
+    snapshot_ready = Signal(dict)
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._timer: QTimer | None = None
+
+    def start(self) -> None:
+        from src.utils.debug_logger import get_debug_logger
+        log = get_debug_logger()
+        log.info("SystemStatsWorker.start: entering on thread %s",
+                 QThread.currentThread().objectName() or "<unnamed>")
+        try:
+            import psutil
+            psutil.cpu_percent(interval=None)  # prime baseline so first real tick isn't 0%
+        except Exception:
+            pass  # safe: psutil prime is best-effort; first tick will just report 0%
+        if self._timer is None:
+            self._timer = QTimer()
+            self._timer.timeout.connect(self._tick)
+            self._timer.start(_POLL_INTERVAL_MS)
+        log.info("SystemStatsWorker.start: timer armed, firing first tick now")
+        self._tick()  # immediate first sample
+
+    def _tick(self) -> None:
+        from src.utils.debug_logger import get_debug_logger
+        log = get_debug_logger()
+        snap: dict = {}
+
+        # CPU% + RAM via psutil -- fast, non-blocking, no registry/WMI contention.
+        try:
+            import psutil
+            snap["cpu_usage"] = f"{psutil.cpu_percent(interval=None):.0f}%"
+            vm = psutil.virtual_memory()
+            snap["ram_used"] = f"{vm.used / 1_073_741_824:.1f} GB"
+        except Exception:
+            snap.setdefault("cpu_usage", "—")
+            snap.setdefault("ram_used", "—")
+
+        # Last-measured mouse Hz -- a light QSettings read (no system registry
+        # or subprocess), safe to run concurrently with the pipeline.
+        try:
+            from src.agent_tools.quick_status import _read_mouse_hz
+            snap["mouse_hz"] = _read_mouse_hz()
+        except Exception:
+            pass  # safe: mouse-Hz read is best-effort; tile keeps its own fallback
+
+        # Thermal data from fetch_snapshot -- the same source the chart uses, so
+        # always accurate. fetch_snapshot() returns {} when LHM is unreachable,
+        # leaving the temp cards at "—".
+        therm: dict = {}
+        try:
+            from src.agent_tools.thermal_guidance import derive_cpu_temp, derive_gpu_temp
+            from src.benchmarks.thermal_monitor import fetch_snapshot
+            therm = fetch_snapshot()
+            if therm:
+                cpu_c_f = derive_cpu_temp(therm)
+                gpu_c_f = derive_gpu_temp(therm)
+                if cpu_c_f is not None:
+                    snap["_cpu_c"] = cpu_c_f
+                    snap["cpu_temp"] = f"{int(round(cpu_c_f))}°C"
+                if gpu_c_f is not None:
+                    snap["_gpu_c"] = gpu_c_f
+                    snap["gpu_temp"] = f"{int(round(gpu_c_f))}°C"
+        except Exception as exc:
+            log.warning("SystemStatsWorker._tick: thermal fetch failed: %s", exc, exc_info=True)
+
+        # Diagnostic INFO on first 3 ticks and every 12th (≈ 1 min) -- keeps
+        # the log compact but proves the polling loop is alive and surfaces
+        # what fetch_snapshot returned vs. what derive_*_temp extracted.
+        self._tick_count = getattr(self, "_tick_count", 0) + 1
+        if self._tick_count <= 3 or self._tick_count % 12 == 0:
+            sample_keys = list(therm.keys())[:3] if therm else []
+            log.info(
+                "SystemStatsWorker._tick #%d: therm_keys=%d sample=%s cpu_c=%s gpu_c=%s cpu_temp=%s",
+                self._tick_count,
+                len(therm),
+                sample_keys,
+                snap.get("_cpu_c"),
+                snap.get("_gpu_c"),
+                snap.get("cpu_temp"),
+            )
+
+        self.snapshot_ready.emit(snap)
