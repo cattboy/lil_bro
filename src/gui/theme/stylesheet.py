@@ -1,70 +1,40 @@
-"""DESIGN.md → QSS bridge. Single source of truth for colors, fonts, and tokens.
+"""QSS builder. Assembles the application stylesheet from per-component sections.
 
-Token assignment reference (kept inline so future contributors don't need
-to re-derive which token lands on which surface):
-
-    Color: deep        #1A1B23  → main window background
-    Color: surface     #24252F  → cards, panels, output panel, dialog body
-    Color: elevated    #2E2F3A  → sidebar, dialog title bars, splash background
-    Color: hover       #363745  → card / button hover state
-    Color: accent      #00E5CC  → primary buttons, active phase border, focus ring,
-                                  brand mark, current dashboard tile highlight
-    Color: accent_dim  rgba(0,229,204,0.15) → active sidebar item background,
-                                              in-progress phase card fill
-    Color: accent_glow rgba(0,229,204,0.30) → primary button + brand mark glow
-    Color: success     #4ADE80  → phase complete, "AI features enabled", checks
-    Color: warning     #FFB547  → thermal 75°C threshold, dashboard caution
-    Color: error       #FF6B6B  → thermal 85°C threshold, phase failed, errors
-    Color: text_primary   #E8E6E3 → all body text on dark surfaces (WCAG AA 14.5:1)
-    Color: text_secondary #9B9AA0 → card labels, dim section titles (WCAG AA 5.1:1)
-    Color: text_muted     #6B6A70 → status bar timestamps, meta text
-    Color: border_default #363745 → terminal-style bordered panels
-    Color: border_accent  rgba(0,229,204,0.25) → active phase border, focused inputs
-
-AI slop guardrails (do/don't):
-    ✓ DO use full borders on cards (DESIGN.md "terminal-style bordered panels")
-    ✗ DON'T `border-left: 3px solid cyan` on cards (AI slop blacklist #8)
-    ✓ DO left-align labels, right-align numeric values (terminal convention)
-    ✗ DON'T center-align everything (AI slop blacklist #4)
-    ✗ DON'T use emoji as design elements (AI slop blacklist #7); use Qt icons or text
-    ✗ DON'T "Welcome to lil_bro" hero copy (AI slop blacklist #9); splash shows brand mark
-    ✓ DO use scanline texture on dark surfaces (DESIGN.md line 109)
-    ✓ DO use accent glow on hover/active (DESIGN.md line 108)
+``build_stylesheet()`` joins the ``_qss_*`` section helpers below; each section
+is kept small so it can be edited independently (Serena-targetable). Colors are
+passed in as ``c`` (the ``COLORS`` dict); fonts are read from the module-level
+``FONTS`` import.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
-
-COLORS: dict[str, str] = {
-    "deep":           "#1A1B23",
-    "surface":        "#24252F",
-    "elevated":       "#2E2F3A",
-    "hover":          "#363745",
-    "accent":         "#00E5CC",
-    "accent_dim":     "rgba(0, 229, 204, 0.15)",
-    "accent_glow":    "rgba(0, 229, 204, 0.3)",
-    "success":        "#4ADE80",
-    "warning":        "#FFB547",
-    "error":          "#FF6B6B",
-    "info":           "#60A5FA",
-    "text_primary":   "#E8E6E3",
-    "text_secondary": "#9B9AA0",
-    "text_muted":     "#6B6A70",
-    "border_default": "#363745",
-    "border_accent":  "rgba(0, 229, 204, 0.25)",
-}
-
-FONTS: dict[str, str] = {
-    "mono": "JetBrains Mono",
-    "sans": "DM Sans",
-}
+from src.gui.theme.tokens import COLORS, FONTS
 
 
 def build_stylesheet() -> str:
     """Return the QSS for the entire app, with DESIGN.md tokens substituted."""
     c = COLORS
+    return "\n".join([
+        _qss_base(c),
+        _qss_buttons(c),
+        _qss_text(c),
+        _qss_chrome(c),
+        _qss_sidebar(c),
+        _qss_stat_cards(c),
+        _qss_chart(c),
+        _qss_poll(c),
+        _qss_phase_row(c),
+        _qss_output_header(c),
+        _qss_log_toolbar(c),
+        _qss_status_bar(c),
+        _qss_batch_dialog(c),
+        _qss_confirm_dialog(c),
+        _qss_splash(c),
+    ])
+
+
+def _qss_base(c: dict[str, str]) -> str:
+    """Base surfaces: windows, sidebar frame, cards, phase-card status states."""
     return f"""
     /* --- Base surfaces ----------------------------------------------- */
     QMainWindow, QDialog, QWidget {{
@@ -100,7 +70,12 @@ def build_stylesheet() -> str:
     QFrame#phaseCard[phaseStatus="failed"] {{
         border: 1px solid {c["error"]};
     }}
+"""
 
+
+def _qss_buttons(c: dict[str, str]) -> str:
+    """QPushButton base style and the primary/warning/secondary variants."""
+    return f"""
     /* --- Buttons ----------------------------------------------------- */
     QPushButton {{
         background-color: {c["surface"]};
@@ -160,7 +135,12 @@ def build_stylesheet() -> str:
     QPushButton:disabled {{
         color: {c["text_muted"]};
     }}
+"""
 
+
+def _qss_text(c: dict[str, str]) -> str:
+    """Text edits, labels, semantic status labels, progress label."""
+    return f"""
     /* --- Text + value displays --------------------------------------- */
     QTextEdit, QPlainTextEdit, QListView {{
         background-color: {c["surface"]};
@@ -211,7 +191,12 @@ def build_stylesheet() -> str:
         color: {c["text_secondary"]};
         font-size: 12px;
     }}
+"""
 
+
+def _qss_chrome(c: dict[str, str]) -> str:
+    """Window chrome: status bar, progress bars, scroll bars, splitter."""
+    return f"""
     /* --- Chrome ------------------------------------------------------ */
     QStatusBar {{
         background-color: {c["elevated"]};
@@ -252,7 +237,12 @@ def build_stylesheet() -> str:
     QSplitter::handle {{
         background-color: {c["border_default"]};
     }}
+"""
 
+
+def _qss_sidebar(c: dict[str, str]) -> str:
+    """V2 sidebar: brand label, nav items with state variants, nav divider."""
+    return f"""
     /* ================================================================
        V2 COMPONENTS
        ================================================================ */
@@ -318,7 +308,12 @@ def build_stylesheet() -> str:
         max-height: 1px;
         margin: 4px 12px;
     }}
+"""
 
+
+def _qss_stat_cards(c: dict[str, str]) -> str:
+    """Dashboard stat-card tone variants (statTone — distinct from sev)."""
+    return f"""
     /* --- Stat card tone variants -------------------------------------
      * IMPORTANT: ''statTone'' and ''sev'' are distinct dynamic properties
      * with non-overlapping purposes — do NOT merge them.
@@ -358,7 +353,12 @@ def build_stylesheet() -> str:
     QLabel#cardValue[statTone="cyan"] {{
         color: {c["accent"]};
     }}
+"""
 
+
+def _qss_chart(c: dict[str, str]) -> str:
+    """Thermal chart wrapper, header, and CPU/GPU legend labels."""
+    return f"""
     /* --- Chart wrap -------------------------------------------------- */
     QFrame#chartWrap {{
         background-color: {c["surface"]};
@@ -389,7 +389,12 @@ def build_stylesheet() -> str:
         font-size: 11px;
         color: #D183E8;
     }}
+"""
 
+
+def _qss_poll(c: dict[str, str]) -> str:
+    """Polling/monitor card chrome, inner labels, and sev tone variants."""
+    return f"""
     /* --- USB Polling widget ------------------------------------------ */
     /* Shared chrome — same border, background, padding for poll/monitor/empty cards.
      * Inner labels (#pollLabel, #pollValue, #pollUnit, #pollStatus) are reused
@@ -437,7 +442,12 @@ def build_stylesheet() -> str:
     QLabel#pollValue[sev="high"]   {{ color: {c["error"]}; }}
 
     QLabel#pollLabel[sev="high"]   {{ color: {c["error"]}; }}
+"""
 
+
+def _qss_phase_row(c: dict[str, str]) -> str:
+    """Pipeline phase row container and compact per-phase cards/labels."""
+    return f"""
     /* --- Phase row --------------------------------------------------- */
     QFrame#phaseRow {{
         background-color: {c["surface"]};
@@ -491,7 +501,12 @@ def build_stylesheet() -> str:
     QLabel#phaseStatus[phaseStatus="failed"] {{
         color: {c["error"]};
     }}
+"""
 
+
+def _qss_output_header(c: dict[str, str]) -> str:
+    """Output view header bar and title label."""
+    return f"""
     /* --- Output view header ------------------------------------------ */
     QFrame#outputHeader {{
         background-color: transparent;
@@ -505,7 +520,12 @@ def build_stylesheet() -> str:
         font-weight: 700;
         color: {c["text_primary"]};
     }}
+"""
 
+
+def _qss_log_toolbar(c: dict[str, str]) -> str:
+    """Log panel toolbar, title, and toolbar buttons."""
+    return f"""
     /* --- Log toolbar ------------------------------------------------- */
     QFrame#logToolbar {{
         background-color: {c["elevated"]};
@@ -534,7 +554,12 @@ def build_stylesheet() -> str:
         background-color: {c["hover"]};
         color: {c["text_primary"]};
     }}
+"""
 
+
+def _qss_status_bar(c: dict[str, str]) -> str:
+    """Custom bottom status bar widget: dot, label, separator."""
+    return f"""
     /* --- Custom status bar widget ------------------------------------ */
     QWidget#statusBarWidget {{
         background-color: {c["elevated"]};
@@ -556,7 +581,12 @@ def build_stylesheet() -> str:
         font-size: 11px;
         color: {c["border_default"]};
     }}
+"""
 
+
+def _qss_batch_dialog(c: dict[str, str]) -> str:
+    """Approval (batch) dialog: frame, titles, fix items, badges, checkbox."""
+    return f"""
     /* --- Approval (batch) dialog ------------------------------------- */
     QDialog#batchDialog {{
         background-color: {c["surface"]};
@@ -648,7 +678,12 @@ def build_stylesheet() -> str:
         color: {c["text_muted"]};
         border: 1px solid {c["border_default"]};
     }}
+"""
 
+
+def _qss_confirm_dialog(c: dict[str, str]) -> str:
+    """Confirm dialog: icon, title, description."""
+    return f"""
     /* --- Confirm dialog visual update -------------------------------- */
     QLabel#confirmIcon {{
         font-size: 28px;
@@ -665,7 +700,12 @@ def build_stylesheet() -> str:
         color: {c["text_muted"]};
         line-height: 1.5;
     }}
+"""
 
+
+def _qss_splash(c: dict[str, str]) -> str:
+    """Splash dialog: brand, tagline, badge, and per-step icon/label/result."""
+    return f"""
     /* --- Splash dialog ----------------------------------------------- */
     QDialog#splashDialog {{
         background-color: {c["deep"]};
@@ -726,37 +766,4 @@ def build_stylesheet() -> str:
     QLabel#splashStepResult[stepState="run"] {{
         color: {c["accent"]};
     }}
-    """
-
-
-def repolish(widget) -> None:
-    """Re-apply QSS to a widget after a dynamic property change.
-
-    Qt does not refresh the stylesheet automatically when a property used in a
-    QSS selector (e.g. ``[sev="high"]``) changes at runtime — callers must ask
-    the style to re-evaluate. This wraps the unpolish/polish dance so widget
-    code can stay a single line.
-    """
-    widget.style().unpolish(widget)
-    widget.style().polish(widget)
-
-
-def load_fonts() -> None:
-    """Register bundled JetBrains Mono + DM Sans .ttf files with QFontDatabase.
-
-    No-op if the ``resources/fonts/`` directory isn't bundled (development
-    runs on a machine without the .ttf files) — Qt then falls back to the
-    closest available system font.
-    """
-    from PySide6.QtGui import QFontDatabase
-
-    fonts_dir = _resources_dir() / "fonts"
-    if not fonts_dir.is_dir():
-        return
-    for ttf in fonts_dir.glob("*.ttf"):
-        QFontDatabase.addApplicationFont(str(ttf))
-
-
-def _resources_dir() -> Path:
-    """Return the bundled resources directory next to the ``src/`` tree."""
-    return Path(__file__).resolve().parent.parent.parent / "resources"
+"""
