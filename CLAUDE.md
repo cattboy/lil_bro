@@ -65,6 +65,7 @@ Serena is started manually by the user before each session. A PreToolUse hook (`
 | Create a new `.py` file | built-in **`Write`** | allows it |
 | Overwrite an existing `.py` wholesale | edit it instead | **blocks** `Write` on existing `.py` |
 | Refactor via the shell (`sed -i`, redirects) | Serena symbol tools | **blocks** in-place `.py` shell edits |
+| Resync Serena after a non-Serena `.py` edit (built-in `Edit`/`Write`/`rm`/shell) | `mcp__serena__restart_language_server` | guidance only |
 | Persist project knowledge | `mcp__serena__write_memory` / `read_memory` | — |
 
 **Rule of thumb:** is the target a *symbol* (function, class, method)? → Serena. Is it a *non-symbol line* (import, module constant) or plain-text / whole-file work? → built-in `Edit`/`Read`/`Write`. The hook draws the same line with `ast`, so it and this table never disagree.
@@ -73,6 +74,12 @@ Serena is started manually by the user before each session. A PreToolUse hook (`
 
 - **Symbol body** (anything inside a `def`/`class`): `mcp__serena__replace_symbol_body`, or `insert_after_symbol` / `insert_before_symbol` to add adjacent code. The hook blocks the built-in `Edit` here.
 - **Module level** (imports, module constants, `__all__`, the module docstring): built-in `Edit`. Serena's symbol tools target whole symbols, not individual lines, so non-symbol edits use `Edit`. The hook classifies the edit site with `ast` and lets `Edit` through.
+
+### After a non-Serena edit — restart the language server
+
+Serena's language server keeps an in-memory copy of each `.py` file, synced **only for Serena's own edits**. The split above guarantees non-Serena edits — every module-level line goes through the built-in `Edit`. Any built-in `Edit`/`Write`/`rm`, shell edit, or working-tree-changing `git` op (`checkout`, `rebase`, `reset --hard`) desyncs the LS; the next `replace_symbol_body` / `insert_*_symbol` then fails with `InvalidTextLocationError` or writes a stale body. A bare `git commit` does **not** desync — it leaves the working tree unchanged.
+
+After any non-Serena change to a `.py` file, call `mcp__serena__restart_language_server` before the next Serena symbol read/edit. To restart rarely, batch per file: all Serena symbol edits first, then built-in module-level `Edit`s last. For a file being substantially rewritten, skip incremental Serena editing — `Read`, compose, `rm`+`Write`. Not hook-enforced; it's on you to call it.
 
 ### Reading code
 
