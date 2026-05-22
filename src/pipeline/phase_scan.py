@@ -24,21 +24,46 @@ class ScanPhase:
             log.warning("LHM sidecar unavailable — continuing without thermal monitoring")
             print_info("Continuing without thermal monitoring -- Cinebench will still run.")
 
-        if ctx.specs:
-            hw = extract_hardware_summary(ctx.specs)
+        # Fresh-first, snapshot-fallback. The pipeline always re-scans live
+        # system state; the startup snapshot preloaded into ctx.specs is kept
+        # only as a degraded-mode fallback for when a fresh dump fails.
+        # Reusing the snapshot as the primary input let a second pipeline run
+        # re-detect and re-apply already-applied fixes.
+        # See docs/pipeline-rescan-idempotency-plan.md.
+        #
+        #   dump_system_specs() --> ""  ---------------> json.load fails --+
+        #            |                                                    |
+        #            v (path)                                             v
+        #       load fresh --> ctx.specs (LIVE)              fall back to startup snapshot
+        snapshot = ctx.specs
+        fresh: dict = {}
+        dump_path = dump_system_specs()
+        if dump_path:
+            try:
+                with open(dump_path, "r", encoding="utf-8") as f:
+                    fresh = json.load(f)
+            except Exception as exc:
+                log.warning(
+                    "Phase 2: fresh spec file %s could not be parsed (%s)",
+                    dump_path, exc,
+                )
+
+        if fresh:
+            ctx.specs = fresh
+            log.info("Phase 2: using fresh system scan")
+            print_info(f"Full system specs temporarily saved to {dump_path}")
+        elif snapshot:
+            ctx.specs = snapshot
+            log.warning("Phase 2: fresh scan unavailable -- using startup snapshot")
+            print_info("Fresh scan unavailable -- using specs collected at startup.")
         else:
-            dump_path = dump_system_specs()
-            if dump_path:
-                print_info(f"Full system specs temporarily saved to {dump_path}")
-                try:
-                    with open(dump_path, "r", encoding="utf-8") as f:
-                        ctx.specs = json.load(f)
-                    hw = extract_hardware_summary(ctx.specs)
-                except Exception as exc:
-                    log.warning("Could not parse specs preview for display: %s", exc)
-                    hw = {}
-            else:
-                hw = {}
+            ctx.specs = {}
+            log.warning(
+                "Phase 2: no system specs available "
+                "(fresh scan and startup snapshot both empty)"
+            )
+
+        hw = extract_hardware_summary(ctx.specs) if ctx.specs else {}
 
         if hw:
             print()

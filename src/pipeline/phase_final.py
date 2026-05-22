@@ -26,6 +26,15 @@ class FinalBenchPhase:
                 print_info("Baseline benchmark did not complete — skipping final benchmark.")
             return PhaseResult("skipped", "Baseline benchmark did not complete")
 
+        # 4A: a run that applied no configuration changes has nothing for a
+        # final benchmark to compare against -- skip it rather than spend
+        # another Cinebench cycle measuring an unchanged machine.
+        if ctx.fixes_applied == 0:
+            print_info("No configuration changes were applied -- skipping final benchmark.")
+            from src.utils.formatting import notify_benchmark_score
+            notify_benchmark_score("final_skipped", {}, None)
+            return PhaseResult("skipped", "No config changes applied")
+
         if run_thermal_guard(
             "FinalBench", ctx,
             skip_message="Skipping final benchmark.",

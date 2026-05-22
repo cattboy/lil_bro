@@ -117,6 +117,19 @@ class BenchmarkRow(QFrame):
     def set_pipeline_failed(self) -> None:
         self._status.set_value("Failed", "warn")
 
+    def set_final_skipped(self) -> None:
+        """Final benchmark skipped -- the run applied no config changes.
+
+        Marks POST-OPT as an intentional skip so the empty card does not read
+        as a benchmark that silently failed. STATUS is finalised separately by
+        set_pipeline_complete().
+        """
+        self._postopt.set_value("SKIPPED")
+        self._postopt.setToolTip(
+            "Final benchmark skipped: this run applied no configuration "
+            "changes, so there was nothing new to measure."
+        )
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------

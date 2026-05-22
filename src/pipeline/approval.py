@@ -56,16 +56,20 @@ def parse_selection(raw: str, max_num: int) -> list[int] | None:
     return None
 
 
-def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created: bool = False) -> None:
+def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created: bool = False) -> int:
     """
     Renders the numbered proposal list, collects batch selection,
     and executes approved auto-fixable actions.
+
+    Returns the count of auto-fixes that were applied successfully. A return
+    of 0 means nothing changed -- FinalBenchPhase uses this to skip the final
+    benchmark (see docs/pipeline-rescan-idempotency-plan.md).
     """
     from src.utils.formatting import get_batch_selection_handler
 
     if not proposals:
         print_success("No configuration issues found -- your setup looks good!")
-        return
+        return 0
 
     auto_fixable = display_proposals(proposals)
 
@@ -74,7 +78,7 @@ def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created:
             "\nAll findings require manual BIOS/driver changes -- "
             "see the instructions above."
         )
-        return
+        return 0
 
     total = len(proposals)
     print()
@@ -99,7 +103,7 @@ def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created:
             [], [p.get("finding", "") for _, p in auto_fixable]
         )
         print_info("No changes applied.")
-        return
+        return 0
 
     # Determine which auto-fixable checks were approved vs skipped
     approved_checks = [
@@ -126,7 +130,9 @@ def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created:
     print()
     bar = AnimatedProgressBar(total=len(selected_proposals), label="Applying fixes")
 
-    # Start session manifest before fix loop so each fix can append its backup entry
+    # Start session manifest before fix loop so each fix can append its backup
+    # entry. start_session_manifest is a no-op if a manifest is already active
+    # (a prior run, or a dashboard fix), so the manifest accumulates per session.
     try:
         from src.utils.revert import start_session_manifest
         start_session_manifest(restore_point_created=restore_point_created)
@@ -136,10 +142,15 @@ def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created:
 
     bar.start()
 
+    # Count fixes that actually succeeded -- execute_fix returns False on
+    # failure. A selected-but-failed fix must not count, or FinalBenchPhase
+    # would benchmark a machine nothing changed on.
+    applied = 0
     for i, (_n, proposal) in enumerate(sorted(selected_proposals.items()), 1):
         check = proposal.get("finding", "")
         bar.update(i, f"Fixing {check.replace('_', ' ')}...")
-        execute_fix(check, specs)
+        if execute_fix(check, specs):
+            applied += 1
 
     bar.finish()
 
@@ -147,3 +158,4 @@ def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created:
         "\nIf anything looks wrong, a System Restore Point was created at startup. "
         "Open 'Create a restore point' in Windows to roll back."
     )
+    return applied

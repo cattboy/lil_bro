@@ -236,6 +236,9 @@ class MainWindow(QMainWindow):
         elif phase == "final":
             self._benchmark_row.set_final(scores)
             self._phase_pill.setText("✓ Complete")
+        elif phase == "final_skipped":
+            self._benchmark_row.set_final_skipped()
+            self._phase_pill.setText("✓ Complete")
 
     # ── Nav "working" indicator for Run button ─────────────────────────
 

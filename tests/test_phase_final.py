@@ -42,13 +42,28 @@ class TestFinalBenchPhaseRunnerGuard:
 
     @patch("src.pipeline.phase_final.run_thermal_guard", return_value=False)
     def test_runs_benchmark_when_runner_set_and_thermals_ok(self, mock_guard):
-        """Phase 5 calls run_benchmark when runner exists and thermals are safe."""
+        """Phase 5 calls run_benchmark when runner exists, thermals are safe,
+        and at least one config fix was applied."""
         mock_runner = MagicMock()
         mock_runner.run_benchmark.return_value = {"status": "success", "scores": {"single": 100}}
-        ctx = _make_ctx(runner=mock_runner, lhm_available=True, baseline_result={"status": "success"})
+        ctx = _make_ctx(runner=mock_runner, lhm_available=True,
+                        baseline_result={"status": "success"}, fixes_applied=1)
         ctx.thermal = MagicMock()
         phase = FinalBenchPhase()
         result = phase.run(ctx)
         mock_runner.run_benchmark.assert_called_once()
         assert isinstance(result, PhaseResult)
         assert result.status == "completed"
+
+    def test_skips_when_no_fixes_applied(self):
+        """4A: a run that applied zero config fixes skips the final benchmark."""
+        mock_runner = MagicMock()
+        ctx = _make_ctx(runner=mock_runner, lhm_available=True,
+                        baseline_result={"status": "success"}, fixes_applied=0)
+        ctx.thermal = MagicMock()
+        with patch("src.utils.formatting.notify_benchmark_score") as mock_notify:
+            result = FinalBenchPhase().run(ctx)
+        mock_runner.run_benchmark.assert_not_called()
+        assert result.status == "skipped"
+        assert "No config changes applied" in result.message
+        mock_notify.assert_called_once_with("final_skipped", {}, None)

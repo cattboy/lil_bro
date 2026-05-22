@@ -15,6 +15,12 @@ class BootstrapPhase:
         try:
             create_restore_point()
             ctx.restore_point_created = True
+            # A dashboard monitor-fix earlier this session may have lazily
+            # created the revert manifest with restore_point_created=False
+            # (no restore point existed yet). Now that one does, upgrade the
+            # flag so revert can honestly offer System Restore.
+            from src.utils.revert import mark_restore_point_created
+            mark_restore_point_created()
         except LilBroError as e:
             log.error("Restore point creation failed: %s", e)
             print_error(str(e))

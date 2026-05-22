@@ -53,6 +53,10 @@ class PipelineContext:
     # Set by BootstrapPhase — whether a System Restore Point was created
     restore_point_created: bool = False
 
+    # Set by ConfigPhase — count of auto-fixes successfully applied this run.
+    # FinalBenchPhase skips when this is 0 (nothing changed to benchmark against).
+    fixes_applied: int = 0
+
 
 class Phase(Protocol):
     """Structural protocol for pipeline phases."""

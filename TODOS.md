@@ -69,6 +69,16 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
+### T-016 — Persistent "what was applied / last run" UI panel
+**Priority:** P2
+**Effort:** M human / M with CC
+**Why:** Users can't currently see what fixes were applied in the current session. The session manifest (2A) accumulates all applied fixes with timestamps, providing the ready data source. A UI panel showing this closes the UX half of the original pipeline-rescan idempotency report.
+**Fix:** Create a new Dashboard-style card or sidebar panel that displays the session manifest: list of applied fixes with timestamps and revert status. Wire it to the `PipelineContext.fixes_applied` and manifest data. Persist the list until the next session starts.
+**Blocked by:** Nothing. Defer until the core pipeline-rescan idempotency work (feat/frontend-ui) lands.
+**Added:** 2026-05-23 (deferred from pipeline-rescan-idempotency-plan.md)
+
+---
+
 ## Completed
 
 ### T-014 — Reconcile `phase_changed` signal naming and dual-signal handler
