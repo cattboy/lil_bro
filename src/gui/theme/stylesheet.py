@@ -29,6 +29,7 @@ def build_stylesheet() -> str:
         _qss_status_bar(c),
         _qss_batch_dialog(c),
         _qss_confirm_dialog(c),
+        _qss_mouse_ready_dialog(c),
         _qss_splash(c),
     ])
 
@@ -698,6 +699,30 @@ def _qss_confirm_dialog(c: dict[str, str]) -> str:
     QLabel#confirmDesc {{
         font-size: 12px;
         color: {c["text_muted"]};
+        line-height: 1.5;
+    }}
+"""
+
+
+def _qss_mouse_ready_dialog(c: dict[str, str]) -> str:
+    """Mouse polling ready dialog: accent bar, title, description."""
+    return f"""
+    /* --- Mouse ready dialog ------------------------------------------ */
+    QFrame#mouseReadyAccent {{
+        background-color: {c["accent"]};
+        border-radius: 1px;
+        min-height: 2px;
+        max-height: 2px;
+    }}
+    QLabel#mouseReadyTitle {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 14px;
+        font-weight: 700;
+        color: {c["text_primary"]};
+    }}
+    QLabel#mouseReadyDesc {{
+        font-size: 12px;
+        color: {c["text_secondary"]};
         line-height: 1.5;
     }}
 """

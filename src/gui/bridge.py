@@ -61,6 +61,8 @@ class GuiBridge(QObject):
         formatting.set_batch_selection_handler(self._handle_batch_selection)
         formatting.set_benchmark_score_sink(self._emit_benchmark_score)
         formatting.set_benchmark_started_sink(self._emit_benchmark_started)
+        formatting.set_mouse_ready_handler(self._handle_mouse_ready)
+        formatting.set_mouse_poll_result_sink(self._emit_mouse_poll_result)
         progress_bar.set_progress_sink(self._emit_progress)
         self._installed = True
 
@@ -72,6 +74,8 @@ class GuiBridge(QObject):
         formatting.set_batch_selection_handler(None)
         formatting.set_benchmark_score_sink(None)
         formatting.set_benchmark_started_sink(None)
+        formatting.set_mouse_ready_handler(None)
+        formatting.set_mouse_poll_result_sink(None)
         progress_bar.set_progress_sink(None)
         self._installed = False
 
@@ -147,6 +151,13 @@ class GuiBridge(QObject):
     def _handle_pause(self, message: str) -> None:
         """Auto-continue in GUI mode. CLI ``Press Enter`` prompts are no-ops here."""
         return
+
+    def _handle_mouse_ready(self) -> None:
+        """Block worker thread until user clicks OK in MouseReadyDialog."""
+        self._await_bool_answer(self.signals.mouse_ready_requested)
+
+    def _emit_mouse_poll_result(self, result: dict) -> None:
+        self.signals.mouse_poll_result_ready.emit(result)
 
     def _handle_batch_selection(self, proposals: list, total: int) -> list[int]:
         """Show ``BatchSelectionDialog`` (via signal) and wait for the selection."""

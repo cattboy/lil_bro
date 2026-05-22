@@ -113,42 +113,12 @@ class MousePollCard(QFrame):
         worker.moveToThread(thread)
 
         def _on_mouse_done(result: dict) -> None:
-            from src.llm.action_proposer import propose_for_check
-            hz = int(result.get("current_hz", 0) or 0)
-            status = result.get("status", "OK")
             log.info(
                 "MousePollCard._manual_poll: result hz=%d status=%s",
-                hz, status,
+                int(result.get("current_hz", 0) or 0), result.get("status", "OK"),
             )
-
             self._mouse_manually_measured = True
-            self._poll_val.setText(str(hz) if hz else "—")
-            if status == "ERROR":
-                self._poll_status.setText("Measurement failed")
-                self._poll_status.setToolTip("")
-                _sev = "high"
-            elif hz >= 1000:
-                self._poll_status.setText("Excellent — optimal for gaming")
-                self._poll_status.setToolTip("")
-                _sev = "low"
-            elif hz >= 500:
-                self._poll_status.setText("Acceptable — 1000Hz preferred")
-                self._poll_status.setToolTip("")
-                _sev = "medium"
-            else:
-                # FAIL tier — canonical text from FALLBACK_PROPOSALS, full
-                # explanation on hover. OK tiers above keep their live
-                # commentary (no FAIL → no template, by design).
-                proposal = propose_for_check(
-                    "mouse_polling",
-                    {"current_hz": hz, "threshold_hz": 500},
-                )
-                self._poll_status.setText(proposal["proposed_action"])
-                self._poll_status.setToolTip(proposal["explanation"])
-                _sev = "high"
-            self._set_poll_sev(_sev)
-
-            self._poll_btn.setEnabled(True)
+            self._render_result(result)
             thread.quit()
 
         worker.finished.connect(_on_mouse_done)
@@ -177,31 +147,43 @@ class MousePollCard(QFrame):
         repolish(self._poll_status)
 
     def _update_poll_display(self, hz_str: str) -> None:
-        from src.llm.action_proposer import propose_for_check
         try:
             hz = int(float(hz_str.replace(" Hz", "").replace("Hz", "")))
-            self._poll_val.setText(str(hz))
-            if hz >= 1000:
-                self._poll_status.setText("Excellent")
-                self._poll_status.setToolTip("")
-                _sev = "low"
-            elif hz >= 500:
-                self._poll_status.setText("Good")
-                self._poll_status.setToolTip("")
-                _sev = "medium"
-            else:
-                # FAIL tier — pull canonical text from FALLBACK_PROPOSALS
-                # (single source of truth shared with pipeline approval flow).
-                proposal = propose_for_check(
-                    "mouse_polling",
-                    {"current_hz": hz, "threshold_hz": 500},
-                )
-                self._poll_status.setText(proposal["proposed_action"])
-                self._poll_status.setToolTip(proposal["explanation"])
-                _sev = "high"
-            self._set_poll_sev(_sev)
+            status = "WARNING" if hz < 500 else "OK"
+            self._render_result({"current_hz": hz, "status": status})
         except (ValueError, AttributeError):
             self._poll_val.setText("—")
             self._poll_status.setText("Not measured")
             self._poll_status.setToolTip("")
             self._set_poll_sev("")
+
+    def _render_result(self, result: dict) -> None:
+        """Single source of truth for Hz → display rendering. Called by both manual and pipeline paths."""
+        from src.llm.action_proposer import propose_for_check
+        hz = int(result.get("current_hz", 0) or 0)
+        status = result.get("status", "OK")
+        self._poll_val.setText(str(hz) if hz else "—")
+        if status == "ERROR":
+            self._poll_status.setText("Measurement failed")
+            self._poll_status.setToolTip("")
+            sev = "high"
+        elif hz >= 1000:
+            self._poll_status.setText("Excellent — optimal for gaming")
+            self._poll_status.setToolTip("")
+            sev = "low"
+        elif hz >= 500:
+            self._poll_status.setText("Acceptable — 1000Hz preferred")
+            self._poll_status.setToolTip("")
+            sev = "medium"
+        else:
+            proposal = propose_for_check("mouse_polling", {"current_hz": hz, "threshold_hz": 500})
+            self._poll_status.setText(proposal["proposed_action"])
+            self._poll_status.setToolTip(proposal["explanation"])
+            sev = "high"
+        self._set_poll_sev(sev)
+        self._poll_btn.setEnabled(True)
+
+    def apply_pipeline_result(self, result: dict) -> None:
+        """Feed a pipeline-measured result to the card (called on main thread, no QThread needed)."""
+        self._mouse_manually_measured = True
+        self._render_result(result)

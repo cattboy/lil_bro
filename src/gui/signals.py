@@ -19,6 +19,8 @@ class PipelineSignals(QObject):
     confirm_requested = Signal(str, str)
     batch_selection_requested = Signal(list)
     mouse_ready_requested = Signal()
+
+    mouse_poll_result_ready = Signal(object)
     benchmark_started = Signal()
     benchmark_score_ready = Signal(str, object, object)
     progress_changed = Signal(int, str)

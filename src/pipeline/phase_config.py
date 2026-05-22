@@ -54,9 +54,12 @@ class ConfigPhase:
             findings.append(thermal_finding)
 
             print()
-            print_accent("Alright, wiggle your mouse for 2 seconds -- we'll measure the polling rate.")
-            prompt_pause("Press Enter when you're ready... ")
-            mouse_result = check_polling_rate()
+            mouse_result = ctx.mouse_result
+            if mouse_result is None:
+                # CLI fallback — GUI pre-measures in ScanPhase
+                print_accent("Alright, wiggle your mouse for 2 seconds -- we'll measure the polling rate.")
+                prompt_pause("Press Enter when you're ready... ")
+                mouse_result = check_polling_rate()
             if mouse_result.get("status") == "WARNING":
                 findings.append({
                     "check": "mouse_polling",

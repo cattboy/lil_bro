@@ -5,8 +5,10 @@ import json
 from src.pipeline.base import PipelineContext, PhaseResult
 from src.collectors.spec_dumper import dump_system_specs
 from src.utils.dump_parser import extract_hardware_summary
+from src.agent_tools.mouse import check_polling_rate
 from src.utils.formatting import (
     print_header, print_success, print_info, print_key_value,
+    notify_mouse_poll_result, prompt_mouse_ready,
 )
 from src.utils.debug_logger import get_debug_logger
 
@@ -23,6 +25,10 @@ class ScanPhase:
         else:
             log.warning("LHM sidecar unavailable — continuing without thermal monitoring")
             print_info("Continuing without thermal monitoring -- Cinebench will still run.")
+
+        prompt_mouse_ready()
+        ctx.mouse_result = check_polling_rate()
+        notify_mouse_poll_result(ctx.mouse_result)
 
         # Fresh-first, snapshot-fallback. The pipeline always re-scans live
         # system state; the startup snapshot preloaded into ctx.specs is kept

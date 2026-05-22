@@ -78,6 +78,37 @@ def notify_benchmark_score(phase: str, scores: dict, cpu_peak: "float | None" = 
         _BENCHMARK_SCORE_SINK(phase, scores, cpu_peak)
 
 
+_MOUSE_READY_HANDLER: Callable[[], None] | None = None
+
+
+def set_mouse_ready_handler(handler: Callable[[], None] | None) -> None:
+    """Install (or clear) the mouse-ready handler. ``None`` restores CLI no-op."""
+    global _MOUSE_READY_HANDLER
+    _MOUSE_READY_HANDLER = handler
+
+
+def prompt_mouse_ready() -> None:
+    """Block (GUI: modal) or no-op (CLI) before mouse polling measurement."""
+    h = _MOUSE_READY_HANDLER
+    if h is not None:
+        h()
+
+
+_MOUSE_POLL_RESULT_SINK: Callable[[dict], None] | None = None
+
+
+def set_mouse_poll_result_sink(sink: Callable[[dict], None] | None) -> None:
+    """Install (or clear) the mouse poll result sink."""
+    global _MOUSE_POLL_RESULT_SINK
+    _MOUSE_POLL_RESULT_SINK = sink
+
+
+def notify_mouse_poll_result(result: dict) -> None:
+    """Deliver mouse poll result to the GUI dashboard card (no-op in CLI)."""
+    if _MOUSE_POLL_RESULT_SINK is not None:
+        _MOUSE_POLL_RESULT_SINK(result)
+
+
 _BENCHMARK_STARTED_SINK: "Callable[[], None] | None" = None
 
 

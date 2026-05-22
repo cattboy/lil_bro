@@ -57,6 +57,18 @@ class PipelineController:
         dialog.exec()
         self._bridge.deliver_answer(dialog.selected_indices())
 
+    def show_mouse_ready_dialog(self) -> None:
+        from src.gui.widgets.mouse_ready_dialog import MouseReadyDialog
+        dialog = MouseReadyDialog(parent=self._main)
+        dialog.exec()
+        self._bridge.deliver_answer(True)
+
+    def on_mouse_poll_result(self, result: object) -> None:
+        try:
+            self._main._dashboard.receive_poll_result(result)
+        except Exception as e:
+            self._log.debug("mouse poll result notify failed: %s", e)
+
     # ── Live output / progress / benchmark ─────────────────────────────
 
     def on_pipeline_output(self, text: str) -> None:

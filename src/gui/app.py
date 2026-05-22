@@ -179,6 +179,8 @@ def run(debug: bool = False) -> int:
     bridge.signals.output_emitted.connect(pipeline.on_pipeline_output)
     bridge.signals.benchmark_score_ready.connect(pipeline.on_benchmark_score)
     bridge.signals.benchmark_started.connect(pipeline.on_benchmark_started)
+    bridge.signals.mouse_ready_requested.connect(pipeline.show_mouse_ready_dialog)
+    bridge.signals.mouse_poll_result_ready.connect(pipeline.on_mouse_poll_result)
 
     # Mirror every Dashboard poll snapshot onto the optimization view's
     # LiveStatRow so both views render the identical system stats.

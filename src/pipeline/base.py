@@ -57,6 +57,9 @@ class PipelineContext:
     # FinalBenchPhase skips when this is 0 (nothing changed to benchmark against).
     fixes_applied: int = 0
 
+    # Set by ScanPhase — mouse polling measured before spec dump in GUI mode
+    mouse_result: Optional[dict] = None
+
 
 class Phase(Protocol):
     """Structural protocol for pipeline phases."""

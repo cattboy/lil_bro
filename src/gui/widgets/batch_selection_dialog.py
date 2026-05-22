@@ -36,7 +36,7 @@ class _FixItem(QFrame):
         sev = (proposal.get("sev") or proposal.get("severity") or "low").lower()
         tag = (proposal.get("tag") or proposal.get("category") or "").upper()
         title = proposal.get("title") or proposal.get("finding") or f"Proposal {idx + 1}"
-        desc = proposal.get("desc") or proposal.get("description") or ""
+        desc = proposal.get("desc") or proposal.get("description") or proposal.get("explanation") or ""
         mode = "AUTO" if proposal.get("can_auto_fix", True) else "MANUAL"
         mode = proposal.get("mode", mode)
 

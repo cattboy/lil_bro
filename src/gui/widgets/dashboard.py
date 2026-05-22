@@ -189,6 +189,10 @@ class Dashboard(QWidget):
         # LiveStatRow) so every view renders the identical snapshot.
         self.stats_ready.emit(snapshot)
 
+    def receive_poll_result(self, result: dict) -> None:
+        """Feed a pipeline-measured poll result to the mouse poll card."""
+        self._mouse_poll_card.apply_pipeline_result(result)
+
     def set_monitor_data(self, displays: list[dict]) -> None:
         """Show/hide pre-allocated slots; dynamically build extras for 2+ monitors.
 
