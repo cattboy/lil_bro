@@ -11,7 +11,7 @@ from .sub.wmi_dumper import get_wmi_specs
 from ..agent_tools.power_plan import get_active_power_plan
 from ..agent_tools.game_mode import get_game_mode_status
 from ..agent_tools.temp_audit import get_temp_sizes
-from ..utils.formatting import print_step, print_step_done, print_error, print_warning
+from ..utils.formatting import print_step, print_step_done, print_error
 from ..utils.paths import get_specs_path
 from ..utils.debug_logger import get_debug_logger
 

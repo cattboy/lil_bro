@@ -9,7 +9,6 @@ Also provides a single-shot ``fetch_snapshot()`` for pre-benchmark idle checks.
 
 import json
 import threading
-import time
 import urllib.request
 from typing import Optional
 

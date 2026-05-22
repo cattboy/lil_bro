@@ -14,7 +14,7 @@ from src.utils.dump_parser import extract_hardware_summary
 from src.llm.action_proposer import propose_actions
 from src.utils.formatting import (
     print_header, print_warning, print_accent, print_dim,
-    print_prompt, print_audit_summary, print_finding,
+    print_audit_summary, print_finding,
 )
 from src.utils.debug_logger import get_debug_logger
 from src.pipeline.approval import run_approval_flow

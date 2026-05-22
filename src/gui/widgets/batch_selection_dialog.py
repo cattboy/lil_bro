@@ -10,23 +10,18 @@ single-line prompt with a checkable list + three actions:
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QDialog,
-    QDialogButtonBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
-
 from src.gui.theme import repolish
-from PySide6.QtCore import Signal  # noqa: E402
-from PySide6.QtWidgets import QFrame, QWidget  # noqa: E402
 
 class _FixItem(QFrame):
     """One clickable fix row: checkbox, sev badge, title/desc, AUTO/MANUAL tag."""

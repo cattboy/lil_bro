@@ -85,7 +85,7 @@ def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created:
         # returns the user's 1-indexed selection list (empty list = skip).
         selection = list(handler(proposals, total) or [])
     else:
-        print_prompt(f"Apply changes? Enter numbers (e.g. \"1 3\"), \"all\", or \"skip\": ")
+        print_prompt("Apply changes? Enter numbers (e.g. \"1 3\"), \"all\", or \"skip\": ")
         while True:
             raw = input().strip()
             selection = parse_selection(raw, total)

@@ -14,6 +14,7 @@ import shutil
 import sys
 import threading
 import time
+from collections.abc import Callable
 
 from colorama import Fore, Style
 
@@ -106,7 +107,7 @@ class AnimatedProgressBar:
         self._running = False
         if self._thread is not None:
             self._thread.join(timeout=1.0)
-        self._draw(final=True)
+        self._draw()
         sys.stdout.write("\n")
         sys.stdout.flush()
 
@@ -118,7 +119,7 @@ class AnimatedProgressBar:
             self._glow_offset = (self._glow_offset + 1) % self._bar_width
             time.sleep(1.0 / _FPS)
 
-    def _draw(self, final: bool = False) -> None:
+    def _draw(self) -> None:
         with self._lock:
             current = self._current
             message = self._message

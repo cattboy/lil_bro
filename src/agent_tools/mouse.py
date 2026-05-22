@@ -1,7 +1,6 @@
 import ctypes
 import time
-from ctypes import wintypes
-from ..utils.formatting import print_step, print_step_done, print_warning, print_success, print_info
+from ..utils.formatting import print_step, print_step_done, print_warning, print_success
 
 def _fallback_measure_rate(duration_seconds: int) -> float:
     """
