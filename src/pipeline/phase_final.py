@@ -36,6 +36,12 @@ class FinalBenchPhase:
             _print_applied_fixes_summary(ctx)
             return PhaseResult("skipped", "Baseline benchmark did not run")
 
+        # Guard: Cinebench not available — nothing to run regardless of baseline result.
+        if not ctx.runner.has_cinebench:
+            print_info("Final benchmark skipped — Cinebench is not available.")
+            _print_applied_fixes_summary(ctx)
+            return PhaseResult("skipped", "Cinebench not available")
+
         # Guard: PRE ran but did not complete successfully.
         baseline_status = ctx.baseline_result.get("status")
         if baseline_status != "success":

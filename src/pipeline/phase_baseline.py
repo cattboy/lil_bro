@@ -2,7 +2,7 @@
 
 from src.pipeline.base import PipelineContext, PhaseResult
 from src.benchmarks.cinebench import BenchmarkRunner
-from src.pipeline.thermal_gate import require_thermal_protection, thermal_safety_gate
+from src.pipeline.thermal_gate import run_thermal_guard
 from src.utils.formatting import (
     print_header, print_info, print_success, print_warning,
 )
@@ -10,7 +10,6 @@ from src.utils.action_logger import action_logger
 from src.utils.debug_logger import get_debug_logger
 
 
-_SKIP_RESULT     = {"status": "skipped", "message": "Benchmark skipped — no thermal protection."}
 _SKIP_RESULT_HOT = {"status": "skipped", "message": "Benchmark skipped — idle temps too high."}
 
 
@@ -23,25 +22,23 @@ class BaselineBenchPhase:
         if ctx.run_benchmarks is False:
             return PhaseResult("skipped", "User opted out of benchmarks")
 
-        if require_thermal_protection("BaselineBench", ctx):
-            ctx.baseline_result = dict(_SKIP_RESULT)
+        ctx.runner = BenchmarkRunner()
+        if not ctx.runner.has_cinebench:
+            ctx.baseline_result = ctx.runner.run_benchmark(full_suite=False, lhm_available=ctx.lhm_available)
             ctx.peak_temps = {}
-            return PhaseResult("skipped", "No thermal protection available")
+            return PhaseResult("skipped", "Cinebench not available")
 
-        benchmark_skipped = thermal_safety_gate(ctx.lhm_available)
-
-        if benchmark_skipped:
+        if run_thermal_guard("BaselineBench", ctx):
             ctx.baseline_result = dict(_SKIP_RESULT_HOT)
             ctx.peak_temps = {}
             action_logger.log_action(
                 "BaselineBench",
-                "Benchmark skipped — idle temps too high",
-                details="Idle temperatures exceeded safe threshold or user declined.",
+                "Benchmark skipped — thermal check failed",
+                details="LHM unavailable, no sensor data, or idle temps too high.",
                 outcome="SKIPPED",
             )
-            return PhaseResult("skipped", "Idle temperatures too high")
+            return PhaseResult("skipped", "Thermal check failed")
 
-        ctx.runner = BenchmarkRunner()
         ctx.thermal.start()
         print_info("Thermal monitoring active -- sampling temperatures during benchmark.")
         try:
