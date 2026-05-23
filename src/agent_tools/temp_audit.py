@@ -51,7 +51,7 @@ def analyze_temp_folders(specs: dict) -> dict:
     total_bytes = temp_data.get("total_bytes", 0)
     mb = total_bytes / (1024 * 1024)
 
-    if total_bytes > (1024 * 1024 * 1024):
+    if total_bytes > (248 * 1024 * 1024):
         return {
             "check": "temp_folders",
             "status": "WARNING",
