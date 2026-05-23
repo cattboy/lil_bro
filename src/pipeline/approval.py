@@ -1,4 +1,4 @@
-"""Phase 4 approval flow -- proposal display, selection parsing, and fix execution."""
+"""Approval-flow utilities: proposal display, selection, and fix execution (ConfigPhase + ApplyPhase)."""
 
 from src.utils.action_logger import action_logger
 from src.utils.formatting import (
@@ -56,14 +56,12 @@ def parse_selection(raw: str, max_num: int) -> list[int] | None:
     return None
 
 
-def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created: bool = False) -> int:
+def run_approval_flow(proposals: list[dict], ctx) -> int:
     """
-    Renders the numbered proposal list, collects batch selection,
-    and executes approved auto-fixable actions.
+    Renders the numbered proposal list, collects batch selection, and stores
+    approved proposals on ctx.approved_proposals for ApplyPhase to execute.
 
-    Returns the count of auto-fixes that were applied successfully. A return
-    of 0 means nothing changed -- FinalBenchPhase uses this to skip the final
-    benchmark (see docs/pipeline-rescan-idempotency-plan.md).
+    Returns the count of auto-fixable proposals selected (0 = nothing approved).
     """
     from src.utils.formatting import get_batch_selection_handler
 
@@ -85,8 +83,6 @@ def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created:
 
     handler = get_batch_selection_handler()
     if handler is not None:
-        # GUI mode — bridge routes this through BatchSelectionDialog and
-        # returns the user's 1-indexed selection list (empty list = skip).
         selection = list(handler(proposals, total) or [])
     else:
         print_prompt("Apply changes? Enter numbers (e.g. \"1 3\"), \"all\", or \"skip\": ")
@@ -105,7 +101,6 @@ def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created:
         print_info("No changes applied.")
         return 0
 
-    # Determine which auto-fixable checks were approved vs skipped
     approved_checks = [
         proposals[n - 1].get("finding", "") for n in selection
         if proposals[n - 1].get("can_auto_fix")
@@ -116,9 +111,7 @@ def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created:
     ]
     action_logger.log_approval_decision(approved_checks, skipped_checks)
 
-    # Map selected numbers to proposals
     selected_proposals = {n: p for n, p in auto_fixable if n in selection}
-    # Inform about manual-only selections
     for n in selection:
         proposal = proposals[n - 1]
         if not proposal.get("can_auto_fix") and n not in selected_proposals:
@@ -127,29 +120,34 @@ def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created:
                 f"{proposal.get('proposed_action')}"
             )
 
-    print()
-    bar = AnimatedProgressBar(total=len(selected_proposals), label="Applying fixes")
+    ctx.approved_proposals = [p for _, p in sorted(selected_proposals.items())]
+    return len(ctx.approved_proposals)
 
-    # Start session manifest before fix loop so each fix can append its backup
-    # entry. start_session_manifest is a no-op if a manifest is already active
-    # (a prior run, or a dashboard fix), so the manifest accumulates per session.
+
+def execute_approved_fixes(ctx) -> int:
+    """Execute proposals stored by run_approval_flow. Sets ctx.fixes_applied and returns count.
+
+    Called by ApplyPhase. Always runs regardless of benchmark state.
+    """
+    if not ctx.approved_proposals:
+        return 0
+
+    bar = AnimatedProgressBar(total=len(ctx.approved_proposals), label="Applying fixes")
+
     try:
         from src.utils.revert import start_session_manifest
-        start_session_manifest(restore_point_created=restore_point_created)
+        start_session_manifest(restore_point_created=ctx.restore_point_created)
     except Exception:
         from src.utils.formatting import print_warning
         print_warning("Revert will not be available for this session — backup could not be saved.")
 
     bar.start()
 
-    # Count fixes that actually succeeded -- execute_fix returns False on
-    # failure. A selected-but-failed fix must not count, or FinalBenchPhase
-    # would benchmark a machine nothing changed on.
     applied = 0
-    for i, (_n, proposal) in enumerate(sorted(selected_proposals.items()), 1):
+    for i, proposal in enumerate(ctx.approved_proposals, 1):
         check = proposal.get("finding", "")
         bar.update(i, f"Fixing {check.replace('_', ' ')}...")
-        if execute_fix(check, specs):
+        if execute_fix(check, ctx.specs):
             applied += 1
 
     bar.finish()
@@ -158,4 +156,5 @@ def run_approval_flow(proposals: list[dict], specs: dict, restore_point_created:
         "\nIf anything looks wrong, a System Restore Point was created at startup. "
         "Open 'Create a restore point' in Windows to roll back."
     )
+    ctx.fixes_applied = applied
     return applied

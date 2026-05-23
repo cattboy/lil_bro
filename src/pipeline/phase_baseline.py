@@ -1,4 +1,4 @@
-"""Phase 3 — Baseline Benchmark: Cinebench run + thermal monitoring."""
+"""Phase 5 — Baseline Benchmark: Cinebench run + thermal monitoring."""
 
 from src.pipeline.base import PipelineContext, PhaseResult
 from src.benchmarks.cinebench import BenchmarkRunner
@@ -17,8 +17,11 @@ _SKIP_RESULT_HOT = {"status": "skipped", "message": "Benchmark skipped — idle 
 class BaselineBenchPhase:
     def run(self, ctx: PipelineContext) -> PhaseResult:
         log = get_debug_logger()
-        log.info("Phase 3: Baseline Benchmark")
-        print_header("Phase 3: Baseline Benchmark")
+        log.info("Phase 5: Baseline Benchmark")
+        print_header("Phase 5: Baseline Benchmark")
+
+        if ctx.run_benchmarks is False:
+            return PhaseResult("skipped", "User opted out of benchmarks")
 
         if require_thermal_protection("BaselineBench", ctx):
             ctx.baseline_result = dict(_SKIP_RESULT)

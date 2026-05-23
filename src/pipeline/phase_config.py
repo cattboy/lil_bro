@@ -1,4 +1,4 @@
-"""Phase 4 — Optimization Configuration Check: analyze, propose, approve."""
+"""Phase 3 — Optimization Configuration Check: analyze and propose."""
 
 from src.pipeline.base import PipelineAborted, PipelineContext, PhaseResult
 from src.agent_tools.display import analyze_display
@@ -25,8 +25,8 @@ class ConfigPhase:
         from src.utils.formatting import prompt_pause
 
         log = get_debug_logger()
-        log.info("Phase 4: Apply Optimization Configurations")
-        print_header("Phase 4: Apply Optimization Configurations")
+        log.info("Phase 3: Analyze and Propose Optimizations")
+        print_header("Phase 3: Analyze and Propose Optimizations")
 
         if not ctx.specs:
             print_warning("No system data available -- skipping configuration checks.")
@@ -46,12 +46,13 @@ class ConfigPhase:
             if nvidia_finding["status"] != "SKIPPED":
                 findings.append(nvidia_finding)
 
-            thermal_finding = analyze_thermals(
-                ctx.peak_temps,
-                cpu_peak=ctx.thermal.get_cpu_peak() if ctx.lhm_available else None,
-                gpu_peak=ctx.thermal.get_gpu_peak() if ctx.lhm_available else None,
-            )
-            findings.append(thermal_finding)
+            if ctx.peak_temps:
+                thermal_finding = analyze_thermals(
+                    ctx.peak_temps,
+                    cpu_peak=ctx.thermal.get_cpu_peak() if ctx.lhm_available else None,
+                    gpu_peak=ctx.thermal.get_gpu_peak() if ctx.lhm_available else None,
+                )
+                findings.append(thermal_finding)
 
             print()
             mouse_result = ctx.mouse_result
@@ -92,13 +93,11 @@ class ConfigPhase:
                 print_dim("Generating recommendations...")
             proposals = propose_actions(hardware, findings, ctx.llm)
 
-            ctx.fixes_applied = run_approval_flow(
-                proposals, ctx.specs, restore_point_created=ctx.restore_point_created
-            )
+            run_approval_flow(proposals, ctx)
         except PipelineAborted:
             raise  # user declined — let orchestrator handle
         except Exception as exc:
             log.error("ConfigPhase failed unexpectedly: %s", exc, exc_info=True)
-            print_warning("Configuration phase encountered an error — skipping to final benchmark.")
+            print_warning("Configuration phase encountered an error — skipping.")
             return PhaseResult("failed", "Configuration phase error", error=str(exc))
-        return PhaseResult("completed", "Configuration complete")
+        return PhaseResult("completed", "Configuration analysis complete")

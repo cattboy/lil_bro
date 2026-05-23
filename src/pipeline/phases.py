@@ -8,8 +8,10 @@ if TYPE_CHECKING:
 from src.pipeline.base import PipelineContext, PipelineAborted, Phase, PhaseResult
 from src.pipeline.phase_bootstrap import BootstrapPhase
 from src.pipeline.phase_scan import ScanPhase
-from src.pipeline.phase_baseline import BaselineBenchPhase
 from src.pipeline.phase_config import ConfigPhase
+from src.pipeline.phase_benchmark_optin import BenchmarkOptInPhase
+from src.pipeline.phase_baseline import BaselineBenchPhase
+from src.pipeline.phase_apply import ApplyPhase
 from src.pipeline.phase_final import FinalBenchPhase
 from src.collectors.sub.lhm_sidecar import LHMSidecar
 from src.benchmarks.thermal_monitor import ThermalMonitor
@@ -19,8 +21,10 @@ from src.utils.debug_logger import get_debug_logger
 _PHASES: list[Phase] = [
     BootstrapPhase(),
     ScanPhase(),
-    BaselineBenchPhase(),
     ConfigPhase(),
+    BenchmarkOptInPhase(),
+    BaselineBenchPhase(),
+    ApplyPhase(),
     FinalBenchPhase(),
 ]
 

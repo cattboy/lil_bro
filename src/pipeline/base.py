@@ -60,6 +60,12 @@ class PipelineContext:
     # Set by ScanPhase — mouse polling measured before spec dump in GUI mode
     mouse_result: Optional[dict] = None
 
+    # Set by BenchmarkOptInPhase — True/False = user's explicit choice; None = not decided.
+    run_benchmarks: Optional[bool] = None
+
+    # Set by ConfigPhase — approved proposals pending execution in ApplyPhase.
+    approved_proposals: list = field(default_factory=list)
+
 
 class Phase(Protocol):
     """Structural protocol for pipeline phases."""

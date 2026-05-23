@@ -109,6 +109,39 @@ def notify_mouse_poll_result(result: dict) -> None:
         _MOUSE_POLL_RESULT_SINK(result)
 
 
+_BENCHMARK_OPTIN_HANDLER: "Callable[[], bool] | None" = None
+
+
+def set_benchmark_optin_handler(handler: "Callable[[], bool] | None") -> None:
+    """Install (or clear) the benchmark opt-in handler. ``None`` restores CLI input()."""
+    global _BENCHMARK_OPTIN_HANDLER
+    _BENCHMARK_OPTIN_HANDLER = handler
+
+
+def prompt_benchmark_optin() -> bool:
+    """Ask the user whether to run PRE/POST Cinebench benchmarks (~30 min).
+
+    GUI mode: calls the registered handler (dialog returns True/False).
+              If no handler registered yet, defaults to True (preserves existing behavior).
+    CLI mode: interactive y/N prompt; defaults to False on empty input.
+    """
+    h = _BENCHMARK_OPTIN_HANDLER
+    if h is not None:
+        return h()
+    if _BATCH_SELECTION_HANDLER is not None:
+        # GUI mode without a registered benchmark optin handler — run benchmarks by default
+        # until the GUI is wired up with a proper dialog.
+        return True
+    print_info(
+        "\nOptional: Run a Cinebench PRE/POST benchmark to measure the impact of your fixes.\n"
+        "  PRE benchmark  →  apply fixes  →  POST benchmark  →  comparison\n"
+        "  Estimated time: ~30 minutes."
+    )
+    print_prompt("Run benchmarks? [y/N]: ")
+    raw = input().strip().lower()
+    return raw in ("y", "yes")
+
+
 _BENCHMARK_STARTED_SINK: "Callable[[], None] | None" = None
 
 
