@@ -390,10 +390,34 @@ class BenchmarkRunner:
                 if watchdog:
                     watchdog.stop()
 
-            print_step_done(True)
+            # Guard 1: honour a cancel that fired concurrently with process exit
+            if _state.is_cancelled():
+                print_step_done(False)
+                print_warning("Benchmark cancelled.")
+                log.warning("Cinebench: Cancelled concurrently with process exit.")
+                return {
+                    "status": "aborted",
+                    "benchmark": "cinebench",
+                    "message": "Cancelled from GUI.",
+                }
 
             raw = output_file.read_text(encoding="utf-8", errors="replace") if output_file.exists() else ""
             scores = self._parse_output(raw, full_suite)
+
+            # Guard 2: treat a no-scores exit as aborted (e.g. user closed Cinebench window mid-run)
+            if not scores:
+                print_step_done(False)
+                print_warning("Cinebench exited without producing scores — benchmark may have been interrupted.")
+                log.warning("Cinebench: Process exited but no scores parsed; treating as aborted.")
+                return {
+                    "status": "aborted",
+                    "benchmark": "cinebench",
+                    "raw_output": raw[:500],
+                    "scores": {},
+                    "message": "Cinebench exited without producing scores.",
+                }
+
+            print_step_done(True)
 
             # Write filtered results file (FINDSTR "CB" equivalent) for human reference
             cb_lines = [ln for ln in raw.splitlines() if re.match(r"^\s*CB\s+", ln)]

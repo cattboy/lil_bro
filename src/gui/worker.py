@@ -98,6 +98,8 @@ class _MonitorFixWorker(QObject):
     def run(self) -> None:
         try:
             from src.pipeline.fix_dispatch import execute_fix
+            from src.utils.revert import start_session_manifest
+            start_session_manifest(restore_point_created=False)
             execute_fix("display", self._specs)
         except Exception:
             from src.utils.debug_logger import get_debug_logger

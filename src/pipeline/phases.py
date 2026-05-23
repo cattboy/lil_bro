@@ -42,7 +42,7 @@ def run_optimization_pipeline(lhm: LHMSidecar, llm: Optional[Llama] = None, prel
         log = get_debug_logger()
         try:
             for phase in _PHASES:
-                if _state.is_cancelled():
+                if _state.is_cancelled() and not ctx.cancel_override:
                     log.info("Pipeline cancelled before phase %s", type(phase).__name__)
                     break
                 result: PhaseResult = phase.run(ctx)

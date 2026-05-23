@@ -5,6 +5,7 @@ from src.benchmarks.cinebench import BenchmarkRunner
 from src.pipeline.thermal_gate import run_thermal_guard
 from src.utils.formatting import (
     print_header, print_info, print_success, print_warning,
+    prompt_approval,
 )
 from src.utils.action_logger import action_logger
 from src.utils.debug_logger import get_debug_logger
@@ -51,6 +52,15 @@ class BaselineBenchPhase:
         if ctx.baseline_result.get("status") == "success":
             print_success("Baseline Benchmark Complete!")
             print_info(f"Scores: {ctx.baseline_result.get('scores', {})}")
+        else:
+            baseline_status = ctx.baseline_result.get("status")
+            if ctx.approved_proposals:
+                n = len(ctx.approved_proposals)
+                reason = "was cancelled" if baseline_status == "aborted" else "failed"
+                if prompt_approval(f"Benchmark {reason}. Apply the {n} approved fix(es) anyway?"):
+                    ctx.cancel_override = True
+                else:
+                    ctx.skip_apply = True
 
         ctx.peak_temps = ctx.thermal.get_peak_temps()
         cpu_peak = ctx.thermal.get_cpu_peak()

@@ -66,6 +66,13 @@ class PipelineContext:
     # Set by ConfigPhase — approved proposals pending execution in ApplyPhase.
     approved_proposals: list = field(default_factory=list)
 
+    # Set by BaselineBenchPhase when user declines to apply after a benchmark abort.
+    skip_apply: bool = False
+
+    # Set by BaselineBenchPhase when user confirms apply despite benchmark abort.
+    # Phases loop honours this to not break on is_cancelled().
+    cancel_override: bool = False
+
 
 class Phase(Protocol):
     """Structural protocol for pipeline phases."""

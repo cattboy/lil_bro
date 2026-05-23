@@ -38,6 +38,15 @@
 - Always implement multi-method fallbacks — never hard-fail when a tool (nvidia-smi, dxdiag, etc.) is missing. Fall back to WMI or registry alternatives.
 - Terminal UI only — do not introduce PyQt or GUI dependencies until explicitly requested.
 
+### Dashboard Fix Pattern
+When a fix can be triggered from a Dashboard card button (outside the pipeline `ApplyPhase`), follow this pattern — see `_MonitorFixWorker` in `src/gui/worker.py` as the reference implementation:
+
+1. **Always route through `execute_fix(check_name, specs)`** (`src/pipeline/fix_dispatch.py`) — never call `_fix_*` handlers directly.
+2. **Call `start_session_manifest(restore_point_created=False)` before `execute_fix()`** in the worker's `run()` method. It is a no-op if the pipeline already ran — safe to call unconditionally. Without it, `_record_revertible()` inside the handler writes into an uninitialized manifest and the fix is silently non-revertible.
+3. **The check name passed to `execute_fix` must exactly match the `@register_fix` key** in `fix_dispatch.py` — same string the analyzer returns in `"check"`.
+4. **Pass a filtered `specs` dict** narrowed to only the targeted item so the handler doesn't act on everything.
+5. Wire the button signal → `StartupCoordinator` method → `QThread` + worker, mirroring `on_monitor_fix_requested` in `src/gui/startup_coordinator.py`.
+
 ### Subprocess & Temp Files
 - **All subprocess temp files must be stored in CWD, not `%TEMP%`.** Use `get_temp_dir()` from `src/utils/paths.py` as the `dir=` argument for `tempfile.TemporaryDirectory()` and `tempfile.mkstemp()`. This ensures all runtime artifacts live under `./lil_bro/` and get cleaned up on exit via `post_run_cleanup.py`.
 - Any new code spawning subprocesses that produce temp files must use `dir=str(get_temp_dir())` — never rely on the system default temp directory.
