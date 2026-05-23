@@ -49,18 +49,17 @@ class BaselineBenchPhase:
         finally:
             ctx.thermal.stop()
 
-        if ctx.baseline_result.get("status") == "success":
+        status = ctx.baseline_result.get("status")
+        if status == "success":
             print_success("Baseline Benchmark Complete!")
             print_info(f"Scores: {ctx.baseline_result.get('scores', {})}")
-        else:
-            baseline_status = ctx.baseline_result.get("status")
-            if ctx.approved_proposals:
-                n = len(ctx.approved_proposals)
-                reason = "was cancelled" if baseline_status == "aborted" else "failed"
-                if prompt_approval(f"Benchmark {reason}. Apply the {n} approved fix(es) anyway?"):
-                    ctx.cancel_override = True
-                else:
-                    ctx.skip_apply = True
+        elif ctx.approved_proposals:
+            n = len(ctx.approved_proposals)
+            reason = "was cancelled" if status == "aborted" else "failed"
+            if prompt_approval(f"Benchmark {reason}. Apply the {n} approved fix(es) anyway?"):
+                ctx.cancel_override = True
+            else:
+                ctx.skip_apply = True
 
         ctx.peak_temps = ctx.thermal.get_peak_temps()
         cpu_peak = ctx.thermal.get_cpu_peak()
@@ -80,7 +79,7 @@ class BaselineBenchPhase:
         else:
             print_warning("Thermal monitor ran but captured no temperature data.")
 
-        if ctx.baseline_result.get("status") == "success":
+        if status == "success":
             from src.utils.formatting import notify_benchmark_score
             notify_benchmark_score(
                 "baseline",

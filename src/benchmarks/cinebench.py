@@ -392,29 +392,31 @@ class BenchmarkRunner:
 
             # Guard 1: honour a cancel that fired concurrently with process exit
             if _state.is_cancelled():
+                reason = "Cancelled from GUI."
                 print_step_done(False)
-                print_warning("Benchmark cancelled.")
-                log.warning("Cinebench: Cancelled concurrently with process exit.")
+                print_warning(f"Benchmark aborted: {reason}")
+                log.warning("Cinebench: Benchmark aborted -- %s (concurrent with process exit)", reason)
                 return {
                     "status": "aborted",
                     "benchmark": "cinebench",
-                    "message": "Cancelled from GUI.",
+                    "message": reason,
                 }
 
             raw = output_file.read_text(encoding="utf-8", errors="replace") if output_file.exists() else ""
             scores = self._parse_output(raw, full_suite)
 
-            # Guard 2: treat a no-scores exit as aborted (e.g. user closed Cinebench window mid-run)
+            # Guard 2: no cancel signal but no scores -- tool failure (EULA screen, AV quarantine, driver crash)
             if not scores:
+                reason = "Cinebench exited without producing scores -- benchmark may have been interrupted."
                 print_step_done(False)
-                print_warning("Cinebench exited without producing scores — benchmark may have been interrupted.")
-                log.warning("Cinebench: Process exited but no scores parsed; treating as aborted.")
+                print_warning(reason)
+                log.warning("Cinebench: Process exited but no scores parsed; treating as error (no cancel signal).")
                 return {
-                    "status": "aborted",
+                    "status": "error",
                     "benchmark": "cinebench",
                     "raw_output": raw[:500],
                     "scores": {},
-                    "message": "Cinebench exited without producing scores.",
+                    "message": reason,
                 }
 
             print_step_done(True)
