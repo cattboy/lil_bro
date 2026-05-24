@@ -15,49 +15,21 @@ attempt to fix the WDK build chain here.
 import ctypes
 import json
 import os
-import socket
 import subprocess
-import sys
 import threading
 import time
 import urllib.request
 from typing import Optional
 
-from ...utils.formatting import print_step, print_step_done, print_warning, print_info, print_dim
 from ...utils.action_logger import action_logger
 from ...utils.debug_logger import get_debug_logger
+from ...utils.formatting import print_dim, print_info, print_step, print_step_done, print_warning
 from ...utils.platform import is_admin
+from .lhm_discovery import _LHM_SEARCH_PATHS, _PROJECT_ROOT, find_lhm_executable
+from .lhm_http import LHM_PORT, LHM_URL, _POLL_INTERVAL, _STARTUP_TIMEOUT, _is_lhm_responding
+from .lhm_process_utils import _find_elevated_pid, _is_port_in_use
 
 log = get_debug_logger()
-
-from .lhm_discovery import _PROJECT_ROOT, _LHM_SEARCH_PATHS, find_lhm_executable
-from .lhm_http import LHM_PORT, LHM_URL, _STARTUP_TIMEOUT, _POLL_INTERVAL, _is_lhm_responding
-
-
-
-def _find_elevated_pid(exe_name: str) -> Optional[int]:
-    """Find the PID of a running process by exe name via tasklist."""
-    try:
-        result = subprocess.run(
-            ["tasklist", "/fi", f"imagename eq {exe_name}", "/fo", "csv", "/nh"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        for line in result.stdout.strip().splitlines():
-            parts = line.strip('"').split('","')
-            if parts and parts[0].lower() == exe_name.lower():
-                return int(parts[1])
-    except Exception:
-        pass  # safe: tasklist parse fallback; caller treats None as "not running"
-    return None
-
-
-def _is_port_in_use(port: int) -> bool:
-    """Check if a TCP port is already bound on localhost."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(1)
-        return s.connect_ex(("127.0.0.1", port)) == 0
 
 
 class LHMSidecar:

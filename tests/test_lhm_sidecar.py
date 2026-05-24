@@ -13,7 +13,7 @@ from src.collectors.sub.lhm_sidecar import (
 
 # ── Port probe tests ─────────────────────────────────────────────────────────
 
-@patch("src.collectors.sub.lhm_sidecar.socket.socket")
+@patch("src.collectors.sub.lhm_process_utils.socket.socket")
 def test_port_in_use_returns_true(mock_socket_cls):
     mock_sock = MagicMock()
     mock_sock.connect_ex.return_value = 0
@@ -22,7 +22,7 @@ def test_port_in_use_returns_true(mock_socket_cls):
     assert _is_port_in_use(8085) is True
 
 
-@patch("src.collectors.sub.lhm_sidecar.socket.socket")
+@patch("src.collectors.sub.lhm_process_utils.socket.socket")
 def test_port_not_in_use_returns_false(mock_socket_cls):
     mock_sock = MagicMock()
     mock_sock.connect_ex.return_value = 1
