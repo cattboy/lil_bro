@@ -95,6 +95,8 @@ a = Analysis(
         'src.gui.windows.main_window',
         'src.agent_tools.mouse',
         'src.agent_tools.quick_status',
+        # src.utils helpers re-exported via formatting
+        'src.utils._console',
     ],
     hookspath=[],
     hooksconfig={},
