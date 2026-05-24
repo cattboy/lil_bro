@@ -50,7 +50,7 @@ def test_lhm_not_responding(mock_urlopen):
 
 # ── find_lhm_executable ──────────────────────────────────────────────────────
 
-@patch("src.collectors.sub.lhm_sidecar.os.path.isfile")
+@patch("src.collectors.sub.lhm_discovery.os.path.isfile")
 def test_find_lhm_returns_custom_server(mock_isfile):
     """lhm-server.exe found → returns (path, True)."""
     mock_isfile.side_effect = lambda p: p.endswith("lhm-server.exe")
@@ -60,7 +60,7 @@ def test_find_lhm_returns_custom_server(mock_isfile):
     assert is_custom is True
 
 
-@patch("src.collectors.sub.lhm_sidecar.os.path.isfile")
+@patch("src.collectors.sub.lhm_discovery.os.path.isfile")
 def test_find_lhm_returns_full_lhm(mock_isfile):
     """Only full LHM found → returns (path, False)."""
     mock_isfile.side_effect = lambda p: "LibreHardwareMonitor.exe" in p and "lhm-server" not in p
@@ -70,7 +70,7 @@ def test_find_lhm_returns_full_lhm(mock_isfile):
     assert is_custom is False
 
 
-@patch("src.collectors.sub.lhm_sidecar.os.path.isfile", return_value=False)
+@patch("src.collectors.sub.lhm_discovery.os.path.isfile", return_value=False)
 def test_find_lhm_exe_not_found(mock_isfile):
     """Nothing found → returns (None, False)."""
     path, is_custom = find_lhm_executable()

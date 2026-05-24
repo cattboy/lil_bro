@@ -35,26 +35,7 @@ LHM_URL = f"http://localhost:{LHM_PORT}/data.json"
 _STARTUP_TIMEOUT = 15  # seconds to wait for /data.json readiness (.NET cold start)
 _POLL_INTERVAL = 0.5  # seconds between readiness checks
 
-# Search order for thermal sensor server binaries.
-# lhm-server.exe (custom minimal server) is checked first; falling back to
-# a user-installed full LibreHardwareMonitor installation.
-_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-
-_LHM_SEARCH_PATHS = [
-    # 1. PyInstaller frozen bundle -- sys._MEIPASS/tools/lhm-server.exe
-    os.path.join(getattr(sys, "_MEIPASS", _PROJECT_ROOT), "tools", "lhm-server.exe"),
-    # 2. Next to the running executable -- portable deployment (frozen .exe)
-    os.path.join(os.path.dirname(sys.executable), "tools", "lhm-server.exe"),
-    # 3. Source-tree dev path -- tools/lhm-server/dist/lhm-server.exe
-    os.path.join(_PROJECT_ROOT, "tools", "lhm-server", "dist", "lhm-server.exe"),
-    # 4. Full LibreHardwareMonitor installation (user-installed)
-    os.path.join(_PROJECT_ROOT, "tools", "LibreHardwareMonitor", "LibreHardwareMonitor.exe"),
-    r"C:\Program Files\LibreHardwareMonitor\LibreHardwareMonitor.exe",
-    r"C:\Program Files (x86)\LibreHardwareMonitor\LibreHardwareMonitor.exe",
-    os.path.expandvars(r"%LOCALAPPDATA%\LibreHardwareMonitor\LibreHardwareMonitor.exe"),
-]
-
-
+from .lhm_discovery import _PROJECT_ROOT, _LHM_SEARCH_PATHS, find_lhm_executable
 def _find_elevated_pid(exe_name: str) -> Optional[int]:
     """Find the PID of a running process by exe name via tasklist."""
     try:
@@ -90,22 +71,6 @@ def _is_lhm_responding() -> bool:
             return isinstance(data, dict)
     except Exception:
         return False
-
-
-def find_lhm_executable() -> tuple[Optional[str], bool]:
-    """Search for a thermal sensor server binary.
-
-    Returns:
-        (path, is_custom_server) where:
-        - path is the absolute path to the binary, or None if not found.
-        - is_custom_server is True for lhm-server.exe (custom minimal server),
-          False for the full LibreHardwareMonitor application.
-    """
-    for path in _LHM_SEARCH_PATHS:
-        if os.path.isfile(path):
-            is_custom = os.path.basename(path) == "lhm-server.exe"
-            return path, is_custom
-    return None, False
 
 
 class LHMSidecar:
