@@ -33,7 +33,7 @@ def test_port_not_in_use_returns_false(mock_socket_cls):
 
 # ── LHM responding tests ─────────────────────────────────────────────────────
 
-@patch("src.collectors.sub.lhm_sidecar.urllib.request.urlopen")
+@patch("src.collectors.sub.lhm_http.urllib.request.urlopen")
 def test_lhm_responding_valid_json(mock_urlopen):
     mock_resp = MagicMock()
     mock_resp.read.return_value = json.dumps({"Children": []}).encode()
@@ -43,7 +43,7 @@ def test_lhm_responding_valid_json(mock_urlopen):
     assert _is_lhm_responding() is True
 
 
-@patch("src.collectors.sub.lhm_sidecar.urllib.request.urlopen", side_effect=Exception("timeout"))
+@patch("src.collectors.sub.lhm_http.urllib.request.urlopen", side_effect=Exception("timeout"))
 def test_lhm_not_responding(mock_urlopen):
     assert _is_lhm_responding() is False
 

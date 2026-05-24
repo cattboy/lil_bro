@@ -30,12 +30,11 @@ from ...utils.platform import is_admin
 
 log = get_debug_logger()
 
-LHM_PORT = 8085
-LHM_URL = f"http://localhost:{LHM_PORT}/data.json"
-_STARTUP_TIMEOUT = 15  # seconds to wait for /data.json readiness (.NET cold start)
-_POLL_INTERVAL = 0.5  # seconds between readiness checks
-
 from .lhm_discovery import _PROJECT_ROOT, _LHM_SEARCH_PATHS, find_lhm_executable
+from .lhm_http import LHM_PORT, LHM_URL, _STARTUP_TIMEOUT, _POLL_INTERVAL, _is_lhm_responding
+
+
+
 def _find_elevated_pid(exe_name: str) -> Optional[int]:
     """Find the PID of a running process by exe name via tasklist."""
     try:
@@ -59,18 +58,6 @@ def _is_port_in_use(port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(1)
         return s.connect_ex(("127.0.0.1", port)) == 0
-
-
-def _is_lhm_responding() -> bool:
-    """Check if LHM's HTTP endpoint is serving valid JSON."""
-    try:
-        req = urllib.request.Request(LHM_URL)
-        with urllib.request.urlopen(req, timeout=2) as resp:
-            data = json.loads(resp.read())
-            # LHM returns a JSON object with a "Children" key at top level
-            return isinstance(data, dict)
-    except Exception:
-        return False
 
 
 class LHMSidecar:
