@@ -55,5 +55,5 @@ The one clean seam is `resize_console_window` — fully isolated ctypes IO, no c
 ## Status
 - [x] Phase 4 devil's advocate complete (5 concerns addressed)
 - [x] User approved (auto mode)
-- [ ] Implementation complete
-- [ ] All tests passing
+- [x] Implementation complete (1 chunk committed)
+- [x] All target tests passing (38/38)
