@@ -10,7 +10,7 @@ from src.benchmarks.cinebench import (
 
 # ── find_cinebench ────────────────────────────────────────────────────────────
 
-@patch("src.benchmarks.cinebench.os.path.isfile")
+@patch("src.benchmarks.cinebench_discovery.os.path.isfile")
 def test_find_cinebench_found(mock_isfile):
     """Returns the first matching path."""
     mock_isfile.side_effect = lambda p: "bench-exe" in p
@@ -19,13 +19,13 @@ def test_find_cinebench_found(mock_isfile):
     assert "Cinebench.exe" in result
 
 
-@patch("src.benchmarks.cinebench.os.path.isfile", return_value=False)
+@patch("src.benchmarks.cinebench_discovery.os.path.isfile", return_value=False)
 def test_find_cinebench_not_found(mock_isfile):
     """Returns None when no path matches."""
     assert find_cinebench() is None
 
 
-@patch("src.benchmarks.cinebench.os.path.isfile")
+@patch("src.benchmarks.cinebench_discovery.os.path.isfile")
 def test_find_cinebench_checks_all_paths(mock_isfile):
     """All search paths should be checked."""
     mock_isfile.return_value = False

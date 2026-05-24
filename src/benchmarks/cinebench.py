@@ -12,7 +12,7 @@ import re
 import subprocess
 import threading
 import time
-from pathlib import Path
+from pathlib import Path  # re-exported for tests that @patch cinebench.Path
 from typing import Optional
 
 from .thermal_monitor import ThermalWatchdog
@@ -34,33 +34,7 @@ log = get_debug_logger()
 # -- Cinebench discovery ------------------------------------------------------
 
 from ..pipeline import _state
-
-_REPO_ROOT = str(Path(__file__).resolve().parent.parent.parent)
-
-_CINEBENCH_SEARCH_PATHS = [
-    # Placed next to lil_bro.exe by the user
-    str(Path.cwd() / "Cinebench.exe"),
-    # Bundled with lil_bro (future installer puts it here)
-    os.path.join(_REPO_ROOT, "bench-exe", "Cinebench.exe"),
-    # Maxon default installs
-    r"C:\Program Files\Maxon Cinebench 2024\Cinebench.exe",
-    r"C:\Program Files\Maxon Cinebench\Cinebench.exe",
-    r"C:\Program Files\Maxon Cinema 4D 2026\Cinebench.exe",
-    r"C:\Program Files\Maxon Cinema 4D 2024\Cinebench.exe",
-    # Desktop shortcuts
-    r"C:\Users\Public\Desktop\Cinebench.exe",
-    os.path.expanduser(r"~\Desktop\Cinebench.exe"),
-    # Steam
-    os.path.expandvars(
-        r"%ProgramFiles(x86)%\Steam\steamapps\common\Cinebench 2024\Cinebench.exe"
-    ),
-    os.path.expandvars(
-        r"%ProgramFiles(x86)%\Steam\steamapps\common\Cinebench\Cinebench.exe"
-    ),
-    # User local apps
-    os.path.expandvars(r"%LOCALAPPDATA%\Programs\Cinebench 2024\Cinebench.exe"),
-    os.path.expandvars(r"%LOCALAPPDATA%\Programs\Cinebench\Cinebench.exe"),
-]
+from .cinebench_discovery import _REPO_ROOT, _CINEBENCH_SEARCH_PATHS, find_cinebench
 
 _CINEBENCH_TIMEOUT = _cfg.benchmark.cinebench_timeout  # max seconds for a single run
 
@@ -191,23 +165,6 @@ def _minimize_cinebench_window(
         time.sleep(1)
 
 
-def find_cinebench() -> Optional[str]:
-    """Search common install paths for Cinebench. Returns exe path or None."""
-    for path in _CINEBENCH_SEARCH_PATHS:
-        if os.path.isfile(path):
-            return path
-    return None
-
-
-
-
-
-
-
-
-
-
-# -- Benchmark runner ---------------------------------------------------------
 
 
 class BenchmarkRunner:
