@@ -84,9 +84,22 @@ class PipelineWorker(QObject):
 class _MonitorFixWorker(QObject):
     """Runs ``execute_fix('display', specs)`` off the GUI thread.
 
-    The bridge's installed approval handler intercepts ``prompt_approval()``
-    inside ``_fix_display()`` and surfaces it via the standard ApprovalDialog,
-    so this worker only needs to invoke the dispatcher.
+    ``_fix_display`` -> ``_fix_one_display`` does NOT call
+    ``prompt_approval`` -- it captures the current display mode, validates a
+    target mode via ``apply_display_mode(..., dry_run=True)``, then commits.
+    The caller (StartupCoordinator.on_monitor_fix_requested) gates the user
+    approval with a BatchSelectionDialog before spawning this worker, so the
+    apply path is intentionally non-interactive.
+
+    WARNING for future fix handlers: if you add a check whose ``_fix_*``
+    handler calls ``prompt_approval``, do NOT route it through a worker
+    shaped like this one. ``prompt_approval`` emits
+    ``bridge.signals.approval_requested`` (QueuedConnection) then blocks on
+    a ``QEventLoop.exec()`` -- the worker thread here has no event loop
+    (we call ``run()`` synchronously from ``thread.started``, never
+    ``thread.exec()``), so the queued slot would sit forever and the worker
+    would deadlock. Route interactive fixes through the pipeline approval
+    flow (``ApplyPhase`` + ``execute_approved_fixes``) instead.
     """
 
     finished = Signal()
