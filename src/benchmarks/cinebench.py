@@ -94,6 +94,20 @@ class BenchmarkRunner:
 
     def _run_cinebench(self, full_suite: bool, lhm_available: bool = False) -> dict:
         """Launch Cinebench via CLI and capture results."""
+        # Path containing a double-quote would escape the batch-file quoting
+        # below ("...""{self.cinebench_path}"...") and let arbitrary cmd.exe
+        # tokens through. find_cinebench() only returns paths from a hardcoded
+        # search list -- none of which contain " -- but a future caller passing
+        # an arbitrary path needs this guard.
+        if '"' in str(self.cinebench_path):
+            reason = (
+                f"Cinebench path contains an unsupported character ('\"'): "
+                f"{self.cinebench_path}"
+            )
+            print_error(reason)
+            log.error("Cinebench: %s", reason)
+            return {"status": "error", "benchmark": "cinebench", "message": reason}
+
         mode = "All Tests" if full_suite else "CPU Single-Core"
         print_step(f"Running Cinebench ({mode})")
         print()  # newline so subsequent print_info calls appear on their own lines
