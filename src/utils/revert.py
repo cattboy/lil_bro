@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import json
+import os
 import subprocess
 import threading
 from datetime import datetime
@@ -203,11 +204,25 @@ def _read_raw_manifest() -> dict | None:
 
 
 def _write_manifest(manifest: dict) -> None:
-    """Serialize and write manifest to disk. Logs warning on failure."""
+    """Serialize and write manifest atomically. Logs warning on failure.
+
+    Writes to a ``.tmp`` sibling first, then ``os.replace`` swaps it in. A
+    plain ``write_text`` is non-atomic on Windows (CreateFile -> WriteFile ->
+    CloseHandle); a kill between WriteFile and CloseHandle leaves
+    ``session_latest.json`` truncated, and ``_read_raw_manifest`` then treats
+    the corrupt file as absent -- silently losing every revert entry from this
+    session.
+    """
     path = get_session_backup_path()
+    tmp = path.with_name(path.name + ".tmp")
     try:
-        path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        tmp.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
     except OSError as exc:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass  # safe: leftover .tmp gets overwritten on the next write
         print_warning(
             "Revert will not be available for this session — backup could not be saved."
         )

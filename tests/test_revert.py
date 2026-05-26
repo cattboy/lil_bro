@@ -464,3 +464,62 @@ class TestManifestThreadSafety:
                 t.join()
         data = json.loads(manifest_path.read_text())
         assert len(data["fixes"]) == 20
+
+
+class TestAtomicManifestWrite:
+    """CR-4: _write_manifest must be atomic (.tmp + os.replace).
+
+    A plain write_text on Windows is CreateFile -> WriteFile -> CloseHandle;
+    a kill between WriteFile and CloseHandle leaves session_latest.json
+    partially written. _read_raw_manifest catches the JSONDecodeError and
+    treats it as "no manifest" -- silently losing every fix from this
+    session. Atomic write via a staging file means the worst case is the
+    new entry didn't land, never that the prior data is lost.
+    """
+
+    def setup_method(self):
+        revert_mod._pending_manifest = None
+
+    def teardown_method(self):
+        revert_mod._pending_manifest = None
+
+    def test_atomic_write_leaves_no_staging_file(self, tmp_path):
+        """Happy path: the .tmp file does not survive a successful write."""
+        manifest_path = tmp_path / "session_latest.json"
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            start_session_manifest(restore_point_created=True)
+            append_fix_to_manifest({"fix": "power_plan"})
+        assert manifest_path.exists()
+        assert not (manifest_path.with_name("session_latest.json.tmp")).exists()
+        data = json.loads(manifest_path.read_text())
+        assert [f["fix"] for f in data["fixes"]] == ["power_plan"]
+
+    def test_replace_failure_preserves_existing_manifest(self, tmp_path):
+        """If os.replace fails (locked file, cross-volume), the original
+        manifest must be untouched -- worst case is one missed entry, not a
+        wiped session."""
+        manifest_path = tmp_path / "session_latest.json"
+        manifest_path.write_text(json.dumps(
+            {"schema_version": 1, "session_id": "preserved",
+             "restore_point_created": True,
+             "fixes": [{"fix": "power_plan", "revertible": True}]}
+        ))
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path), \
+             patch("src.utils.revert.os.replace", side_effect=OSError("locked")), \
+             patch("src.utils.revert.print_warning"):
+            append_fix_to_manifest({"fix": "game_mode"})
+        data = json.loads(manifest_path.read_text())
+        assert data["session_id"] == "preserved"
+        assert [f["fix"] for f in data["fixes"]] == ["power_plan"]
+
+    def test_staging_file_cleaned_up_on_replace_failure(self, tmp_path):
+        """A failed os.replace must not leak a .tmp file behind."""
+        manifest_path = tmp_path / "session_latest.json"
+        manifest_path.write_text(json.dumps(
+            {"schema_version": 1, "session_id": "x", "fixes": []}
+        ))
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path), \
+             patch("src.utils.revert.os.replace", side_effect=OSError("locked")), \
+             patch("src.utils.revert.print_warning"):
+            append_fix_to_manifest({"fix": "game_mode"})
+        assert not (manifest_path.with_name("session_latest.json.tmp")).exists()
