@@ -257,7 +257,7 @@ The lhm-server build auto-triggers `tools/PawnIO/build.ps1` (source build) if `t
 3. Return a dict with at minimum `check`, `status`, `message`, `can_auto_fix` keys
 4. Wire it into `phase_config.py` — add your check function to the run phase method
 5. Add a handler function and registry entry to `src/pipeline/fix_dispatch.py` using `@register_fix("your_check")` decorator if `can_auto_fix: True`
-6. Add a fallback template to `_FALLBACK` in `action_proposer.py` for offline/LLM-fallback scenarios
+6. Add a fallback template to `FALLBACK_PROPOSALS` in `action_proposer.py` for offline/LLM-fallback scenarios
 7. Write mocked tests in `tests/test_your_check.py`
 
 The Phase protocol (in `base.py`) ensures your check's findings flow cleanly through the orchestrator: Phase 4 (Config) → Fix dispatch → Approval UX → Phase 5 (Verification).
