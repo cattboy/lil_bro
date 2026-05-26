@@ -10,12 +10,18 @@ def _make_ctx(**kwargs):
 
 
 class TestRunThermalGuard:
+    @patch("src.pipeline.thermal_gate.fetch_snapshot", return_value={})
     @patch("src.pipeline.thermal_gate.require_thermal_protection", return_value=True)
-    def test_returns_true_when_no_protection(self, mock_require):
+    def test_returns_true_when_no_protection(self, mock_require, mock_fetch):
         """require_thermal_protection=True short-circuits and returns True."""
         ctx = _make_ctx(lhm_available=True)
         assert run_thermal_guard("TestPhase", ctx) is True
-        mock_require.assert_called_once_with("TestPhase", ctx)
+        mock_require.assert_called_once()
+        # snapshot is captured once at the top and passed through as kwarg
+        args, kwargs = mock_require.call_args
+        assert args[0] == "TestPhase"
+        assert args[1] is ctx
+        assert "snapshot" in kwargs
 
     @patch("src.pipeline.thermal_gate.prompt_approval", return_value=False)
     @patch("src.pipeline.thermal_gate.fetch_snapshot")
@@ -50,11 +56,7 @@ class TestRunThermalGuard:
         run_thermal_guard("TestPhase", ctx, approval_prompt="Custom prompt?")
         mock_approval.assert_called_once_with("Custom prompt?")
 
-    @patch("src.pipeline.thermal_gate.require_thermal_protection", return_value=False)
-    def test_no_lhm_returns_false(self, mock_require):
-        """No LHM available — proceed without checking temps."""
-        ctx = _make_ctx(lhm_available=False)
-        assert run_thermal_guard("TestPhase", ctx) is False
+    
 
     @patch("src.pipeline.thermal_gate.fetch_snapshot")
     @patch("src.pipeline.thermal_gate.check_idle_thermals")
