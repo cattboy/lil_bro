@@ -157,6 +157,18 @@ class StartupCoordinator:
         runtime = self._runtime
         main = self._main
         log = self._log
+        # Guard: dashboard fix during a pipeline run races ApplyPhase's
+        # _fix_display -- concurrent ChangeDisplaySettingsExW + concurrent
+        # manifest appends would record the wrong "before" state and break
+        # revert.
+        if runtime.get("pipeline_thread") is not None:
+            log.warning("Monitor fix suppressed: pipeline is running")
+            return
+        # Guard: rapid double-click would spawn two _MonitorFixWorker threads;
+        # the second's manifest "before" entry would be the first's after.
+        if runtime.get("monitor_fix_thread") is not None:
+            log.warning("Monitor fix already in progress -- ignoring")
+            return
         specs = runtime.get("preloaded_specs", {}) or {}
         displays = specs.get("DisplayCapabilities", []) or []
         target = next((d for d in displays if d.get("device") == device), None)
