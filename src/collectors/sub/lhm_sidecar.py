@@ -26,7 +26,10 @@ from ...utils.debug_logger import get_debug_logger
 from ...utils.formatting import print_dim, print_info, print_step, print_step_done, print_warning
 from ...utils.platform import is_admin
 from .lhm_discovery import _LHM_SEARCH_PATHS, _PROJECT_ROOT, find_lhm_executable
-from .lhm_http import LHM_PORT, LHM_URL, _POLL_INTERVAL, _STARTUP_TIMEOUT, _is_lhm_responding
+from .lhm_http import (
+    LHM_PORT, LHM_URL, _MAX_RESPONSE_BYTES, _POLL_INTERVAL, _STARTUP_TIMEOUT,
+    _is_lhm_responding,
+)
 from .lhm_process_utils import _find_elevated_pid, _is_port_in_use
 
 log = get_debug_logger()
@@ -340,6 +343,6 @@ class LHMSidecar:
         try:
             req = urllib.request.Request(LHM_URL)
             with urllib.request.urlopen(req, timeout=2) as resp:
-                return json.loads(resp.read())
+                return json.loads(resp.read(_MAX_RESPONSE_BYTES))
         except Exception:
             return None

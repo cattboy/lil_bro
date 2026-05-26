@@ -17,6 +17,11 @@ LHM_PORT = 8085
 LHM_URL = f"http://localhost:{LHM_PORT}/data.json"
 _STARTUP_TIMEOUT = 15  # seconds to wait for /data.json readiness (.NET cold start)
 _POLL_INTERVAL = 0.5  # seconds between readiness checks
+# Cap on a single LHM HTTP response. Defensive: if another local process
+# binds port 8085 before lhm-server, an attacker-controlled body would
+# otherwise be buffered into memory before json.loads. Real LHM sensor
+# trees are well under 500 KB.
+_MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 
 
 def _is_lhm_responding() -> bool:
@@ -24,7 +29,7 @@ def _is_lhm_responding() -> bool:
     try:
         req = urllib.request.Request(LHM_URL)
         with urllib.request.urlopen(req, timeout=2) as resp:
-            data = json.loads(resp.read())
+            data = json.loads(resp.read(_MAX_RESPONSE_BYTES))
             # LHM returns a JSON object with a "Children" key at top level
             return isinstance(data, dict)
     except Exception:
