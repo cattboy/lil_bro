@@ -72,6 +72,18 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
         except Exception:
             pass  # safe: revert-on-quit best-effort; thread may already be done
 
+    # Wait for an in-flight dashboard monitor fix so we don't tear down LHM /
+    # the manifest writer while _MonitorFixWorker is mid execute_fix(). The
+    # atomic-write in revert._write_manifest survives a hard kill; this wait
+    # still lets the worker land its append cleanly so the user's "Fix Now"
+    # click is reflected in the next session's Revert.
+    monitor_fix_thread = runtime.get("monitor_fix_thread")
+    if monitor_fix_thread is not None:
+        try:
+            monitor_fix_thread.wait(3000)
+        except Exception:
+            pass  # safe: monitor-fix-on-quit best-effort
+
     try:
         main._dashboard.stop_polling()
     except Exception:
@@ -87,7 +99,7 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
     try:
         settings.save_geometry(main)
     except Exception:
-        pass  # safe: QSettings write failure should not block window close
+        pass  # safe: QSettings write failure should not block window close  # safe: QSettings write failure should not block window close
 
 
 def run(debug: bool = False) -> int:
