@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from src.gui.widgets.monitor_refresh_card import MonitorEmptyCard, MonitorRefreshCard
 from src.gui.widgets.mouse_poll_card import MousePollCard
 from src.gui.widgets.stat_card import STAT_CARDS, StatCard
+from src.utils.debug_logger import get_debug_logger
 
 
 class Dashboard(QWidget):
@@ -128,6 +129,8 @@ class Dashboard(QWidget):
 
         self._worker_thread: QThread | None = None
         self._worker = None  # SystemStatsWorker — lazily created in start_polling()
+        self._apply_count: int = 0
+        self._log = get_debug_logger()
 
     # ── Polling lifecycle ──────────────────────────────────────────────
 
@@ -164,11 +167,9 @@ class Dashboard(QWidget):
     # ── Render slot ────────────────────────────────────────────────────
 
     def apply_snapshot(self, snapshot: dict) -> None:
-        self._apply_count = getattr(self, "_apply_count", 0) + 1
+        self._apply_count += 1
         if self._apply_count <= 3 or self._apply_count % 12 == 0:
-            from src.utils.debug_logger import get_debug_logger
-            log = get_debug_logger()
-            log.info(
+            self._log.info(
                 "Dashboard.apply_snapshot #%d: cpu_temp=%s gpu_temp=%s _cpu_c=%s _gpu_c=%s",
                 self._apply_count,
                 snapshot.get("cpu_temp"),

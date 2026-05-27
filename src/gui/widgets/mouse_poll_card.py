@@ -12,6 +12,7 @@ from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from src.gui.theme import repolish
+from src.llm.action_proposer import propose_for_check
 
 
 class MousePollCard(QFrame):
@@ -159,7 +160,6 @@ class MousePollCard(QFrame):
 
     def _render_result(self, result: dict) -> None:
         """Single source of truth for Hz → display rendering. Called by both manual and pipeline paths."""
-        from src.llm.action_proposer import propose_for_check
         hz = int(result.get("current_hz", 0) or 0)
         status = result.get("status", "OK")
         self._poll_val.setText(str(hz) if hz else "—")

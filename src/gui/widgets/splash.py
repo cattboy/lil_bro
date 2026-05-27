@@ -194,7 +194,7 @@ class SplashDialog(QDialog):
     def on_init_step(self, name: str, status: str) -> None:
         """Slot wired to StartupOrchestrator.init_step signal."""
         try:
-            idx = list(_STEP_NAMES).index(name)
+            idx = _STEP_NAMES.index(name)
         except ValueError:
             return  # unknown step name — ignore
         if status == "running":

@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 
 from src.gui.theme import repolish
+from src.llm.action_proposer import propose_for_check
 class MonitorRefreshCard(QFrame):
     """Always-visible per-monitor card. Emits ``fix_requested(device)``."""
 
@@ -75,7 +76,6 @@ class MonitorRefreshCard(QFrame):
 
     def set_display(self, d: dict) -> None:
         """Populate the card from one ``DisplayCapabilities`` entry."""
-        from src.llm.action_proposer import propose_for_check
         raw_device = str(d.get("device") or "Display")
         is_wmi = (d.get("source") == "wmi") or raw_device.startswith("WMI:")
         display_name = raw_device[4:] if raw_device.startswith("WMI:") else raw_device
