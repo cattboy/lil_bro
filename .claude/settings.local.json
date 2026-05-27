@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "permissions": {
     "allow": [
       "Bash(git push:*)",
@@ -59,7 +62,8 @@
       "Bash(awk NR>=370 && NR<=420 *)",
       "mcp__claude_ai_Context7__resolve-library-id",
       "Bash(gh pr *)",
-      "Bash(.venv/Scripts/python.exe -m pytest tests/ -q)"
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -q)",
+      "mcp__serena__restart_language_server"
     ]
   },
   "enabledMcpjsonServers": [
@@ -77,9 +81,6 @@
         ]
       }
     ]
-  },
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "enabledPlugins": {
     "pyright-lsp@claude-plugins-official": true,
