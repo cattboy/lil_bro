@@ -202,12 +202,10 @@ class Dashboard(QWidget):
         fragile in the bundled PyInstaller exe but tolerable when caller
         defers this until after main.show().
         """
-        from src.utils.debug_logger import get_debug_logger
-        log = get_debug_logger()
-        log.info("Dashboard.set_monitor_data: %d display(s) received", len(displays or []))
+        self._log.info("Dashboard.set_monitor_data: %d display(s) received", len(displays or []))
 
         # Diagnostic: confirm dashboard widget state at call time
-        log.info(
+        self._log.info(
             "Dashboard: self.parent()=%s self.parentWidget()=%s layout_is_outer=%s",
             type(self.parent()).__name__ if self.parent() else "None",
             type(self.parentWidget()).__name__ if self.parentWidget() else "None",
@@ -224,7 +222,16 @@ class Dashboard(QWidget):
         self._monitor_empty_slot.ensurePolished()
 
         self._log_geometry("immediate")
-        QTimer.singleShot(500, self, lambda: self._log_geometry("deferred"))
+        # 3-arg singleShot: when ``self`` (the context QObject) is destroyed
+        # before the 500 ms elapses, Qt auto-cancels the deferred slot. The
+        # bound method reference avoids a closure-captured ``self`` and keeps
+        # the slot identity stable for any future disconnect.
+        QTimer.singleShot(500, self, self._log_geometry_deferred)
+
+    def _log_geometry_deferred(self) -> None:
+        """Trampoline so ``set_monitor_data`` can pass a bound method to
+        ``QTimer.singleShot`` instead of a closure."""
+        self._log_geometry("deferred")
 
     def _rebuild_monitor_cards(self, displays: list[dict]) -> None:
         """Show/hide the pre-allocated slots and (re)build extras for 2+ monitors."""
