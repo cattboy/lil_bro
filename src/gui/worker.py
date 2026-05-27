@@ -126,6 +126,30 @@ class _MonitorFixWorker(QObject):
         self.finished.emit()
 
 
+class _MonitorRefreshWorker(QObject):
+    """Runs ``get_monitor_refresh_capabilities()`` off the GUI thread.
+
+    The ctypes ``EnumDisplayDevicesW`` probe plus its WMI fallback can
+    block for 200-800 ms; calling it on the GUI thread janks the dashboard
+    when the user clicks Refresh on the empty-monitor card or after a
+    monitor fix completes. Result is delivered via ``finished(list)`` so
+    the caller updates ``set_monitor_data`` on the main thread.
+    """
+
+    finished = Signal(list)
+    failed = Signal(str)
+
+    def run(self) -> None:
+        try:
+            from src.collectors.sub.monitor_dumper import get_monitor_refresh_capabilities
+            displays = get_monitor_refresh_capabilities() or []
+        except Exception as exc:
+            get_debug_logger().error("MonitorRefreshWorker uncaught exception", exc_info=True)
+            self.failed.emit(str(exc))
+            return
+        self.finished.emit(displays)
+
+
 class _MousePollWorker(QObject):
     """Runs ``check_polling_rate()`` off the GUI thread.
 

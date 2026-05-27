@@ -141,17 +141,45 @@ class StartupCoordinator:
     # ── Monitor refresh card ───────────────────────────────────────────
 
     def refresh_monitor_card(self) -> None:
+        """Re-probe monitor capabilities on a worker thread.
+
+        get_monitor_refresh_capabilities() runs EnumDisplayDevicesW + an
+        optional WMI fallback, blocking for 200-800 ms. Doing that on the
+        GUI thread janks the dashboard when the user clicks Refresh or
+        when this fires off fix_thread.finished after a monitor fix.
+        Result is applied to the UI from _on_refresh_result on the main
+        thread.
+        """
+        runtime = self._runtime
+        if runtime.get("monitor_refresh_thread") is not None:
+            return  # already in-flight; the existing worker will deliver the result
+        from src.gui.worker import _MonitorRefreshWorker
+        refresh_thread = QThread()
+        refresh_worker = _MonitorRefreshWorker()
+        refresh_worker.moveToThread(refresh_thread)
+        refresh_thread.started.connect(refresh_worker.run)
+        refresh_worker.finished.connect(self._on_refresh_result)
+        refresh_worker.failed.connect(self._on_refresh_failed)
+        refresh_worker.finished.connect(refresh_thread.quit)
+        refresh_worker.failed.connect(refresh_thread.quit)
+        refresh_thread.finished.connect(refresh_worker.deleteLater)
+        refresh_thread.finished.connect(refresh_thread.deleteLater)
+        refresh_thread.finished.connect(lambda: runtime.pop("monitor_refresh_thread", None))
+        refresh_thread.finished.connect(lambda: runtime.pop("monitor_refresh_worker", None))
+        runtime["monitor_refresh_thread"] = refresh_thread
+        runtime["monitor_refresh_worker"] = refresh_worker
+        refresh_thread.start()
+
+    def _on_refresh_result(self, displays: list) -> None:
         main = self._main
         runtime = self._runtime
-        try:
-            from src.collectors.sub.monitor_dumper import get_monitor_refresh_capabilities
-            displays = get_monitor_refresh_capabilities()
-            main._dashboard.set_monitor_data(displays)
-            sp = runtime.get("preloaded_specs", {}) or {}
-            sp["DisplayCapabilities"] = displays
-            runtime["preloaded_specs"] = sp
-        except Exception as exc:
-            self._log.warning("Could not refresh monitor card: %s", exc)
+        main._dashboard.set_monitor_data(displays)
+        sp = runtime.get("preloaded_specs", {}) or {}
+        sp["DisplayCapabilities"] = displays
+        runtime["preloaded_specs"] = sp
+
+    def _on_refresh_failed(self, exc_str: str) -> None:
+        self._log.warning("Could not refresh monitor card: %s", exc_str)
 
     def on_monitor_fix_requested(self, device: str) -> None:
         runtime = self._runtime

@@ -92,3 +92,60 @@ class TestMonitorFixGuards:
         coord._log.warning.assert_called_once()
         msg = coord._log.warning.call_args[0][0]
         assert "unknown device" in msg.lower()
+
+
+
+class TestRefreshMonitorCard:
+    """C10 (E1): refresh_monitor_card runs get_monitor_refresh_capabilities
+    on a worker thread so the 200-800ms EnumDisplayDevicesW + WMI fallback
+    doesn't jank the GUI."""
+
+    def test_dispatches_worker_off_main_thread(self):
+        """A first call spawns a worker + thread and registers them on runtime."""
+        runtime: dict = {}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._MonitorRefreshWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_monitor_card()
+        mock_worker_cls.assert_called_once_with()
+        mock_thread_cls.assert_called_once_with()
+        assert runtime.get("monitor_refresh_thread") is mock_thread_cls.return_value
+        assert runtime.get("monitor_refresh_worker") is mock_worker_cls.return_value
+        # The worker's run slot must be wired to thread.started so the OS
+        # event loop kicks it off when start() is called.
+        mock_thread_cls.return_value.started.connect.assert_called_with(
+            mock_worker_cls.return_value.run
+        )
+        mock_thread_cls.return_value.start.assert_called_once()
+
+    def test_second_call_is_dropped_while_in_flight(self):
+        """A second click while a refresh is already running must NOT spawn
+        a second worker -- the in-flight one will deliver the result."""
+        sentinel_thread = MagicMock()
+        runtime = {"monitor_refresh_thread": sentinel_thread}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._MonitorRefreshWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_monitor_card()
+        mock_worker_cls.assert_not_called()
+        mock_thread_cls.assert_not_called()
+        assert runtime["monitor_refresh_thread"] is sentinel_thread
+
+    def test_result_handler_updates_dashboard_and_specs(self):
+        """The finished(list) signal handler writes back to the dashboard
+        and to runtime['preloaded_specs']."""
+        runtime: dict = {"preloaded_specs": {"PowerPlan": {"name": "High"}}}
+        coord = _make_coordinator(runtime)
+        displays = [{"device": r"\\.\DISPLAY1", "current_refresh_hz": 144, "max_refresh_hz": 144}]
+        coord._on_refresh_result(displays)
+        coord._main._dashboard.set_monitor_data.assert_called_once_with(displays)
+        # preloaded_specs is updated in place; existing keys preserved.
+        assert runtime["preloaded_specs"]["DisplayCapabilities"] == displays
+        assert runtime["preloaded_specs"]["PowerPlan"] == {"name": "High"}
+
+    def test_failed_handler_logs_warning(self):
+        """The failed(str) signal handler logs and is otherwise a no-op --
+        the empty-card state stays whatever it was before the refresh."""
+        coord = _make_coordinator({})
+        coord._on_refresh_failed("EnumDisplayDevicesW returned 0")
+        coord._log.warning.assert_called_once()
