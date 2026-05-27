@@ -71,16 +71,10 @@ class StartupCoordinator:
         # it covers the LHM-failed case where on_lhm_ready was never called.
         runtime["lhm"] = startup_lhm
 
-        # Load pre-collected specs (written by StartupOrchestrator Step 3)
-        preloaded_specs: dict = {}
-        if self._orchestrator.specs_path:
-            try:
-                import json as _json
-                with open(self._orchestrator.specs_path, encoding="utf-8") as _f:
-                    preloaded_specs = _json.load(_f)
-            except Exception as e:
-                log.debug("preloaded specs load failed: %s", e)
-        runtime["preloaded_specs"] = preloaded_specs
+        # Specs were loaded by StartupOrchestrator Step 3 on the worker
+        # thread (see startup.py); reading the attribute here is just a
+        # dict reference -- no main-thread file I/O.
+        runtime["preloaded_specs"] = getattr(self._orchestrator, "preloaded_specs", {}) or {}
 
         try:
             if runtime.get("pipeline_thread") is None and runtime.get("revert_thread") is None:

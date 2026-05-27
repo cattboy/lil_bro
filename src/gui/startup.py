@@ -31,6 +31,7 @@ class StartupOrchestrator(QObject):
         from time import sleep
 
         self.specs_path: str | None = None
+        self.preloaded_specs: dict = {}
         startup_lhm = None
         try:
             # ── Step 1: LHM Monitor — PawnIO install + sidecar launch ───────
@@ -68,6 +69,19 @@ class StartupOrchestrator(QObject):
                 from src.collectors.spec_dumper import dump_system_specs
                 path = dump_system_specs()
                 self.specs_path = path if path else None
+                # Load the JSON into memory here on the worker thread so
+                # on_finished doesn't block the GUI on a 50-200 KB file
+                # read once the splash closes -- HDD / network-drive jank
+                # risk for the post-splash transition.
+                if self.specs_path:
+                    try:
+                        import json
+                        with open(self.specs_path, encoding="utf-8") as f:
+                            loaded = json.load(f)
+                        if isinstance(loaded, dict):
+                            self.preloaded_specs = loaded
+                    except Exception:
+                        pass  # safe: best-effort preload; consumers tolerate {}
                 self.init_step.emit("System Specs", "done" if path else "fail")
             except Exception:
                 self.specs_path = None
