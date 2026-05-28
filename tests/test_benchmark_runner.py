@@ -83,6 +83,7 @@ def test_runner_auto_discovery(mock_find):
 @patch("src.benchmarks.cinebench.Path.exists", return_value=True)
 @patch("src.benchmarks.cinebench.subprocess.Popen")
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
+
 def test_run_cinebench_success(mock_isfile, mock_popen, mock_exists, mock_write, mock_read, mock_approve):
     """Cinebench runs and returns success with parsed CB score."""
     mock_proc = MagicMock()
@@ -104,6 +105,7 @@ def test_run_cinebench_success(mock_isfile, mock_popen, mock_exists, mock_write,
 @patch("src.benchmarks.cinebench.Path.exists", return_value=True)
 @patch("src.benchmarks.cinebench.subprocess.Popen")
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
+
 def test_run_cinebench_full_suite(mock_isfile, mock_popen, mock_exists, mock_write, mock_read, mock_approve):
     """full_suite=True passes AllTests flag and parses multi-core score."""
     mock_proc = MagicMock()
@@ -144,6 +146,45 @@ def test_run_benchmark_user_declines(mock_isfile, mock_approve):
     result = runner.run_benchmark()
     assert result["status"] == "skipped"
     assert result["benchmark"] == "cinebench"
+
+
+# ── _run_cinebench path guards ────────────────────────────────────────────────
+
+@patch("src.benchmarks.cinebench.prompt_approval", return_value=True)
+@patch("src.benchmarks.cinebench.Path.write_text")
+@patch("src.benchmarks.cinebench.get_temp_dir", return_value=__import__("pathlib").Path(r"C:\Users\John%Admin%\lil_bro\tmp"))
+@patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
+def test_run_cinebench_percent_in_output_path(mock_isfile, mock_get_temp_dir, mock_write, mock_approve):
+    """output_file path containing '%' returns error before launching the batch wrapper."""
+    runner = BenchmarkRunner(cinebench_path=r"C:\CB\Cinebench.exe")
+    result = runner.run_benchmark(full_suite=False)
+    assert result["status"] == "error"
+    assert result["benchmark"] == "cinebench"
+    assert "%" in result["message"]
+
+
+@patch("src.benchmarks.cinebench.prompt_approval", return_value=True)
+@patch("src.benchmarks.cinebench.subprocess.Popen")
+@patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
+@patch("src.benchmarks.cinebench.get_temp_dir")
+
+def test_run_cinebench_output_file_too_large(mock_get_temp_dir, mock_isfile, mock_popen, mock_approve):
+    """output_file exceeding 50 MB returns error before reading into memory."""
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = 0
+    mock_proc.communicate.return_value = (None, None)
+    mock_popen.return_value = mock_proc
+
+    mock_file = MagicMock()
+    mock_file.stat.return_value.st_size = 51_000_000
+    mock_get_temp_dir.return_value.__truediv__ = MagicMock(return_value=mock_file)
+
+    runner = BenchmarkRunner(cinebench_path=r"C:\CB\Cinebench.exe")
+    result = runner.run_benchmark(full_suite=False)
+
+    assert result["status"] == "error"
+    assert result["benchmark"] == "cinebench"
+    assert "50 MB" in result["message"]
 
 
 # ── BenchmarkRunner.run_benchmark — fallback path ───────────────────────────

@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
 
 from src.gui.theme import repolish
 from src.llm.action_proposer import propose_for_check
+
+
 class MonitorRefreshCard(QFrame):
     """Always-visible per-monitor card. Emits ``fix_requested(device)``."""
 
@@ -125,6 +127,7 @@ class MonitorRefreshCard(QFrame):
         # whichever branch ran above gets its sev write picked up.
         repolish(self._status_lbl)
         repolish(self._val_lbl)
+
     def _on_fix_clicked(self) -> None:
         if self._device:
             self.fix_requested.emit(self._device)

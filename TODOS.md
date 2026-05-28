@@ -85,22 +85,12 @@ Format: Priority | Effort (human / CC) | Context
 ---
 
 ### T-018 — SystemStatsWorker missing deleteLater wire
-**Priority:** P3
-**Effort:** XS human / XS with CC
-**Why:** Adversarial review on v0.2.0.0 flagged that `SystemStatsWorker` is the only QObject worker without `thread.finished.connect(worker.deleteLater)` wiring (the monitor-fix and monitor-refresh workers both have it). In `Dashboard.stop_polling`, dropping the last Python reference triggers `QObject.__del__` on the GUI thread while the worker thread may still be in `_tick()` — violates Qt's "destroy on owning thread" rule. Safe in practice on CPython, fragile under PyInstaller bundling.
-**Fix:** In `Dashboard.start_polling`, add `self._worker_thread.finished.connect(self._worker.deleteLater)` before `self._worker_thread.start()`. Remove the manual `self._worker = None` in `stop_polling` (let deleteLater run); keep `_worker_thread = None` as the sentinel.
-**Blocked by:** Nothing. Refactor next time touching `src/gui/widgets/dashboard.py`.
-**Added:** 2026-05-28 (from /ship v0.2.0.0 adversarial review)
+**Priority:** P3 — **COMPLETED 2026-05-28**
 
 ---
 
 ### T-019 — Cinebench output_file path `%` defense + 50 MB output cap
-**Priority:** P4
-**Effort:** S human / XS with CC
-**Why:** Adversarial review on v0.2.0.0 flagged two related Cinebench output-path concerns. (1) The batch wrapper uses `start /b /wait "parentconsole" cmd.exe /C ""{cinebench_path}" {flag} > "{output_file}""`; if `output_file` resolves to a path containing `%` (e.g. running the exe from a `%`-containing CWD), `cmd.exe` would env-expand the redirect. `get_temp_dir()` returns a CWD-relative path, so a `%` in the user's username or working directory could leak. (2) Successful-path reads `output_file.read_text()` with no size cap — Cinebench R24 in verbose mode or a crashing run could produce a multi-MB file. The error path already caps at `raw[:500]`, but `cb_lines` is written to `cinebench_results.txt` without a line cap.
-**Fix:** Add `if '%' in str(output_file)` to the `_run_cinebench` guard alongside the existing `"` check (or `^%`-escape the output path in the batch template). Add `if output_file.stat().st_size > 50_000_000` early-return as a tool-failure error. Cap `cb_lines` to the last 500 lines before writing `results_file`.
-**Blocked by:** Nothing. No live exploit; defense in depth.
-**Added:** 2026-05-28 (from /ship v0.2.0.0 adversarial review)
+**Priority:** P4 — **COMPLETED 2026-05-28**
 
 ---
 
@@ -110,16 +100,29 @@ Format: Priority | Effort (human / CC) | Context
 ---
 
 ### T-021 — Maintainability polish (PEP-8 + `__all__` + docstring direction inversions)
-**Priority:** P4 (cosmetic)
-**Effort:** XS human / XS with CC
-**Why:** /ship maintainability specialist on v0.2.0.0 flagged six low-priority polish items: missing trailing newline at `src/benchmarks/cinebench.py:289`; PEP-8 blank-line gaps in `src/gui/widgets/monitor_refresh_card.py` (between import and class definition, and between method definitions); `src/benchmarks/cinebench_monitor.py:9` docstring reversed direction ("re-exported from cinebench" should be "imported into cinebench so test patches work"); `__all__` declared in three sub-modules (`lhm_http.py`, `lhm_discovery.py`, `lhm_process_utils.py`) but no consumer uses star-import, so `__all__` is decorative; repeated `from src.utils.debug_logger import get_debug_logger` inside `Dashboard` method bodies that could be cached as `self._log` once in `__init__`.
-**Fix:** Address opportunistically the next time each file is touched. None of these affects runtime; they only affect reader clarity.
-**Blocked by:** Nothing.
-**Added:** 2026-05-28 (from /ship v0.2.0.0 maintainability review)
+**Priority:** P4 (cosmetic) — **COMPLETED 2026-05-28**
 
 ---
 
 ## Completed
+
+### T-021 — Maintainability polish (PEP-8 + `__all__` + docstring direction inversions)
+**Completed:** 2026-05-28
+Three-agent review (2 investigators + devil's advocate) verified which items were real vs noise. Fixed: (1) trailing newline at EOF in `cinebench.py` via `replace_symbol_body` on `BenchmarkRunner._parse_output`; (2) two PEP-8 blank-line gaps in `monitor_refresh_card.py` — 2 blank lines before `MonitorRefreshCard` class, 1 blank line between `set_display` and `_on_fix_clicked`; (3) cinebench_monitor.py module docstring direction — "re-exported from `cinebench`" → "imported into `cinebench` from this module" so the test-patch flow reads in the correct direction; (4) `__all__` in `lhm_http.py`, `lhm_discovery.py`, `lhm_process_utils.py` — **kept** (unanimous: provides API documentation, IDE autocomplete surface, and mock-patching clarity at zero cost; no consumers needed); (5) repeated `get_debug_logger` re-imports in `Dashboard.start_polling`, `_rebuild_monitor_cards`, `_log_geometry` removed — all three now use `self._log` consistently.
+
+---
+
+### T-018 — SystemStatsWorker missing deleteLater wire
+**Completed:** 2026-05-28
+Added `self._worker_thread.finished.connect(self._worker.deleteLater)` in `Dashboard.start_polling()` before `thread.start()`. Did NOT remove `self._worker = None` from `stop_polling()` — devil's advocate review found that removing it breaks the re-entrancy guard at line 141 and the fallback sentinel check in `startup_coordinator.py:92`. PySide6/Shiboken ownership semantics let both coexist safely: `deleteLater` marks the C++ object as Qt-owned so Python `__del__` skips the C++ destructor even if the Python refcount drops to zero on the GUI thread.
+
+---
+
+### T-019 — Cinebench output_file path `%` defense + 50 MB output cap
+**Completed:** 2026-05-28
+Three defenses added to `_run_cinebench()` in `src/benchmarks/cinebench.py`: (1) `if "%" in str(output_file)` guard after construction of `output_file`, matching the existing `"` guard pattern — returns error before batch file is written. (2) `try: if output_file.stat().st_size > 50_000_000: return error / except OSError: pass` before `read_text()` — OSError catch handles the case where the file doesn't exist (subprocess produced no output). (3) `cb_lines = cb_lines[-500:]` cap before writing `cinebench_results.txt`. Devil's advocate caught that `%` escaping in the batch template would be cleaner but inconsistent with the existing rejection pattern. 2 new tests added (suite: 708 → 710).
+
+---
 
 ### T-020 — Strip triple-comment tail artifacts from Serena replace edits
 **Completed:** 2026-05-28
