@@ -57,3 +57,13 @@ Both log files are preserved after each run:
 
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** — Architecture, developer setup, test commands, and build instructions
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — How to report bugs, submit pull requests, and contribute
+
+## License
+
+This project is licensed under the **MIT License**. See [LICENSE.md](LICENSE.md) for full details.
+
+Copyright © 2026 cattboy
+
+## Code of Conduct
+
+We are committed to providing a welcoming, inclusive, and harassment-free environment for all contributors and users. Please see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for our full Code of Conduct and enforcement procedures.
