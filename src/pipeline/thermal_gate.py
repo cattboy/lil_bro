@@ -86,4 +86,4 @@ def run_thermal_guard(
         print_info(skip_message)
         return True  # User chose to skip
 
-    return False  # User approved despite high temps  # User approved despite high temps
+    return False  # User approved despite high temps

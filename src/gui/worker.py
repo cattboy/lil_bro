@@ -230,7 +230,7 @@ class SystemStatsWorker(QObject):
             self._timer.timeout.connect(self._tick)
             self._timer.start(_POLL_INTERVAL_MS)
         log.info("SystemStatsWorker.start: timer armed, firing first tick now")
-        self._tick()  # immediate first sample  # immediate first sample  # immediate first sample
+        self._tick()  # immediate first sample
 
     def _tick(self) -> None:
         log = get_debug_logger()

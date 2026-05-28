@@ -110,7 +110,7 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
     try:
         settings.save_geometry(main)
     except Exception:
-        pass  # safe: QSettings write failure should not block window close  # safe: QSettings write failure should not block window close  # safe: QSettings write failure should not block window close
+        pass  # safe: QSettings write failure should not block window close
 
 
 def run(debug: bool = False) -> int:
