@@ -127,7 +127,7 @@ def _call_llm(llm: Llama, llm_input: dict) -> list[dict] | None:
 # ── Static fallback templates ──────────────────────────────────────────────────
 # Used when the LLM is unavailable or returns unparseable JSON.
 
-_FALLBACK: dict[str, dict] = {
+FALLBACK_PROPOSALS: dict[str, dict] = {
     "display": {
         "finding": "display",
         "severity": "HIGH",
@@ -194,9 +194,9 @@ _FALLBACK: dict[str, dict] = {
         "severity": "MEDIUM",
         "explanation": (
             "Your mouse polling rate is below 500Hz — this adds measurable input lag. "
-            "Open your mouse's driver software and set it to 1000Hz or higher."
+            "Open your mouse's driver software and set it to 1000Hz-2000Hz. 4k is overkill."
         ),
-        "proposed_action": "Set polling rate to 1000Hz in mouse driver software (manual)",
+        "proposed_action": "Polling rate's below 500Hz — this adds input lag. Set polling rate to 1000Hz in your mouse driver software (google it 4head).",
         "can_auto_fix": False,
     },
     "thermals": {
@@ -230,7 +230,7 @@ def _build_fallback(findings: list[dict]) -> list[dict]:
     for f in findings:
         if not _is_fail(f):
             continue
-        template = _FALLBACK.get(f.get("check", ""))
+        template = FALLBACK_PROPOSALS.get(f.get("check", ""))
         if template:
             proposals.append(dict(template))
     return proposals
@@ -259,3 +259,27 @@ def propose_actions(hardware: dict, findings: list[dict], llm: Optional[Llama]) 
 
     proposals.sort(key=lambda p: _SEVERITY_ORDER.get(p.get("severity", "LOW"), 2))
     return proposals
+
+
+def propose_for_check(
+    check: str,
+    finding: dict | None = None,
+    llm: Optional[Llama] = None,
+) -> dict | None:
+    """Single-finding shortcut for GUI callsites.
+
+    Returns one proposal dict (matching FALLBACK_PROPOSALS schema) or None
+    when the check has no template / finding doesn't qualify as FAIL.
+
+    `finding` is optional — when omitted, returns the FALLBACK_PROPOSALS
+    entry directly (used by widgets that show static text before any
+    measurement). When provided, must include keys consumed by
+    build_llm_input for that check (e.g., current_hz for mouse_polling)
+    when llm is supplied; those keys are ignored on the LLM-None path.
+    """
+    if finding is None:
+        template = FALLBACK_PROPOSALS.get(check)
+        return dict(template) if template else None
+    full = {**finding, "check": check, "status": "WARNING"}
+    results = propose_actions(hardware={}, findings=[full], llm=llm)
+    return results[0] if results else None

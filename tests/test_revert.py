@@ -19,6 +19,8 @@ from src.utils.revert import (
 
     load_manifest,
 
+    mark_restore_point_created,
+
     revert_fix,
 
     start_session_manifest,
@@ -69,13 +71,26 @@ class TestStartSessionManifest:
             start_session_manifest()
         assert not manifest_path.exists()
 
-    def test_second_call_replaces_pending_manifest(self, tmp_path):
+    def test_noop_when_disk_manifest_exists(self, tmp_path):
+        """2A: start_session_manifest is a no-op when a manifest already
+        exists on disk -- a second pipeline run keeps the first run's data."""
+        manifest_path = tmp_path / "session_latest.json"
+        manifest_path.write_text(json.dumps(
+            {"schema_version": 1, "session_id": "disk1", "fixes": []}
+        ))
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            start_session_manifest(restore_point_created=True)
+        assert revert_mod._pending_manifest is None
+
+    def test_second_call_keeps_active_manifest(self, tmp_path):
+        """2A: a second call must NOT replace an active manifest, so re-running
+        the pipeline keeps the first run's restore_point_created and fixes."""
         manifest_path = tmp_path / "session_latest.json"
         with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
             start_session_manifest(restore_point_created=True)
             start_session_manifest(restore_point_created=False)
         assert revert_mod._pending_manifest is not None
-        assert revert_mod._pending_manifest["restore_point_created"] is False
+        assert revert_mod._pending_manifest["restore_point_created"] is True
 
 
 
@@ -118,13 +133,20 @@ class TestAppendFixToManifest:
             start_session_manifest()
         assert not manifest_path.exists()
 
-    def test_archives_previous_session_on_first_fix(self, tmp_path):
+    def test_append_accumulates_into_existing_disk_manifest(self, tmp_path):
+        """2A: an existing on-disk manifest is accumulated into, never archived."""
         manifest_path = tmp_path / "session_latest.json"
-        manifest_path.write_text(json.dumps({"session_id": "old123", "fixes": []}))
+        manifest_path.write_text(json.dumps(
+            {"schema_version": 1, "session_id": "old123",
+             "fixes": [{"fix": "power_plan"}]}
+        ))
         with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
-            start_session_manifest()
+            start_session_manifest()  # no-op: a manifest already exists on disk
             append_fix_to_manifest({"fix": "game_mode"})
-        assert (tmp_path / "session_old123.json").exists()
+        assert not (tmp_path / "session_old123.json").exists()  # not archived
+        data = json.loads(manifest_path.read_text())
+        assert data["session_id"] == "old123"
+        assert [f["fix"] for f in data["fixes"]] == ["power_plan", "game_mode"]
 
     def test_appends_entry_to_fixes(self, tmp_path):
         # Subsequent-call path: no pending manifest, file already on disk.
@@ -136,6 +158,18 @@ class TestAppendFixToManifest:
         data = json.loads(manifest_path.read_text())
         assert len(data["fixes"]) == 1
         assert data["fixes"][0]["fix"] == "power_plan"
+
+    def test_accumulates_across_two_runs(self, tmp_path):
+        """2A: two start/append cycles accumulate into ONE manifest -- a
+        second pipeline run must not strand the first run's revert data."""
+        manifest_path = tmp_path / "session_latest.json"
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            start_session_manifest(restore_point_created=True)
+            append_fix_to_manifest({"fix": "power_plan"})
+            start_session_manifest(restore_point_created=True)  # 2nd run: no-op
+            append_fix_to_manifest({"fix": "game_mode"})
+        data = json.loads(manifest_path.read_text())
+        assert [f["fix"] for f in data["fixes"]] == ["power_plan", "game_mode"]
 
     def test_write_failure_calls_warning_no_raise(self, tmp_path):
         manifest_path = tmp_path / "session_latest.json"
@@ -153,12 +187,16 @@ class TestAppendFixToManifest:
              patch("src.utils.revert.print_warning"):
             append_fix_to_manifest({"fix": "game_mode"})  # must not raise
 
-    def test_missing_manifest_warns(self, tmp_path):
-        manifest_path = tmp_path / "missing.json"
-        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path), \
-             patch("src.utils.revert.print_warning") as mock_warn:
-            append_fix_to_manifest({"fix": "game_mode"})
-        mock_warn.assert_called()  # must not raise
+    def test_append_lazily_creates_manifest(self, tmp_path):
+        """2A: a fix with no active manifest (a dashboard fix as the first
+        action of the session) lazily creates one, restore_point_created False."""
+        manifest_path = tmp_path / "session_latest.json"
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            append_fix_to_manifest({"fix": "display"})
+        assert manifest_path.exists()
+        data = json.loads(manifest_path.read_text())
+        assert data["restore_point_created"] is False
+        assert [f["fix"] for f in data["fixes"]] == ["display"]  # must not raise
 
 
 
@@ -358,3 +396,130 @@ class TestTriggerSystemRestore:
         assert result is False
 
         mock_err.assert_called()
+
+
+class TestMarkRestorePointCreated:
+
+    def setup_method(self):
+        revert_mod._pending_manifest = None
+
+    def teardown_method(self):
+        revert_mod._pending_manifest = None
+
+    def test_upgrades_pending_manifest(self, tmp_path):
+        """D1: upgrades the flag on a manifest still staged in memory."""
+        manifest_path = tmp_path / "session_latest.json"
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            start_session_manifest(restore_point_created=False)
+            mark_restore_point_created()
+        assert revert_mod._pending_manifest is not None
+        assert revert_mod._pending_manifest["restore_point_created"] is True
+
+    def test_upgrades_disk_manifest(self, tmp_path):
+        """D1: upgrades the flag on a manifest a dashboard fix wrote to disk."""
+        manifest_path = tmp_path / "session_latest.json"
+        manifest_path.write_text(json.dumps(
+            {"schema_version": 1, "session_id": "d1",
+             "restore_point_created": False, "fixes": []}
+        ))
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            mark_restore_point_created()
+        data = json.loads(manifest_path.read_text())
+        assert data["restore_point_created"] is True
+
+    def test_noop_when_no_manifest(self, tmp_path):
+        """D1: a no-op when no manifest exists -- the pipeline's first fix
+        will stage one with the correct value."""
+        manifest_path = tmp_path / "missing.json"
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            mark_restore_point_created()  # must not raise
+        assert not manifest_path.exists()
+
+
+class TestManifestThreadSafety:
+
+    def setup_method(self):
+        revert_mod._pending_manifest = None
+
+    def teardown_method(self):
+        revert_mod._pending_manifest = None
+
+    def test_concurrent_appends_keep_every_entry(self, tmp_path):
+        """T3: the manifest lock serializes concurrent appends so a dashboard
+        fix racing a pipeline run cannot drop an entry."""
+        import threading
+
+        manifest_path = tmp_path / "session_latest.json"
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            start_session_manifest(restore_point_created=True)
+            threads = [
+                threading.Thread(
+                    target=append_fix_to_manifest, args=({"fix": f"f{i}"},)
+                )
+                for i in range(20)
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+        data = json.loads(manifest_path.read_text())
+        assert len(data["fixes"]) == 20
+
+
+class TestAtomicManifestWrite:
+    """CR-4: _write_manifest must be atomic (.tmp + os.replace).
+
+    A plain write_text on Windows is CreateFile -> WriteFile -> CloseHandle;
+    a kill between WriteFile and CloseHandle leaves session_latest.json
+    partially written. _read_raw_manifest catches the JSONDecodeError and
+    treats it as "no manifest" -- silently losing every fix from this
+    session. Atomic write via a staging file means the worst case is the
+    new entry didn't land, never that the prior data is lost.
+    """
+
+    def setup_method(self):
+        revert_mod._pending_manifest = None
+
+    def teardown_method(self):
+        revert_mod._pending_manifest = None
+
+    def test_atomic_write_leaves_no_staging_file(self, tmp_path):
+        """Happy path: the .tmp file does not survive a successful write."""
+        manifest_path = tmp_path / "session_latest.json"
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            start_session_manifest(restore_point_created=True)
+            append_fix_to_manifest({"fix": "power_plan"})
+        assert manifest_path.exists()
+        assert not (manifest_path.with_name("session_latest.json.tmp")).exists()
+        data = json.loads(manifest_path.read_text())
+        assert [f["fix"] for f in data["fixes"]] == ["power_plan"]
+
+    def test_replace_failure_preserves_existing_manifest(self, tmp_path):
+        """If os.replace fails (locked file, cross-volume), the original
+        manifest must be untouched -- worst case is one missed entry, not a
+        wiped session."""
+        manifest_path = tmp_path / "session_latest.json"
+        manifest_path.write_text(json.dumps(
+            {"schema_version": 1, "session_id": "preserved",
+             "restore_point_created": True,
+             "fixes": [{"fix": "power_plan", "revertible": True}]}
+        ))
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path), \
+             patch("src.utils.revert.os.replace", side_effect=OSError("locked")), \
+             patch("src.utils.revert.print_warning"):
+            append_fix_to_manifest({"fix": "game_mode"})
+        data = json.loads(manifest_path.read_text())
+        assert data["session_id"] == "preserved"
+        assert [f["fix"] for f in data["fixes"]] == ["power_plan"]
+
+    def test_staging_file_cleaned_up_on_replace_failure(self, tmp_path):
+        """A failed os.replace must not leak a .tmp file behind."""
+        manifest_path = tmp_path / "session_latest.json"
+        manifest_path.write_text(json.dumps(
+            {"schema_version": 1, "session_id": "x", "fixes": []}
+        ))
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path), \
+             patch("src.utils.revert.os.replace", side_effect=OSError("locked")), \
+             patch("src.utils.revert.print_warning"):
+            append_fix_to_manifest({"fix": "game_mode"})
+        assert not (manifest_path.with_name("session_latest.json.tmp")).exists()

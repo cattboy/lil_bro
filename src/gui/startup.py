@@ -20,25 +20,73 @@ class StartupOrchestrator(QObject):
     """Runs LHM init + font registration + (future) warm-up steps."""
 
     init_step = Signal(str, str)  # step_name, "running" | "ok" | "fail"
+    lhm_ready = Signal(object)    # emitted from worker thread after Step 1 succeeds
     finished = Signal(object)     # startup_lhm tuple or None on partial failure
 
     def run(self) -> None:
+        from src.collectors.sub.lhm_sidecar import LHMSidecar
+        from src.agent_tools.thermal_guidance import derive_cpu_temp
+        from src.benchmarks.thermal_monitor import fetch_snapshot
+        from src.pipeline.startup_thermals import _SENSOR_RETRIES, _SENSOR_RETRY_DELAY
+        from time import sleep
+
+        self.specs_path: str | None = None
+        self.preloaded_specs: dict = {}
         startup_lhm = None
         try:
-            self.init_step.emit("Initializing UI", "running")
-            from src.gui import theme
-            theme.load_fonts()
-            self.init_step.emit("Initializing UI", "ok")
-
-            self.init_step.emit("Starting thermal monitor", "running")
+            # ── Step 1: LHM Monitor — PawnIO install + sidecar launch ───────
+            self.init_step.emit("LHM Monitor", "running")
+            lhm = LHMSidecar()
+            lhm_available = False
             try:
-                from src.pipeline.startup_thermals import run_startup_thermal_scan
-                startup_lhm, _ = run_startup_thermal_scan()
-                self.init_step.emit("Starting thermal monitor", "ok")
+                lhm_available = lhm.start()
+                self.init_step.emit("LHM Monitor", "done" if lhm_available else "fail")
+                if lhm_available:
+                    startup_lhm = lhm
+                    # Trigger dashboard polling now so by splash-close the cards
+                    # are already populated. See plan
+                    # `when-starting-lil-bro-exe-sometimes-smooth-puzzle.md`.
+                    self.lhm_ready.emit(lhm)
             except Exception:
-                self.init_step.emit("Starting thermal monitor", "fail")
+                self.init_step.emit("LHM Monitor", "fail")
 
-            self.init_step.emit("Ready", "ok")
+            # ── Step 2: Sensors — wait for CPU/GPU readings to appear ───────
+            self.init_step.emit("Sensors", "running")
+            if lhm_available:
+                try:
+                    for _ in range(_SENSOR_RETRIES):
+                        temps = fetch_snapshot()
+                        if temps and derive_cpu_temp(temps) is not None:
+                            break
+                        sleep(_SENSOR_RETRY_DELAY)
+                except Exception:
+                    pass  # safe: thermal probe retry loop tolerates transient sidecar errors
+            self.init_step.emit("Sensors", "done")
+
+            # ── Step 3: System Specs — collect full hardware profile ─────────
+            self.init_step.emit("System Specs", "running")
+            try:
+                from src.collectors.spec_dumper import dump_system_specs
+                path = dump_system_specs()
+                self.specs_path = path if path else None
+                # Load the JSON into memory here on the worker thread so
+                # on_finished doesn't block the GUI on a 50-200 KB file
+                # read once the splash closes -- HDD / network-drive jank
+                # risk for the post-splash transition.
+                if self.specs_path:
+                    try:
+                        import json
+                        with open(self.specs_path, encoding="utf-8") as f:
+                            loaded = json.load(f)
+                        if isinstance(loaded, dict):
+                            self.preloaded_specs = loaded
+                    except Exception:
+                        pass  # safe: best-effort preload; consumers tolerate {}
+                self.init_step.emit("System Specs", "done" if path else "fail")
+            except Exception:
+                self.specs_path = None
+                self.init_step.emit("System Specs", "fail")
+
         except Exception:
             from src.utils.debug_logger import get_debug_logger
             get_debug_logger().error("StartupOrchestrator unhandled exception", exc_info=True)

@@ -36,52 +36,71 @@
 - New system checks belong in `src/agent_tools/` as independent modules.
 - Each check function returns a structured dict with at minimum `status` and `message` keys.
 - Always implement multi-method fallbacks — never hard-fail when a tool (nvidia-smi, dxdiag, etc.) is missing. Fall back to WMI or registry alternatives.
-- Terminal UI only — do not introduce PyQt or GUI dependencies until explicitly requested.
+- GUI via PySide6 (default). CLI mode preserved via `--terminal`. New visual work uses PySide6; do not introduce PyQt.
+
+### Dashboard Fix Pattern
+When a fix can be triggered from a Dashboard card button (outside the pipeline `ApplyPhase`), follow this pattern — see `_MonitorFixWorker` in `src/gui/worker.py` as the reference implementation:
+
+1. **Always route through `execute_fix(check_name, specs)`** (`src/pipeline/fix_dispatch.py`) — never call `_fix_*` handlers directly.
+2. **Call `start_session_manifest(restore_point_created=False)` before `execute_fix()`** in the worker's `run()` method. It is a no-op if the pipeline already ran — safe to call unconditionally. Without it, `_record_revertible()` inside the handler writes into an uninitialized manifest and the fix is silently non-revertible.
+3. **The check name passed to `execute_fix` must exactly match the `@register_fix` key** in `fix_dispatch.py` — same string the analyzer returns in `"check"`.
+4. **Pass a filtered `specs` dict** narrowed to only the targeted item so the handler doesn't act on everything.
+5. Wire the button signal → `StartupCoordinator` method → `QThread` + worker, mirroring `on_monitor_fix_requested` in `src/gui/startup_coordinator.py`.
 
 ### Subprocess & Temp Files
 - **All subprocess temp files must be stored in CWD, not `%TEMP%`.** Use `get_temp_dir()` from `src/utils/paths.py` as the `dir=` argument for `tempfile.TemporaryDirectory()` and `tempfile.mkstemp()`. This ensures all runtime artifacts live under `./lil_bro/` and get cleaned up on exit via `post_run_cleanup.py`.
 - Any new code spawning subprocesses that produce temp files must use `dir=str(get_temp_dir())` — never rely on the system default temp directory.
 - PyInstaller's `runtime_tmpdir='.'` in `lil_bro.spec` ensures `_MEI*` extraction dirs are created in CWD. Stale `_MEI*` dirs from crashes are cleaned up by `_cleanup_stale_mei()` in `post_run_cleanup.py`.
 
+### Bundling (PyInstaller)
+- **Every new module under `src/gui/widgets/` MUST be added to `hiddenimports` in `lil_bro.spec`** (alphabetical with the existing widget list around line 81-91). PyInstaller's static analyzer can miss lazy imports inside method bodies, and the `try/except` in `app.py._on_finished` will swallow the resulting `ImportError` silently — the widget appears fine in dev mode but never renders in the bundled exe.
+- After updating the spec, rebuild with `python -m PyInstaller lil_bro.spec --noconfirm`.
+
 ---
 
 ## Serena MCP Tools
 
-Serena is started manually by the user before each session. **Using built-in tools (Read, Grep, Glob, Edit) on code files when Serena is available is a mistake.** Treat it as a hard rule, not a preference.
+Serena is started manually by the user before each session. A PreToolUse hook (`.claude/hooks/serena_guard.py`) **enforces** the split below: structural edits go through Serena's symbol tools; the built-in tools handle what Serena can't target. A blocked call always means "wrong tool — switch."
 
-### Decision gate — run this check before every tool call on a `.py` file:
+### Decision gate — before any tool call on a `.py` file
 
-> **"Does a Serena tool cover this task?"**
-> If YES → use Serena. STOP. Do not call Read/Grep/Glob/Edit.
-> If NO → proceed with the built-in tool.
+| What you're doing | Use | Hook |
+|---|---|---|
+| Edit a function / class / method body | `mcp__serena__replace_symbol_body`, `insert_after_symbol`, `insert_before_symbol`, `rename_symbol` | **blocks** built-in `Edit` |
+| Edit a module-level line — import, constant, `__all__`, module docstring | built-in **`Edit`** | allows it (not a symbol) |
+| Search code / find a symbol / find callers | `mcp__serena__search_for_pattern`, `find_symbol`, `find_referencing_symbols` | **blocks** `Grep`/`Glob` on `.py` |
+| Module or symbol overview (exploring) | `mcp__serena__get_symbols_overview`, `find_symbol` | guidance only |
+| Read exact text / whole-file context | built-in **`Read`** | allows it |
+| Create a new `.py` file | built-in **`Write`** | allows it |
+| Overwrite an existing `.py` wholesale | edit it instead | **blocks** `Write` on existing `.py` |
+| Refactor via the shell (`sed -i`, redirects) | Serena symbol tools | **blocks** in-place `.py` shell edits |
+| Resync Serena after a non-Serena `.py` edit (built-in `Edit`/`Write`/`rm`/shell) | `mcp__serena__restart_language_server` | guidance only |
+| Persist project knowledge | `mcp__serena__write_memory` / `read_memory` | — |
 
-| Task | MUST use Serena | NEVER use |
-|------|----------------|-----------|
-| Find a function / class / symbol | `mcp__serena__find_symbol` | Grep |
-| Search code by pattern | `mcp__serena__search_for_pattern` | Grep |
-| Get file/module overview | `mcp__serena__get_symbols_overview` | Read |
-| Browse project structure | `mcp__serena__list_dir` | Glob |
-| Locate a file | `mcp__serena__find_file` | Glob |
-| Edit a symbol body | `mcp__serena__replace_symbol_body` | Edit |
-| Cross-file refactoring | Serena symbol tools | Grep + Edit |
-| Find all callers of a symbol | `mcp__serena__find_referencing_symbols` | Grep |
-| Rename a symbol project-wide | `mcp__serena__rename_symbol` | sed / Edit |
-| Persist project knowledge | `mcp__serena__write_memory` / `read_memory` | Memory files |
+**Rule of thumb:** is the target a *symbol* (function, class, method)? → Serena. Is it a *non-symbol line* (import, module constant) or plain-text / whole-file work? → built-in `Edit`/`Read`/`Write`. The hook draws the same line with `ast`, so it and this table never disagree.
+
+### Editing — symbol vs. module level
+
+- **Symbol body** (anything inside a `def`/`class`): `mcp__serena__replace_symbol_body`, or `insert_after_symbol` / `insert_before_symbol` to add adjacent code. The hook blocks the built-in `Edit` here.
+- **Module level** (imports, module constants, `__all__`, the module docstring): built-in `Edit`. Serena's symbol tools target whole symbols, not individual lines, so non-symbol edits use `Edit`. The hook classifies the edit site with `ast` and lets `Edit` through.
+
+### After a non-Serena edit — restart the language server
+
+Serena's language server keeps an in-memory copy of each `.py` file, synced **only for Serena's own edits**. The split above guarantees non-Serena edits — every module-level line goes through the built-in `Edit`. Any built-in `Edit`/`Write`/`rm`, shell edit, or working-tree-changing `git` op (`checkout`, `rebase`, `reset --hard`) desyncs the LS; the next `replace_symbol_body` / `insert_*_symbol` then fails with `InvalidTextLocationError` or writes a stale body. A bare `git commit` does **not** desync — it leaves the working tree unchanged.
+
+After any non-Serena change to a `.py` file, call `mcp__serena__restart_language_server` before the next Serena symbol read/edit. To restart rarely, batch per file: all Serena symbol edits first, then built-in module-level `Edit`s last. For a file being substantially rewritten, skip incremental Serena editing — `Read`, compose, `rm`+`Write`. Not hook-enforced; it's on you to call it.
+
+### Reading code
+
+Built-in `Read` on `.py` is allowed — and is required before any built-in `Edit` (the Edit tool refuses to run on an unread file, and the `claude-code` context excludes Serena's `read_file`). For *exploring* code, still prefer Serena: `get_symbols_overview` for a module's shape, `find_symbol` (with `include_body`) for one symbol, `search_for_pattern` for everything else. Don't `Read` a whole file just to locate one function.
 
 ### Creating new Python files
 
-Use the built-in **Write** tool for new `.py` files. Serena's `claude-code` context deliberately excludes `create_text_file` by upstream design — "tools that would duplicate Claude Code's built-in capabilities." The guard hook carves out `Write` on paths that do not yet exist.
-
-Flow: `Write` creates the file → switch to Serena symbol tools for all subsequent reads and edits.
+Use the built-in **Write** tool for new `.py` files — the `claude-code` context excludes `create_text_file` ("tools that would duplicate Claude Code's built-in capabilities"). The hook carves out `Write` on paths that do not yet exist and blocks it on existing `.py` files (a whole-file overwrite can't be scoped to a symbol).
 
 ### When NOT to use Serena
 
-Serena's backend here (Pyright via SolidLSP) indexes **only Python**. For markdown, JSON, YAML, TOML, XML, `.txt`, config, logs, images — use built-ins (`Read`, `Grep`, `Glob`, `Edit`, `Write`, `Bash`) directly. Routing a `.md` read through `mcp__serena__search_for_pattern` works but is wasted effort.
-
-Quick check before any tool call: does the target file end in `.py`?
-- No → built-ins.
-- Yes, creating new → `Write`.
-- Yes, existing → Serena (see table above).
+Serena's backend here (Pyright via SolidLSP) indexes **only Python**. For markdown, JSON, YAML, TOML, XML, `.txt`, config, logs, images — use built-ins directly. Same for any `.py` under `.claude/` (hooks, skills): Serena doesn't index that tree, and the hook carves it out.
 
 ### Schema loading
 Serena tools are deferred — their schemas are not pre-loaded. Before calling any `mcp__serena__*` tool, load its schema first:
@@ -89,21 +108,14 @@ Serena tools are deferred — their schemas are not pre-loaded. Before calling a
 ToolSearch: select:mcp__serena__find_symbol   (or whichever tool you need)
 ```
 
-### The only valid exceptions
-Built-in tools are allowed **only** when:
-1. The file is non-code: markdown, config, logs, XML, `.txt`, `.json`, `.toml`
-2. Serena is confirmed not running (note this explicitly before falling back)
-3. The target file is outside the project root
-
-If you catch yourself reaching for Read/Grep/Glob on a `.py` file — stop and use Serena instead.
-
 ---
 
 ## Architecture
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full file tree, 5-phase pipeline, and tech stack.
 
-Key entry points: `src/main.py` → `src/pipeline/phases.py` → phase files → `src/agent_tools/` checks.
+Key entry points (GUI): `src/main.py` → `src/gui/app.py` → `StartupCoordinator` → `PipelineController` → `src/pipeline/phases.py` → phase files → `src/agent_tools/` checks.
+Key entry points (CLI): `src/main.py --terminal` → `src/pipeline/phases.py` → phase files → `src/agent_tools/` checks.
 
 ---
 
@@ -117,7 +129,7 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 
 ## Development Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). Current test count: 450.
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). Current test count: 671.
 
 ---
 

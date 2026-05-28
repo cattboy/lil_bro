@@ -59,3 +59,91 @@ class _RaisingPhase:
 
     def run(self, ctx):  # pragma: no cover - guard
         raise AssertionError(f"phase {self.name} must not run when cancelled")
+
+
+
+def test_stop_requested_reaches_worker_across_threads(qtbot):
+    """Regression for the QueuedConnection deadlock bug.
+
+    The original Stop button wiring used Qt.AutoConnection, which picks
+    QueuedConnection for cross-thread signals. But PipelineWorker.run() is
+    a long blocking call -- it occupies the worker thread for the full
+    pipeline duration -- so the worker thread's Qt event loop never
+    processes queued slots. The cancel signal sat in the queue forever.
+
+    Fix in src/gui/app.py: explicitly use Qt.ConnectionType.DirectConnection
+    so the slot runs on the SENDER (GUI) thread, writing the bool flag
+    from there. The worker's polling loop reads it on the next iteration.
+
+    Topology mirrors production: real QThread, real PipelineWorker moved
+    to it, a QObject runner moved to the same thread spinning a synchronous
+    polling loop. Cancel emitted from the main thread reaches the worker's
+    flag within one poll interval (~50 ms).
+    """
+    import time
+    from PySide6.QtCore import QObject, QThread, Qt, Signal, Slot
+
+    class _Emitter(QObject):
+        stop_requested = Signal()
+
+    class _PollRunner(QObject):
+        finished = Signal()
+
+        def __init__(self, worker: PipelineWorker) -> None:
+            super().__init__()
+            self.worker = worker
+            self.saw_cancel = False
+
+        @Slot()
+        def run(self) -> None:
+            _state.set_cancel_check(lambda: self.worker.cancel_requested)
+            try:
+                deadline = time.monotonic() + 3.0
+                while time.monotonic() < deadline:
+                    if _state.is_cancelled():
+                        self.saw_cancel = True
+                        return
+                    time.sleep(0.05)
+            finally:
+                _state.set_cancel_check(None)
+                self.finished.emit()
+
+    emitter = _Emitter()
+    worker = PipelineWorker()
+    runner = _PollRunner(worker)
+
+    thread = QThread()
+    worker.moveToThread(thread)
+    runner.moveToThread(thread)
+    thread.started.connect(runner.run)
+    runner.finished.connect(thread.quit)
+    emitter.stop_requested.connect(
+        worker.request_cancel,
+        Qt.ConnectionType.DirectConnection,
+    )
+
+    try:
+        thread.start()
+        # Wait for runner to enter its polling loop.
+        time.sleep(0.2)
+        with qtbot.waitSignal(runner.finished, timeout=3000) as blocker:
+            emitter.stop_requested.emit()
+        assert blocker.signal_triggered, (
+            "runner.finished never fired -- cancel signal likely "
+            "deadlocked in QueuedConnection (use Qt.DirectConnection)"
+        )
+        assert runner.saw_cancel, (
+            "polling loop never observed _state.is_cancelled() == True"
+        )
+    finally:
+        # Hard guarantee the thread is stopped before pytestqt teardown
+        # processes events on these QObjects -- otherwise a thread that
+        # outlives the test triggers an access violation when pytestqt
+        # walks the now-half-destroyed QObject graph.
+        if thread.isRunning():
+            worker.request_cancel()
+            thread.quit()
+            thread.wait(2000)
+            if thread.isRunning():
+                thread.terminate()
+                thread.wait(1000)

@@ -63,16 +63,11 @@ def _record_non_revertible(
     append_fix_to_manifest(entry)
 
 
-@register_fix("display")
-def _fix_display(specs: dict) -> bool:
-    """Sets monitor to highest available refresh rate."""
+def _fix_one_display(device: str) -> bool:
+    """Apply highest-available refresh rate to a single display."""
     from src.agent_tools.display_setter import apply_display_mode, find_best_mode, get_current_display_mode
-    from src.collectors.sub.monitor_dumper import get_all_displays
 
     try:
-        devices = get_all_displays()
-        device = devices[0] if devices else "\\\\.\\DISPLAY1"
-
         current = get_current_display_mode(device)
         before_state: dict | None = None
         if current is not None:
@@ -85,20 +80,20 @@ def _fix_display(specs: dict) -> bool:
 
         mode = find_best_mode(device, target_hz=None, require_same_resolution=True)
         if mode is None:
-            print_error("[display] No suitable mode found -- nothing changed.")
+            print_error(f"[display] {device}: No suitable mode found -- nothing changed.")
             return False
 
         ok, msg = apply_display_mode(device, mode, persist=True, dry_run=True)
         if not ok:
-            print_error(f"[display] Validation failed: {msg}")
+            print_error(f"[display] {device}: Validation failed: {msg}")
             return False
 
         ok, msg = apply_display_mode(device, mode, persist=True, dry_run=False)
         if not ok:
-            print_error(f"[display] Apply failed: {msg}")
+            print_error(f"[display] {device}: Apply failed: {msg}")
             return False
     except Exception as e:
-        print_error(f"[display] Error: {e}")
+        print_error(f"[display] {device}: Error: {e}")
         return False
 
     if before_state:
@@ -113,13 +108,43 @@ def _fix_display(specs: dict) -> bool:
             },
         )
     else:
-        _record_non_revertible("display", "Before-state not available")
+        _record_non_revertible("display", f"Before-state not available for {device}")
 
     print_success(
-        f"[display] Refresh rate set to {mode.dmDisplayFrequency}Hz "
+        f"[display] {device}: Refresh rate set to {mode.dmDisplayFrequency}Hz "
         f"({mode.dmPelsWidth}x{mode.dmPelsHeight}). {msg}"
     )
     return True
+
+
+@register_fix("display")
+def _fix_display(specs: dict) -> bool:
+    """Sets monitor(s) to highest available refresh rate.
+
+    Iterates over ``specs["DisplayCapabilities"]`` when present so callers
+    can target specific monitors by filtering the list. Falls back to the
+    first display from ``get_all_displays()`` when the key is missing
+    (legacy callers).
+    """
+    displays = specs.get("DisplayCapabilities") or []
+    if not displays:
+        from src.collectors.sub.monitor_dumper import get_all_displays
+        devices = get_all_displays()
+        device = devices[0] if devices else "\\\\.\\DISPLAY1"
+        return _fix_one_display(device)
+
+    any_ok = False
+    for d in displays:
+        cur = int(d.get("current_refresh_hz") or 0)
+        mx = int(d.get("max_refresh_hz") or 0)
+        if cur > 0 and mx > 0 and cur >= mx:
+            continue  # already at max
+        device = d.get("device")
+        if not device:
+            continue
+        if _fix_one_display(device):
+            any_ok = True
+    return any_ok
 
 
 @register_fix("power_plan")

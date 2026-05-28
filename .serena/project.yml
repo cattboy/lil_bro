@@ -115,7 +115,8 @@ excluded_tools: []
 
 # list of tools to include that would otherwise be disabled (particularly optional tools that are disabled by default).
 # This extends the existing inclusions (e.g. from the global configuration).
-included_optional_tools: []
+included_optional_tools:
+  - restart_language_server   # resync the LS after non-Serena .py edits
 
 # fixed set of tools to use as the base tool set (if non-empty), replacing Serena's default set of tools.
 # This cannot be combined with non-empty excluded_tools or included_optional_tools.

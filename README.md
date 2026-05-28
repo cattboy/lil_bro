@@ -18,6 +18,7 @@ All processing happens locally. The only external calls are optional driver vers
 
 ## Architecture
 
+- **GUI:** PySide6 desktop app (default); `--terminal` flag restores the original CLI experience
 - **Brain:** `llama-cpp-python` running `Qwen2.5-Coder-7B-Instruct.Q4_K_M.gguf` (~4.5 GB, optional — downloaded on first run)
 - **Orchestrator:** Python 3.11+
 - **Sidecar Tools:** Custom lhm-server.exe (LibreHardwareMonitor + PawnIO for ring-0 thermal access); bundled NVIDIA Profile Inspector (C# WPF for GPU profile editing)
@@ -25,13 +26,11 @@ All processing happens locally. The only external calls are optional driver vers
 
 ## Status
 
-🟢 **v0.9.1 — Sprint: logging-v2** — Logging system v2: action_logger restricted to system-modification audit only; debug_logger always-on in GUI mode (INFO level minimum, DEBUG with --debug); sys.excepthook + threading.excepthook installed; --debug flag wired through GUI mode; Help → Open Debug Log menu added.
+🟢 **v0.2.0.0 — PySide6 Desktop GUI + Pipeline Rescan Idempotency** — Full windowed app with dashboard (live thermals, mouse polling, monitor refresh tiles), optimization pipeline with phase-card progress, batch fix selection dialog, and animated splash screen. Running the pipeline twice in one session now finds nothing the second time. Dashboard "Fix Now" buttons are race-guarded and revertible. CLI mode preserved via `--terminal`. 671 tests passing.
 
-Previous: **Sprint: revert-last-session** — Session-level revert system: `revert.py` manifest I/O (JSON schema v1, per-session archiving); `phase_revert.py` interactive revert flow with reverse-order dispatch; per-fix revert handlers for power plan, game mode, NVIDIA profile, and display; Windows System Restore fallback via `rstrui.exe`; `display_utils.py` DEVMODE struct + mode enumeration. Accessible via menu option 4 or `--revert` CLI flag.
+Previous: **v0.1.1.0** — NVIDIA settings no longer falsely flag after a specs reload; Cinebench cleanup, zombie-process kill, and AMD-only NPI init error all fixed. NPI helpers consolidated into `src/utils/nvidia_npi.py`.
 
-Previous: **Sprint: nvidia-profile-inspector** — 882 tests passing. Bundled NVIDIA Profile Inspector tool (C# WPF) with Python integration: nvidia_profile_dumper.py extracts GPU profiles; nvidia_profile.py detects misconfigs; nvidia_profile_setter.py applies fixes. Pipeline refactored into Phase classes (base.py + 5 phase modules) with PipelineContext state bag. Setting ID validation against NPI_CustomSettingNames.xml canonical reference.
-
-Previous: Action logger v2 with outcome tags (`[PASS]`/`[FAIL]`/`[APPROVED]`/`[SKIPPED]`); session lifecycle anchored at app launch. Debug logging via `--debug` flag. Post-run cleanup preserves CWD-root logs. `main.py` split into `src/pipeline/` package. Terminal UI redesigned to DESIGN.md. Game Mode auto-fix, animated progress bar, Cinebench + thermal benchmarking, LLM-powered recommendations with batch approval UX. LLM is optional — static fallback templates always work offline.
+Previous: **v0.1.0.0** — Full revert/undo system. Session manifest (`session_latest.json`) records every fix; `phase_revert.py` walks you through reverting each one individually. Windows System Restore fallback offered on partial failure.
 
 ## Development
 

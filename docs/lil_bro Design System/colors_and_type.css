@@ -1,0 +1,166 @@
+/* ────────────────────────────────────────────────────────────────
+   lil_bro design tokens — colors, type, spacing, motion.
+   Dark-mode-first. Load fonts via Google Fonts:
+   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+   ──────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ── Backgrounds (dark, default) ── */
+  --bg-deep:       #1A1B23;   /* main canvas */
+  --bg-surface:    #24252F;   /* cards, panels */
+  --bg-elevated:   #2E2F3A;   /* sidebars, title bars */
+  --bg-hover:      #363745;   /* interactive hover */
+
+  /* ── Accent ── */
+  --accent:        #00E5CC;   /* Electric Cyan — diagnostic / signature */
+  --accent-light:  #00B8A3;   /* light-mode accent variant */
+  --accent-dim:    rgba(0,229,204,0.15);
+  --accent-glow:   rgba(0,229,204,0.30);
+  --border-accent: rgba(0,229,204,0.25);
+
+  /* ── Semantic ── */
+  --success:       #4ADE80;   /* mint */
+  --warning:       #FFB547;   /* amber */
+  --error:         #FF6B6B;   /* coral */
+  --info:          #60A5FA;   /* blue */
+  --magenta:       #D183E8;   /* brand banner accent */
+
+  /* ── Text (dark) ── */
+  --text-primary:  #E8E6E3;
+  --text-secondary:#9B9AA0;
+  --text-muted:    #6B6A70;
+
+  /* ── Borders ── */
+  --border:        #363745;
+
+  /* ── Fonts ── */
+  --font-display:  'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-body:     'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  --font-mono:     'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ── Type scale ── */
+  --fs-3xl:  3.5rem;    /* hero brand */
+  --fs-2xl:  2rem;      /* section display */
+  --fs-xl:   1.5rem;    /* stat values */
+  --fs-lg:   1.15rem;   /* large body */
+  --fs-md:   1rem;      /* body */
+  --fs-sm:   0.875rem;  /* data, UI */
+  --fs-xs:   0.8rem;    /* nav items */
+  --fs-2xs:  0.75rem;   /* labels */
+  --fs-3xs:  0.7rem;    /* meta */
+  --fs-4xs:  0.65rem;   /* micro */
+
+  /* ── Spacing (8px base) ── */
+  --sp-2xs: 2px;
+  --sp-xs:  4px;
+  --sp-sm:  8px;
+  --sp-md:  16px;
+  --sp-lg:  24px;
+  --sp-xl:  32px;
+  --sp-2xl: 48px;
+  --sp-3xl: 64px;
+
+  /* ── Radii ── */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:  12px;
+  --radius-full: 9999px;
+
+  /* ── Motion ── */
+  --ease-out:     cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:      cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out:  cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro:    80ms;
+  --dur-short:    150ms;
+  --dur-medium:   300ms;
+  --dur-long:     500ms;
+
+  /* ── Signature textures ── */
+  --scanline: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px
+  );
+  --shadow-glow:    0 0 20px var(--accent-glow);
+  --shadow-card:    0 1px 0 rgba(255,255,255,0.02) inset, 0 8px 24px rgba(0,0,0,0.25);
+  --shadow-dialog:  0 24px 64px rgba(0,0,0,0.55);
+}
+
+/* ── Light mode (opt-in) ── */
+.theme-light, [data-theme="light"] {
+  --bg-deep:       #F0EDE8;
+  --bg-surface:    #FAFAF8;
+  --bg-elevated:   #FFFFFF;
+  --bg-hover:      #E8E5E0;
+  --accent:        #00B8A3;
+  --text-primary:  #1A1B23;
+  --text-secondary:#5A5960;
+  --text-muted:    #8A8990;
+  --border:        #D8D5D0;
+}
+
+/* ── Semantic type roles ── */
+.h-hero {
+  font-family: var(--font-display);
+  font-size: var(--fs-3xl);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--text-primary);
+}
+.h1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+.h2 {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+.h3 {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+.p {
+  font-family: var(--font-body);
+  font-size: var(--fs-md);
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+.p-sm {
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-4xs);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.data, .code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.stat {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}

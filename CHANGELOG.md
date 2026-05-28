@@ -2,6 +2,53 @@
 
 All notable changes to lil_bro are documented here.
 
+## [0.2.0.0] - 2026-05-28
+
+### Added
+- **PySide6 desktop GUI** (~5,000 LOC under `src/gui/`). Replaces the prior CLI-only experience with a windowed app: dashboard with live thermals/mouse polling/monitor refresh tiles, optimization pipeline with phase-card progress, batch fix selection dialog, approval/confirm dialogs, AI Setup dialog with model download, animated splash screen. Five startup steps (theme/fonts → settings → bridge → LLM → spec dump) run before the main window appears. CLI mode is preserved via `lil_bro.exe --terminal`.
+- **Stop button + global hotkeys** to cancel long-running benchmarks (Esc / Q / Return / Enter). Cancel signal routes through `Qt.DirectConnection` for reliable worker-thread wakeup, and the pipeline polls `_state.is_cancelled()` between phases.
+- **GUI-mode output sinks** for `formatting.py` (`set_output_sink`), `progress_bar.py` (`set_progress_sink`), and approval/confirm handler registries. CLI mode falls back to direct stdout writes; GUI mode routes through Qt signals into the output panel.
+- **Pipeline rescan idempotency** — running the optimization pipeline twice in one session now finds nothing the second time. `ScanPhase` always re-dumps live system specs (with the startup snapshot kept only as a degraded-mode fallback when the fresh dump fails); `FinalBenchPhase` skips with a distinct "no changes applied" message when `fixes_applied == 0`; the revert manifest accumulates across runs instead of being reset, so one Revert undoes every run's changes in newest-first order. See `docs/pipeline-rescan-idempotency-plan.md`.
+- **Dashboard monitor refresh card** with a per-display "Fix Now" button that routes through the shared session manifest, so refresh-rate fixes triggered from the dashboard are revertible just like pipeline fixes.
+- **`_MonitorRefreshWorker`** moves the 200-800ms ctypes `EnumDisplayDevicesW` + WMI fallback off the GUI thread when the user clicks Refresh on the empty-monitor card.
+- **Atomic session manifest write** (`src/utils/revert.py`) — `.tmp` staging + `os.replace`. A process kill mid-write no longer wipes the session's revert data; worst case is the in-flight entry didn't land.
+- **`src/agent_tools/quick_status.py`** — fast registry/QSettings reads for dashboard tile initialization without a full pipeline run.
+- **`src/console_attach.py`** — Win32 console attach helper so `--terminal` cleanly attaches to the parent console or allocates a new one.
+
+### Fixed
+- **Dashboard "Fix Now" race conditions** — the monitor fix and monitor refresh paths now both reject clicks while the optimization pipeline is running and while the same worker is already in-flight, and `aboutToQuit` waits for both worker threads before LHM teardown. Without these guards a mid-pipeline fix could record stale "before" state in the manifest, breaking revert.
+- **LHM sidecar startup on slow PCs and iGPUs** — readiness polling extended; partial-load conditions no longer flag as failures.
+- **Cinebench cancellation under GUI mode** — the worker thread now honors `_state.is_cancelled()` mid-run, matching CLI cancel behavior.
+- **Bundled-exe widget loading** — `'src.gui.widgets.status_bar_widget'` was missing from `lil_bro.spec` hiddenimports, causing the status bar to silently disappear in the bundled exe (the `try/except` in `app.py._on_finished` swallowed the `ImportError`).
+- **LHM HTTP read size now capped at 10 MB** across the three call sites against `http://localhost:8085/data.json`. Defensive against another local process binding the port first; real responses are well under 500 KB.
+- **`thermal_gate.run_thermal_guard` no longer fetches the LHM snapshot twice per benchmark**, removing the redundant HTTP round-trip and a dead unreachable branch.
+
+### Changed
+- **Major file refactors** for maintainability: `theme.py` split into a `theme/` package (7 modules), `cinebench.py` extracted into discovery / monitor / parser submodules, `lhm_sidecar.py` extracted into discovery / http / process_utils, `formatting.py` extracted `_console.py`, `app.run()` extracted `PipelineController` + `StartupCoordinator`. Behavior is unchanged; the goal was smaller, more readable files.
+- **Terminal output formatting in the GUI output panel** — ANSI color codes are mapped to theme-aware hex colors; dividers and headers render at full panel width.
+- **`src/llm/action_proposer.py`** — `_FALLBACK` renamed to public `FALLBACK_PROPOSALS`; new `propose_for_check()` helper. Dashboard tiles consume the same proposal templates as the CLI pipeline, so fix descriptions stay consistent across surfaces.
+- **`StartupOrchestrator` now preloads `full_specs.json` on its worker thread** so the post-splash transition does no main-thread file I/O.
+
+### Removed
+- Duplicate `_on_benchmark_started` function definition in `src/gui/app.py` (signal binding selected the second copy; first was dead code).
+- Stale "`_on_phase_changed = _on_benchmark_score`" alias and the dead `phase_changed` signal (`src/gui/signals.py`, `src/gui/app.py`). The signal was defined and connected to `_on_benchmark_score` but emitted by zero call sites: a gravestone left when `PhaseRow` was superseded by `BenchmarkRow` (driven by `benchmark_score_ready`). The signal and its `.connect()` wiring are removed; `_on_benchmark_score` now serves `benchmark_score_ready` alone.
+- Redundant local `from PySide6.QtCore import QTimer` inside `Dashboard.set_monitor_data` (`QTimer` already imported at module scope).
+- Duplicate inline comment in `DashboardWorker.start`.
+- Unreachable branch in `thermal_gate.run_thermal_guard` after `require_thermal_protection` already returned True.
+- Vacuous `test_no_lhm_returns_false` test that mocked an impossible production state to exercise the dead branch above.
+
+### Security
+- **Cinebench path** (`self.cinebench_path`) is now rejected if it contains a double-quote, preventing batch-file quote escape from a future caller passing arbitrary paths. `find_cinebench()` only returns hardcoded search results today; this is defense-in-depth.
+- **`_find_elevated_pid(exe_name)`** validates `exe_name` against `^[\w.\-]+\.exe$` before interpolating it into the tasklist `/fi` filter. All current callers pass a hardcoded literal; the guard locks the function to safe inputs for any future caller.
+
+### For contributors
+- `CONTRIBUTING.md` "writing new checks" guide now references `FALLBACK_PROPOSALS` (was the renamed `_FALLBACK`).
+- `_MonitorFixWorker` docstring corrected; added a warning that future fix handlers calling `prompt_approval` will deadlock if routed through a worker shaped like this one (no event loop on the worker thread).
+- See `docs/lil_bro Design System/` for the design system, font/color preview pages, and the React/HTML/CSS kit the PySide6 QSS is modeled after.
+- `lil_bro.spec` hiddenimports list now covers every module under `src/gui/widgets/`; per CLAUDE.md any new widget MUST be added there to avoid silent bundled-exe regressions.
+
+---
+
 ## [0.1.1.0] - 2026-05-03
 
 ### Fixed

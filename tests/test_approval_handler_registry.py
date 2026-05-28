@@ -66,7 +66,7 @@ def test_handler_return_false_propagates(monkeypatch):
 
 
 def test_set_confirm_handler_intercepts_call():
-    formatting.set_confirm_handler(lambda question: question == "yes please")
+    formatting.set_confirm_handler(lambda title, description: title == "yes please")
     try:
         assert formatting.prompt_confirm("yes please") is True
         assert formatting.prompt_confirm("nope") is False
@@ -75,7 +75,7 @@ def test_set_confirm_handler_intercepts_call():
 
 
 def test_confirm_handler_clears_cleanly(monkeypatch):
-    formatting.set_confirm_handler(lambda _q: True)
+    formatting.set_confirm_handler(lambda _t, _d: True)
     formatting.set_confirm_handler(None)
     monkeypatch.setattr("builtins.input", lambda _prompt="": "n")
     assert formatting.prompt_confirm("after clear") is False

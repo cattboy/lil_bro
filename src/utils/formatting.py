@@ -2,6 +2,8 @@ import shutil
 import sys
 from colorama import init, Fore, Style
 
+from ._console import resize_console_window
+
 # Initialize colorama to support ANSI escape sequences on Windows
 init(autoreset=True)
 
@@ -22,9 +24,7 @@ from collections.abc import Callable
 # pipeline modules loaded before the GUI bridge installs its handlers.
 _DEFAULT_SINK: Callable[[str], None] | None = None
 _APPROVAL_HANDLER: Callable[[str], bool] | None = None
-_CONFIRM_HANDLER: Callable[[str], bool] | None = None
-_PAUSE_HANDLER: Callable[[str], None] | None = None
-_BATCH_SELECTION_HANDLER: Callable[[list, int], list[int]] | None = None
+_CONFIRM_HANDLER: Callable[[str, str], bool] | None = None
 _PAUSE_HANDLER: Callable[[str], None] | None = None
 _BATCH_SELECTION_HANDLER: Callable[[list, int], list[int]] | None = None
 
@@ -41,7 +41,7 @@ def set_approval_handler(handler: Callable[[str], bool] | None) -> None:
     _APPROVAL_HANDLER = handler
 
 
-def set_confirm_handler(handler: Callable[[str], bool] | None) -> None:
+def set_confirm_handler(handler: Callable[[str, str], bool] | None) -> None:
     """Install (or clear) the confirm handler. ``None`` restores CLI input()."""
     global _CONFIRM_HANDLER
     _CONFIRM_HANDLER = handler
@@ -64,6 +64,98 @@ def set_batch_selection_handler(
 def get_batch_selection_handler() -> Callable[[list, int], list[int]] | None:
     """Read the current batch-selection handler (None outside GUI mode)."""
     return _BATCH_SELECTION_HANDLER
+
+
+_BENCHMARK_SCORE_SINK: Callable[[str, dict, "float | None"], None] | None = None
+
+
+def set_benchmark_score_sink(sink: "Callable[[str, dict, float | None], None] | None") -> None:
+    global _BENCHMARK_SCORE_SINK
+    _BENCHMARK_SCORE_SINK = sink
+
+
+def notify_benchmark_score(phase: str, scores: dict, cpu_peak: "float | None" = None) -> None:
+    """Deliver benchmark score data to the GUI sink (no-op in terminal mode)."""
+    if _BENCHMARK_SCORE_SINK is not None:
+        _BENCHMARK_SCORE_SINK(phase, scores, cpu_peak)
+
+
+_MOUSE_READY_HANDLER: Callable[[], None] | None = None
+
+
+def set_mouse_ready_handler(handler: Callable[[], None] | None) -> None:
+    """Install (or clear) the mouse-ready handler. ``None`` restores CLI no-op."""
+    global _MOUSE_READY_HANDLER
+    _MOUSE_READY_HANDLER = handler
+
+
+def prompt_mouse_ready() -> None:
+    """Block (GUI: modal) or no-op (CLI) before mouse polling measurement."""
+    h = _MOUSE_READY_HANDLER
+    if h is not None:
+        h()
+
+
+_MOUSE_POLL_RESULT_SINK: Callable[[dict], None] | None = None
+
+
+def set_mouse_poll_result_sink(sink: Callable[[dict], None] | None) -> None:
+    """Install (or clear) the mouse poll result sink."""
+    global _MOUSE_POLL_RESULT_SINK
+    _MOUSE_POLL_RESULT_SINK = sink
+
+
+def notify_mouse_poll_result(result: dict) -> None:
+    """Deliver mouse poll result to the GUI dashboard card (no-op in CLI)."""
+    if _MOUSE_POLL_RESULT_SINK is not None:
+        _MOUSE_POLL_RESULT_SINK(result)
+
+
+_BENCHMARK_OPTIN_HANDLER: "Callable[[], bool] | None" = None
+
+
+def set_benchmark_optin_handler(handler: "Callable[[], bool] | None") -> None:
+    """Install (or clear) the benchmark opt-in handler. ``None`` restores CLI input()."""
+    global _BENCHMARK_OPTIN_HANDLER
+    _BENCHMARK_OPTIN_HANDLER = handler
+
+
+def prompt_benchmark_optin() -> bool:
+    """Ask the user whether to run PRE/POST Cinebench benchmarks (~30 min).
+
+    GUI mode: calls the registered handler (dialog returns True/False).
+              If no handler registered yet, defaults to True (preserves existing behavior).
+    CLI mode: interactive y/N prompt; defaults to False on empty input.
+    """
+    h = _BENCHMARK_OPTIN_HANDLER
+    if h is not None:
+        return h()
+    if _BATCH_SELECTION_HANDLER is not None:
+        # GUI mode without a registered benchmark optin handler — run benchmarks by default
+        # until the GUI is wired up with a proper dialog.
+        return True
+    print_info(
+        "\nOptional: Run a Cinebench PRE/POST benchmark to measure the impact of your fixes.\n"
+        "  PRE benchmark  →  apply fixes  →  POST benchmark  →  comparison\n"
+        "  Estimated time: ~30 minutes."
+    )
+    print_prompt("Run benchmarks? [y/N]: ")
+    raw = input().strip().lower()
+    return raw in ("y", "yes")
+
+
+_BENCHMARK_STARTED_SINK: "Callable[[], None] | None" = None
+
+
+def set_benchmark_started_sink(sink: "Callable[[], None] | None") -> None:
+    global _BENCHMARK_STARTED_SINK
+    _BENCHMARK_STARTED_SINK = sink
+
+
+def notify_benchmark_started() -> None:
+    """Signal that Cinebench is now actively running (no-op in terminal mode)."""
+    if _BENCHMARK_STARTED_SINK is not None:
+        _BENCHMARK_STARTED_SINK()
 
 
 def _emit(text: str, sink: Callable[[str], None] | None = None, end: str = "\n") -> None:
@@ -143,8 +235,16 @@ def print_section_divider(label: str = None, output_sink: Callable[[str], None] 
 def print_audit_summary(ok: int, warnings: int, unknowns: int,
                         output_sink: Callable[[str], None] | None = None):
     """Prints a compound-colored audit result line."""
+    _emit("", sink=output_sink)
     _emit(
-        f"{Style.DIM}Audit complete:{Style.RESET_ALL}  "
+        f"{Style.DIM}================================\n{Style.RESET_ALL}"
+        f"{Fore.GREEN}========= R E A D === H E R E =========\n{Style.RESET_ALL}"
+        f"{Style.DIM}================================{Style.RESET_ALL}",
+        sink=output_sink,
+    )
+    _emit("", sink=output_sink)
+    _emit(
+        f"{Style.DIM}Audit complete:{Style.RESET_ALL}"
         f"{Fore.GREEN}{ok} OK{Style.RESET_ALL}"
         f"{Style.DIM}  —  {Style.RESET_ALL}"
         f"{Fore.YELLOW}{warnings} need attention{Style.RESET_ALL}"
@@ -181,16 +281,24 @@ def print_proposal(num: int, severity: str, title: str,
     _emit(f"    {Fore.WHITE}{explanation}{Style.RESET_ALL}", sink=output_sink)
     _emit(f"    {Style.DIM}Fix: {action}  {fix_tag}{Style.RESET_ALL}", sink=output_sink)
 
-def prompt_confirm(question: str) -> bool:
+def prompt_confirm(title: str, description: str = "") -> bool:
     """Branded yes/no prompt for non-system decisions (e.g. model download).
 
     Late-lookup: reads ``_CONFIRM_HANDLER`` at call time so a GUI bridge
     swap reaches every caller, including modules imported before the swap.
+
+    ``description`` is optional context shown below the title. CLI mode
+    prints it on a second line when non-empty; the GUI bridge routes both
+    title and description to ``ConfirmDialog``.
     """
     handler = _CONFIRM_HANDLER
     if handler is not None:
-        return handler(question)
-    print(f"{Fore.MAGENTA}{question} [y/n]: {Style.RESET_ALL}", end="", flush=True)
+        return handler(title, description)
+    if description:
+        print(f"{Fore.MAGENTA}{title}{Style.RESET_ALL}")
+        print(f"{Fore.MAGENTA}{description} [y/n]: {Style.RESET_ALL}", end="", flush=True)
+    else:
+        print(f"{Fore.MAGENTA}{title} [y/n]: {Style.RESET_ALL}", end="", flush=True)
     return input().strip().lower() in ("y", "yes")
 
 def prompt_approval(action_description: str) -> bool:
@@ -233,49 +341,3 @@ def prompt_pause(message: str = "") -> None:
         pass  # no stdin available — skip silently
 
 
-def resize_console_window() -> None:
-    """Resize the console window to 80% of the primary screen, centered.
-
-    Skips resize when running inside Windows Terminal (which manages its
-    own window layout) to avoid interfering with focus and input handling.
-    """
-    try:
-        import ctypes
-        import os
-
-        # Windows Terminal manages its own window — resizing the pseudo-console
-        # HWND can steal keyboard focus and break input().
-        if os.environ.get("WT_SESSION"):
-            return
-
-        kernel32 = ctypes.windll.kernel32
-        user32   = ctypes.windll.user32
-
-        hwnd = kernel32.GetConsoleWindow()
-        if not hwnd:
-            return
-
-        screen_w = user32.GetSystemMetrics(0)   # SM_CXSCREEN
-        screen_h = user32.GetSystemMetrics(1)   # SM_CYSCREEN
-
-        win_w = int(screen_w * 0.8)
-        win_h = int(screen_h * 0.8)
-        x     = (screen_w - win_w) // 2
-        y     = (screen_h - win_h) // 2
-
-        # Only de-maximize if actually maximized — unconditional SW_RESTORE
-        # triggers WM_SIZE messages that can disrupt the console input state.
-        if user32.IsZoomed(hwnd):
-            user32.ShowWindow(hwnd, 9)   # SW_RESTORE
-
-        # SWP_NOACTIVATE prevents SetWindowPos from triggering focus/activation
-        # changes that steal keyboard input from the console.
-        SWP_NOZORDER   = 0x0004
-        SWP_NOACTIVATE = 0x0010
-        user32.SetWindowPos(hwnd, None, x, y, win_w, win_h,
-                            SWP_NOZORDER | SWP_NOACTIVATE)
-
-        # Re-acquire keyboard focus after the position change.
-        user32.SetForegroundWindow(hwnd)
-    except Exception:
-        pass

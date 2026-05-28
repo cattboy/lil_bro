@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import ctypes
 import json
+import os
 import subprocess
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -24,59 +26,114 @@ _DISP_CHANGE_SUCCESSFUL = 0
 # ---------------------------------------------------------------------------
 # Manifest write / read
 # ---------------------------------------------------------------------------
+#
+# Lifecycle -- one manifest per app session:
+#
+#   first fix (pipeline OR dashboard) --> lazy-create / flush staged manifest
+#        |                                          |
+#        v                                          v
+#   accumulate every applied fix  ------------>  written to disk
+#        |
+#        v
+#   explicit revert (run_revert_phase), on success --> manifest file deleted
+#
+# A second pipeline run does NOT reset the manifest: start_session_manifest is
+# a no-op while one is active, so revert can undo every run's changes.
+# See docs/pipeline-rescan-idempotency-plan.md.
 
 
 _pending_manifest: dict | None = None
 
-def start_session_manifest(restore_point_created: bool = True) -> None:
-    """Stage a fresh manifest in memory. Written to disk only if fixes are applied."""
-    global _pending_manifest
-    session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    _pending_manifest = {
+# Serializes every read-modify-write of the manifest. The pipeline runs on a
+# QThread and a dashboard monitor-fix runs on its own QThread; both append to
+# the same manifest, so the read-modify-write must not interleave.
+_manifest_lock = threading.Lock()
+
+
+def _new_manifest(restore_point_created: bool) -> dict:
+    """Build a fresh, empty session manifest."""
+    return {
         "schema_version": 1,
-        "session_id": session_id,
+        "session_id": datetime.now().strftime("%Y%m%d_%H%M%S"),
         "session_date": datetime.now().isoformat(),
         "restore_point_created": restore_point_created,
         "fixes": [],
     }
 
 
-def append_fix_to_manifest(entry: dict) -> None:
-    """Append one fix entry to the session manifest.
+def start_session_manifest(restore_point_created: bool = False) -> None:
+    """Stage a session manifest in memory, only if none is active yet.
 
-    On the first call, flushes the pending in-memory manifest to disk (archiving
-    any previous session file). Subsequent calls read, append, and write as before.
-    If no fixes are ever applied, no file is written.
+    The manifest spans one app session: it accumulates every applied fix
+    until an explicit revert deletes it. Calling this again while a manifest
+    is already active -- staged in memory or written to disk -- is a no-op,
+    so re-running the pipeline never discards the earlier run's revert data.
+
+    Written to disk only when the first fix is applied (see
+    ``append_fix_to_manifest``); a run that applies nothing leaves no file.
     """
     global _pending_manifest
-    try:
+    with _manifest_lock:
+        if _pending_manifest is not None or _read_raw_manifest() is not None:
+            return  # a session manifest is already active
+        _pending_manifest = _new_manifest(restore_point_created)
+
+
+def mark_restore_point_created() -> None:
+    """Record that a System Restore Point now exists for this session.
+
+    Called by ``BootstrapPhase`` after the restore point is created. If a
+    manifest was lazily created earlier by a dashboard fix -- with
+    ``restore_point_created=False`` because no restore point existed yet --
+    this upgrades the flag so revert can honestly offer System Restore.
+    A no-op when no manifest exists; the pipeline's first fix will then stage
+    one with the correct value.
+    """
+    global _pending_manifest
+    with _manifest_lock:
         if _pending_manifest is not None:
-            manifest = _pending_manifest
-            _pending_manifest = None
-            old_path = get_session_backup_path()
-            if old_path.exists():
-                try:
-                    import json as _json
-                    old_data = _json.loads(old_path.read_text(encoding="utf-8"))
-                    old_id = old_data.get("session_id", "unknown")
-                    old_path.rename(old_path.parent / f"session_{old_id}.json")
-                except Exception:
-                    pass
-        else:
-            manifest = _read_raw_manifest()
-        if manifest is None:
-            print_warning("Revert manifest missing — this fix will not be revertible.")
+            _pending_manifest["restore_point_created"] = True
             return
-        manifest.setdefault("fixes", []).append(entry)
-        _write_manifest(manifest)
-    except Exception as e:
-        prefix = entry.get("fix", "unknown")
-        print_warning(f"[{prefix}] Fix applied but revert log failed: {e}")
+        manifest = _read_raw_manifest()
+        if manifest is not None:
+            manifest["restore_point_created"] = True
+            _write_manifest(manifest)
+
+
+def append_fix_to_manifest(entry: dict) -> None:
+    """Append one applied-fix entry to the session manifest.
+
+    Flushes the staged in-memory manifest to disk on the first call, then
+    reads-appends-writes on subsequent calls. The manifest accumulates across
+    the whole session and is never archived -- an explicit revert is what
+    clears it. If no manifest is active (e.g. a dashboard fix is the first
+    action of the session, before any pipeline run), one is created lazily
+    with ``restore_point_created=False`` -- no restore point exists outside
+    the pipeline.
+    """
+    global _pending_manifest
+    with _manifest_lock:
+        try:
+            if _pending_manifest is not None:
+                manifest = _pending_manifest
+                _pending_manifest = None
+            else:
+                manifest = _read_raw_manifest()
+            if manifest is None:
+                # Lazy creation: a dashboard-initiated fix with no pipeline
+                # run before it. No restore point exists outside the pipeline.
+                manifest = _new_manifest(restore_point_created=False)
+            manifest.setdefault("fixes", []).append(entry)
+            _write_manifest(manifest)
+        except Exception as e:
+            prefix = entry.get("fix", "unknown")
+            print_warning(f"[{prefix}] Fix applied but revert log failed: {e}")
 
 
 def load_manifest() -> dict | None:
     """Return the session manifest, or None if not found or corrupt."""
-    data = _read_raw_manifest()
+    with _manifest_lock:
+        data = _read_raw_manifest()
     if data is not None:
         ver = data.get("schema_version")
         if ver is None or ver != 1:
@@ -147,11 +204,25 @@ def _read_raw_manifest() -> dict | None:
 
 
 def _write_manifest(manifest: dict) -> None:
-    """Serialize and write manifest to disk. Logs warning on failure."""
+    """Serialize and write manifest atomically. Logs warning on failure.
+
+    Writes to a ``.tmp`` sibling first, then ``os.replace`` swaps it in. A
+    plain ``write_text`` is non-atomic on Windows (CreateFile -> WriteFile ->
+    CloseHandle); a kill between WriteFile and CloseHandle leaves
+    ``session_latest.json`` truncated, and ``_read_raw_manifest`` then treats
+    the corrupt file as absent -- silently losing every revert entry from this
+    session.
+    """
     path = get_session_backup_path()
+    tmp = path.with_name(path.name + ".tmp")
     try:
-        path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        tmp.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
     except OSError as exc:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass  # safe: leftover .tmp gets overwritten on the next write
         print_warning(
             "Revert will not be available for this session — backup could not be saved."
         )

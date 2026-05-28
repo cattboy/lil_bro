@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.collectors.sub.lhm_sidecar import LHMSidecar
-from src.utils.formatting import print_info, print_warning, print_dim
+from src.utils.formatting import print_info, print_dim
 from src.utils.action_logger import action_logger
 from src.utils.debug_logger import get_debug_logger
 from src.utils.platform import is_admin

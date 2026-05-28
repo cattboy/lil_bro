@@ -52,7 +52,7 @@ class Settings:
             try:
                 self._qs.setValue(_STATE_KEY, window.saveState())
             except Exception:
-                pass
+                pass  # safe: saveState is unsupported on some Qt builds
         self._qs.sync()
 
     def restore_geometry(self, window: QWidget) -> bool:
@@ -69,5 +69,5 @@ class Settings:
                 try:
                     window.restoreState(state)
                 except Exception:
-                    pass
+                    pass  # safe: restoreState may reject stale state from a prior Qt version
         return True

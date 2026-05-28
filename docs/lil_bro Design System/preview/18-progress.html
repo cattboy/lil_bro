@@ -1,0 +1,60 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Progress + bars</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);}
+  body { width: 700px; padding: 22px 26px; background-image: var(--scanline);
+         display:grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  h3 { font-family: var(--font-mono); font-size: 10px;
+       letter-spacing: 0.14em; text-transform: uppercase;
+       color: var(--text-muted); margin: 0 0 14px; font-weight: 500; }
+  .lbl { font-family: var(--font-mono); font-size: 11px;
+         display:flex; justify-content:space-between; margin-bottom: 6px; color: var(--text-muted); }
+  .lbl span:last-child { color: var(--accent); }
+  .bg { height: 10px; background: var(--bg-deep);
+        border-radius: 9999px; overflow:hidden;
+        border: 1px solid var(--border); }
+  .fill {
+    height: 100%; border-radius: 9999px;
+    background: linear-gradient(90deg, var(--accent), #00FFE0, var(--accent));
+    background-size: 200% 100%;
+    animation: plasma 2s linear infinite;
+    box-shadow: 0 0 12px var(--accent-glow);
+  }
+  .static { background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+  @keyframes plasma { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .ring-w { display:flex; align-items:center; gap: 14px; }
+  .ring {
+    width: 72px; height: 72px;
+    background: conic-gradient(var(--accent) 0deg 252deg, var(--bg-surface) 252deg);
+    border-radius: 50%;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: 0 0 24px var(--accent-glow);
+  }
+  .ring::after {
+    content: ''; position:absolute; width: 56px; height: 56px;
+    border-radius: 50%; background: var(--bg-deep);
+  }
+  .ring span { position:relative; z-index:1; font-family: var(--font-mono);
+               font-size: 16px; font-weight: 700; color: var(--accent); }
+  .ring-info { font-family: var(--font-body); font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+  .ring-info b { color: var(--text-primary); font-weight: 600; }
+</style>
+</head>
+<body>
+  <div>
+    <h3>Download (animated)</h3>
+    <div class="lbl"><span>2.1 GB / 4.6 GB</span><span>45%</span></div>
+    <div class="bg"><div class="fill" style="width:45%"></div></div>
+    <div style="display:flex;justify-content:space-between;margin-top:10px;font-family:var(--font-mono);font-size:11px;color:var(--text-muted)"><span>18.4 MB/s</span><span>ETA 02:22</span></div>
+  </div>
+  <div>
+    <h3>Conic ring</h3>
+    <div class="ring-w">
+      <div class="ring"><span>70%</span></div>
+      <div class="ring-info"><b>Optimizing</b><br>Phase 4 of 5</div>
+    </div>
+  </div>
+</body></html>

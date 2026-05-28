@@ -9,10 +9,10 @@ Also provides a single-shot ``fetch_snapshot()`` for pre-benchmark idle checks.
 
 import json
 import threading
-import time
 import urllib.request
 from typing import Optional
 
+from src.collectors.sub.lhm_http import _MAX_RESPONSE_BYTES
 from src.collectors.sub.lhm_sidecar import LHM_URL
 from src.agent_tools.thermal_guidance import derive_cpu_temp
 from src.config import config as _cfg
@@ -92,7 +92,7 @@ def _fetch_temps() -> dict[str, float]:
     try:
         req = urllib.request.Request(LHM_URL)
         with urllib.request.urlopen(req, timeout=2) as resp:
-            data = json.loads(resp.read())
+            data = json.loads(resp.read(_MAX_RESPONSE_BYTES))
             return _parse_temps_from_lhm(data)
     except Exception:
         return {}

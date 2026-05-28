@@ -15,97 +15,24 @@ attempt to fix the WDK build chain here.
 import ctypes
 import json
 import os
-import socket
 import subprocess
-import sys
 import threading
 import time
 import urllib.request
 from typing import Optional
 
-from ...utils.formatting import print_step, print_step_done, print_warning, print_info, print_dim
 from ...utils.action_logger import action_logger
 from ...utils.debug_logger import get_debug_logger
+from ...utils.formatting import print_dim, print_info, print_step, print_step_done, print_warning
 from ...utils.platform import is_admin
+from .lhm_discovery import _LHM_SEARCH_PATHS, _PROJECT_ROOT, find_lhm_executable
+from .lhm_http import (
+    LHM_PORT, LHM_URL, _MAX_RESPONSE_BYTES, _POLL_INTERVAL, _STARTUP_TIMEOUT,
+    _is_lhm_responding,
+)
+from .lhm_process_utils import _find_elevated_pid, _is_port_in_use
 
 log = get_debug_logger()
-
-LHM_PORT = 8085
-LHM_URL = f"http://localhost:{LHM_PORT}/data.json"
-_STARTUP_TIMEOUT = 15  # seconds to wait for /data.json readiness (.NET cold start)
-_POLL_INTERVAL = 0.5  # seconds between readiness checks
-
-# Search order for thermal sensor server binaries.
-# lhm-server.exe (custom minimal server) is checked first; falling back to
-# a user-installed full LibreHardwareMonitor installation.
-_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-
-_LHM_SEARCH_PATHS = [
-    # 1. PyInstaller frozen bundle -- sys._MEIPASS/tools/lhm-server.exe
-    os.path.join(getattr(sys, "_MEIPASS", _PROJECT_ROOT), "tools", "lhm-server.exe"),
-    # 2. Next to the running executable -- portable deployment (frozen .exe)
-    os.path.join(os.path.dirname(sys.executable), "tools", "lhm-server.exe"),
-    # 3. Source-tree dev path -- tools/lhm-server/dist/lhm-server.exe
-    os.path.join(_PROJECT_ROOT, "tools", "lhm-server", "dist", "lhm-server.exe"),
-    # 4. Full LibreHardwareMonitor installation (user-installed)
-    os.path.join(_PROJECT_ROOT, "tools", "LibreHardwareMonitor", "LibreHardwareMonitor.exe"),
-    r"C:\Program Files\LibreHardwareMonitor\LibreHardwareMonitor.exe",
-    r"C:\Program Files (x86)\LibreHardwareMonitor\LibreHardwareMonitor.exe",
-    os.path.expandvars(r"%LOCALAPPDATA%\LibreHardwareMonitor\LibreHardwareMonitor.exe"),
-]
-
-
-def _find_elevated_pid(exe_name: str) -> Optional[int]:
-    """Find the PID of a running process by exe name via tasklist."""
-    try:
-        result = subprocess.run(
-            ["tasklist", "/fi", f"imagename eq {exe_name}", "/fo", "csv", "/nh"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        for line in result.stdout.strip().splitlines():
-            parts = line.strip('"').split('","')
-            if parts and parts[0].lower() == exe_name.lower():
-                return int(parts[1])
-    except Exception:
-        pass
-    return None
-
-
-def _is_port_in_use(port: int) -> bool:
-    """Check if a TCP port is already bound on localhost."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(1)
-        return s.connect_ex(("127.0.0.1", port)) == 0
-
-
-def _is_lhm_responding() -> bool:
-    """Check if LHM's HTTP endpoint is serving valid JSON."""
-    try:
-        req = urllib.request.Request(LHM_URL)
-        with urllib.request.urlopen(req, timeout=2) as resp:
-            data = json.loads(resp.read())
-            # LHM returns a JSON object with a "Children" key at top level
-            return isinstance(data, dict)
-    except Exception:
-        return False
-
-
-def find_lhm_executable() -> tuple[Optional[str], bool]:
-    """Search for a thermal sensor server binary.
-
-    Returns:
-        (path, is_custom_server) where:
-        - path is the absolute path to the binary, or None if not found.
-        - is_custom_server is True for lhm-server.exe (custom minimal server),
-          False for the full LibreHardwareMonitor application.
-    """
-    for path in _LHM_SEARCH_PATHS:
-        if os.path.isfile(path):
-            is_custom = os.path.basename(path) == "lhm-server.exe"
-            return path, is_custom
-    return None, False
 
 
 class LHMSidecar:
@@ -370,7 +297,7 @@ class LHMSidecar:
                         timeout=5,
                     )
                 except Exception:
-                    pass
+                    pass  # safe: subprocess cleanup is best-effort
                 # taskkill /F is fire-and-forget -- wait for the process to
                 # actually disappear so the PawnIO driver handle is released
                 # before downstream cleanup attempts to delete the service.
@@ -398,7 +325,7 @@ class LHMSidecar:
             try:
                 self._process.kill()
             except Exception:
-                pass
+                pass  # safe: process may already be dead
             try:
                 subprocess.run(
                     ["taskkill", "/F", "/T", "/PID", str(pid)],
@@ -406,7 +333,7 @@ class LHMSidecar:
                     timeout=5,
                 )
             except Exception:
-                pass
+                pass  # safe: taskkill fallback is best-effort
         finally:
             log.info("LHM Sidecar: Stopped")
             self._process = None
@@ -416,6 +343,6 @@ class LHMSidecar:
         try:
             req = urllib.request.Request(LHM_URL)
             with urllib.request.urlopen(req, timeout=2) as resp:
-                return json.loads(resp.read())
+                return json.loads(resp.read(_MAX_RESPONSE_BYTES))
         except Exception:
             return None

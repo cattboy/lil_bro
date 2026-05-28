@@ -8,8 +8,10 @@ if TYPE_CHECKING:
 from src.pipeline.base import PipelineContext, PipelineAborted, Phase, PhaseResult
 from src.pipeline.phase_bootstrap import BootstrapPhase
 from src.pipeline.phase_scan import ScanPhase
-from src.pipeline.phase_baseline import BaselineBenchPhase
 from src.pipeline.phase_config import ConfigPhase
+from src.pipeline.phase_benchmark_optin import BenchmarkOptInPhase
+from src.pipeline.phase_baseline import BaselineBenchPhase
+from src.pipeline.phase_apply import ApplyPhase
 from src.pipeline.phase_final import FinalBenchPhase
 from src.collectors.sub.lhm_sidecar import LHMSidecar
 from src.benchmarks.thermal_monitor import ThermalMonitor
@@ -19,13 +21,15 @@ from src.utils.debug_logger import get_debug_logger
 _PHASES: list[Phase] = [
     BootstrapPhase(),
     ScanPhase(),
-    BaselineBenchPhase(),
     ConfigPhase(),
+    BenchmarkOptInPhase(),
+    BaselineBenchPhase(),
+    ApplyPhase(),
     FinalBenchPhase(),
 ]
 
 
-def run_optimization_pipeline(lhm: LHMSidecar, llm: Optional[Llama] = None) -> None:
+def run_optimization_pipeline(lhm: LHMSidecar, llm: Optional[Llama] = None, preloaded_specs: dict | None = None) -> None:
     """Top-level pipeline entry. LHM lifecycle is owned by the caller (main.py).
 
     Cooperative cancel: between phases we poll ``_state.is_cancelled()``;
@@ -34,11 +38,11 @@ def run_optimization_pipeline(lhm: LHMSidecar, llm: Optional[Llama] = None) -> N
     """
     from src.pipeline import _state
     with ThermalMonitor() as thermal:
-        ctx = PipelineContext(lhm=lhm, thermal=thermal, llm=llm)
+        ctx = PipelineContext(lhm=lhm, thermal=thermal, llm=llm, specs=preloaded_specs or {})
         log = get_debug_logger()
         try:
             for phase in _PHASES:
-                if _state.is_cancelled():
+                if _state.is_cancelled() and not ctx.cancel_override:
                     log.info("Pipeline cancelled before phase %s", type(phase).__name__)
                     break
                 result: PhaseResult = phase.run(ctx)

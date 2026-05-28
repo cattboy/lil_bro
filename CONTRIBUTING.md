@@ -95,7 +95,7 @@ python -m pytest tests/test_game_mode.py -v
 python -m pytest tests/ --cov=src --cov-report=term-missing
 ```
 
-Current suite: **882 tests**, all passing (including 557 new tests for NVIDIA Profile Inspector integration).
+Current suite: **671 tests**, all passing.
 
 ---
 
@@ -128,28 +128,51 @@ The `.spec` file (`lil_bro.spec`) is the PyInstaller build configuration — edi
 
 ```
 src/
-  main.py           — Thin entry point (integrity, admin, banner, menu)
+  main.py           — Thin entry point; GUI by default, --terminal for CLI
+  console_attach.py — Win32 console attach helper for --terminal mode
+  bootstrapper.py   — UAC escalation + System Restore Point creation
+  gui/              — PySide6 desktop application
+    app.py          — Application setup + lifecycle
+    pipeline_controller.py — Wires PipelineWorker signals to UI
+    startup_coordinator.py — Manages splash → main window transition
+    bridge.py       — Qt signal bridge between pipeline and GUI
+    signals.py      — Shared signal definitions
+    settings.py     — QSettings persistence
+    startup.py      — Startup orchestrator worker
+    worker.py       — PipelineWorker, _MonitorFixWorker, _MonitorRefreshWorker
+    theme/          — QSS theme package (tokens, stylesheet, dialogs, helpers)
+    widgets/        — Reusable UI widgets (dashboard, stat cards, output panel, ...)
+    windows/        — Top-level windows (main_window.py)
   pipeline/         — Modular 5-phase orchestrator with Phase protocol
     _state.py       — Shared LLM state (get_llm/set_llm)
     base.py         — PipelineContext dataclass + Phase protocol
-    banner.py       — ASCII art banner
-    menu.py         — 3-option menu loop + AI model setup
     approval.py     — Proposal display, selection parsing, fix execution
     fix_dispatch.py — Check→fix dispatch registry (@register_fix decorator)
     thermal_gate.py — Pre-benchmark thermal safety gate
-    startup_thermals.py — Startup thermal scan
     phase_bootstrap.py  — Phase 1: UAC + System Restore Point
     phase_scan.py       — Phase 2: Hardware data collection
     phase_baseline.py   — Phase 3: Baseline benchmark + thermals
     phase_config.py     — Phase 4: All optimization checks + LLM proposals
     phase_final.py      — Phase 5: Verification benchmark
-    phases.py           — 5-phase orchestrator (legacy, now coordinator)
+    phase_revert.py     — Phase 6: Interactive revert flow (--revert or menu)
+    phases.py           — 5-phase orchestrator
   agent_tools/      — One file per system check (display, game_mode, power_plan, nvidia_profile, ...)
   collectors/       — Hardware data collection (WMI, dxdiag, nvidia-smi, NVIDIA Profile, EDID, ...)
+    sub/
+      lhm_sidecar.py    — LHM process lifecycle
+      lhm_http.py       — HTTP polling against LHM localhost:8085
+      lhm_discovery.py  — LHM install discovery
+      lhm_process_utils.py — LHM process management helpers
   llm/              — Optional LLM integration (model loader + action proposer)
   benchmarks/       — Cinebench runner + thermal monitor
+    cinebench.py          — BenchmarkRunner orchestration
+    cinebench_discovery.py — Cinebench install detection
+    cinebench_parser.py   — Cinebench result parsing
+    cinebench_monitor.py  — Background thermal polling during benchmark
+    thermal_monitor.py    — LHM temperature polling
   utils/            — Shared helpers (formatting, logging, paths, progress bar, platform, ...)
-tests/              — Unit tests (all mocked) — 882 total
+    _console.py     — Internal console formatting helpers (extracted from formatting.py)
+tests/              — Unit tests (all mocked) — 671 total
 docs/               — Design notes, plans, vendor reference docs (NPI settings, etc.)
 tools/
   PawnIO/           — PawnIO kernel driver source + WDK build script
@@ -171,7 +194,7 @@ See `CLAUDE.md` for the full architecture reference used by the AI assistant.
 - **Safety first** — every system modification goes through `prompt_approval()` before executing.
 - **No silent changes** — a System Restore Point is created before any fixes are applied.
 - **Always use `uv`** — never `pip install` directly.
-- **Terminal UI only** — no PyQt until explicitly requested.
+- **GUI via PySide6** — GUI is the default; `--terminal` flag preserves the CLI path. New UI work uses PySide6 (not PyQt).
 - **Offline** — no telemetry, no external APIs beyond driver version checks and the one-time GGUF model download.
 
 ---
@@ -257,7 +280,7 @@ The lhm-server build auto-triggers `tools/PawnIO/build.ps1` (source build) if `t
 3. Return a dict with at minimum `check`, `status`, `message`, `can_auto_fix` keys
 4. Wire it into `phase_config.py` — add your check function to the run phase method
 5. Add a handler function and registry entry to `src/pipeline/fix_dispatch.py` using `@register_fix("your_check")` decorator if `can_auto_fix: True`
-6. Add a fallback template to `_FALLBACK` in `action_proposer.py` for offline/LLM-fallback scenarios
+6. Add a fallback template to `FALLBACK_PROPOSALS` in `action_proposer.py` for offline/LLM-fallback scenarios
 7. Write mocked tests in `tests/test_your_check.py`
 
 The Phase protocol (in `base.py`) ensures your check's findings flow cleanly through the orchestrator: Phase 4 (Config) → Fix dispatch → Approval UX → Phase 5 (Verification).

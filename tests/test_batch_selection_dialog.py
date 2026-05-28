@@ -21,7 +21,7 @@ def test_apply_all_returns_full_list(qtbot):
     qtbot.addWidget(dialog)
     dialog.show()
     QTest.qWait(10)
-    dialog.apply_all_btn.click()
+    dialog._apply_btn.click()
     QTest.qWait(10)
     assert dialog.selected_indices() == [1, 2, 3]
 
@@ -31,7 +31,7 @@ def test_skip_returns_empty(qtbot):
     qtbot.addWidget(dialog)
     dialog.show()
     QTest.qWait(10)
-    dialog.skip_btn.click()
+    dialog._skip_btn.click()
     QTest.qWait(10)
     assert dialog.selected_indices() == []
 
@@ -41,8 +41,8 @@ def test_apply_selected_respects_uncheck(qtbot):
     qtbot.addWidget(dialog)
     dialog.show()
     QTest.qWait(10)
-    dialog._list.item(0).setCheckState(Qt.CheckState.Unchecked)
-    dialog.apply_btn.click()
+    dialog._fix_items[0].toggle()
+    dialog._apply_btn.click()
     QTest.qWait(10)
     assert dialog.selected_indices() == [2, 3]
 
@@ -57,12 +57,12 @@ def test_escape_acts_as_skip(qtbot):
     assert dialog.selected_indices() == []
 
 
-def test_default_check_state_respects_can_auto_fix(qtbot):
+def test_default_check_state_all_selected(qtbot):
     proposals = [
         {"finding": "auto", "title": "auto", "severity": "L", "can_auto_fix": True},
         {"finding": "manual", "title": "manual", "severity": "L", "can_auto_fix": False},
     ]
     dialog = BatchSelectionDialog(proposals)
     qtbot.addWidget(dialog)
-    assert dialog._list.item(0).checkState() == Qt.CheckState.Checked
-    assert dialog._list.item(1).checkState() == Qt.CheckState.Unchecked
+    assert dialog._fix_items[0].is_selected
+    assert dialog._fix_items[1].is_selected

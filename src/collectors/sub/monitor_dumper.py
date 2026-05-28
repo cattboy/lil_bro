@@ -45,8 +45,17 @@ def get_current_refresh(device_name: str | None = None) -> int:
 
 # ── Multi-monitor enumeration ──────────────────────────────────────────────────
 
-def get_all_displays() -> list[str]:
-    """Returns device names like ['\\\\.\\DISPLAY1', '\\\\.\\DISPLAY2', ...]"""
+_DISPLAY_DEVICE_ACTIVE = 0x00000001
+_DISPLAY_DEVICE_MIRRORING_DRIVER = 0x00000008
+
+
+def _enum_display_devices(require_active: bool, exclude_mirror: bool = True) -> list[str]:
+    """Walks ``EnumDisplayDevicesW`` with configurable filters.
+
+    Hybrid-GPU laptops often leave the integrated panel without the
+    ACTIVE flag even though it's rendering. ``require_active=False`` is
+    the laptop fallback path.
+    """
     class DISPLAY_DEVICE(ctypes.Structure):
         _fields_ = [
             ("cb",           wintypes.DWORD),
@@ -57,19 +66,36 @@ def get_all_displays() -> list[str]:
             ("DeviceKey",    ctypes.c_wchar * 128),
         ]
 
-    DISPLAY_DEVICE_ACTIVE = 0x00000001
     user32 = ctypes.windll.user32
-    devices = []
+    devices: list[str] = []
     i = 0
     while True:
         dd = DISPLAY_DEVICE()
         dd.cb = ctypes.sizeof(dd)
         if not user32.EnumDisplayDevicesW(None, i, ctypes.byref(dd), 0):
             break
-        if dd.StateFlags & DISPLAY_DEVICE_ACTIVE:
-            devices.append(dd.DeviceName)
+        flags = dd.StateFlags
+        if exclude_mirror and (flags & _DISPLAY_DEVICE_MIRRORING_DRIVER):
+            i += 1
+            continue
+        if require_active and not (flags & _DISPLAY_DEVICE_ACTIVE):
+            i += 1
+            continue
+        devices.append(dd.DeviceName)
         i += 1
     return devices
+
+
+def get_all_displays() -> list[str]:
+    """Returns device names like ['\\\\.\\DISPLAY1', '\\\\.\\DISPLAY2', ...].
+
+    Tries strict (ACTIVE-only) first, then falls back to all non-mirror
+    display devices to catch integrated panels on hybrid-GPU laptops.
+    """
+    devices = _enum_display_devices(require_active=True, exclude_mirror=True)
+    if devices:
+        return devices
+    return _enum_display_devices(require_active=False, exclude_mirror=True)
 
 
 # ── EDID cross-check (optional but useful for validation) ─────────────────────
@@ -135,22 +161,61 @@ def _parse_edid_max_refresh(edid: bytes) -> int | None:
 
 # ── Main entry point ───────────────────────────────────────────────────────────
 
+def _wmi_fallback_capabilities() -> list[dict]:
+    """Last-resort enumeration via WMI Win32_VideoController.
+
+    Used when ``EnumDisplayDevicesW`` returns nothing (some laptop
+    iGPU configurations). WMI typically reports the current resolution's
+    refresh as both current and max, so the card may say "optimal"
+    without true panel-max knowledge — better than no card at all.
+    """
+    try:
+        import wmi  # type: ignore[import]
+        c = wmi.WMI()
+        out: list[dict] = []
+        for v in c.Win32_VideoController():
+            cur = int(getattr(v, "CurrentRefreshRate", 0) or 0)
+            mx = int(getattr(v, "MaxRefreshRate", 0) or 0) or cur
+            w = int(getattr(v, "CurrentHorizontalResolution", 0) or 0)
+            h = int(getattr(v, "CurrentVerticalResolution", 0) or 0)
+            if cur <= 0 and mx <= 0:
+                continue
+            name = str(getattr(v, "Name", "Unknown adapter"))
+            rates = sorted({r for r in (cur, mx) if r > 0}, reverse=True)
+            out.append({
+                "device": f"WMI:{name}",
+                "max_refresh_hz": mx or cur,
+                "at_resolution": f"{w}x{h}" if w and h else "",
+                "current_refresh_hz": cur,
+                "all_refresh_rates": rates,
+                "edid_declared_max_hz": None,
+                "source": "wmi",
+            })
+        return out
+    except Exception:
+        return []
+
+
 def get_monitor_refresh_capabilities() -> list[dict]:
     displays = get_all_displays()
-    results = []
-    edid_data = {e["monitor"]: e.get("edid_max_refresh_hz") 
-                 for e in get_edid_max_refresh_from_registry() 
+    results: list[dict] = []
+    edid_data = {e["monitor"]: e.get("edid_max_refresh_hz")
+                 for e in get_edid_max_refresh_from_registry()
                  if "monitor" in e}
 
     for device in displays:
         info = get_max_refresh_for_device(device)
         info["device"] = device
+        info["source"] = "winapi"
         # Attach EDID ground-truth if we can match it (best-effort name match)
         for mon_key, hz in edid_data.items():
             if any(part in device for part in mon_key.split("\\")):
                 info["edid_declared_max_hz"] = hz
                 break
         results.append(info)
+
+    if not results:
+        results = _wmi_fallback_capabilities()
     return results
 
 

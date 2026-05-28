@@ -59,6 +59,10 @@ class GuiBridge(QObject):
         formatting.set_confirm_handler(self._handle_confirm)
         formatting.set_pause_handler(self._handle_pause)
         formatting.set_batch_selection_handler(self._handle_batch_selection)
+        formatting.set_benchmark_score_sink(self._emit_benchmark_score)
+        formatting.set_benchmark_started_sink(self._emit_benchmark_started)
+        formatting.set_mouse_ready_handler(self._handle_mouse_ready)
+        formatting.set_mouse_poll_result_sink(self._emit_mouse_poll_result)
         progress_bar.set_progress_sink(self._emit_progress)
         self._installed = True
 
@@ -68,6 +72,10 @@ class GuiBridge(QObject):
         formatting.set_confirm_handler(None)
         formatting.set_pause_handler(None)
         formatting.set_batch_selection_handler(None)
+        formatting.set_benchmark_score_sink(None)
+        formatting.set_benchmark_started_sink(None)
+        formatting.set_mouse_ready_handler(None)
+        formatting.set_mouse_poll_result_sink(None)
         progress_bar.set_progress_sink(None)
         self._installed = False
 
@@ -83,15 +91,21 @@ class GuiBridge(QObject):
     def _emit_progress(self, percent: int, label: str) -> None:
         self.signals.progress_changed.emit(int(percent), str(label))
 
+    def _emit_benchmark_score(self, phase: str, scores: dict, cpu_peak: "float | None") -> None:
+        self.signals.benchmark_score_ready.emit(phase, scores, cpu_peak)
+
+    def _emit_benchmark_started(self) -> None:
+        self.signals.benchmark_started.emit()
+
     # ── Bool-answer handlers (worker thread blocks until main answers) ──
 
     def _handle_approval(self, action: str) -> bool:
         return self._await_bool_answer(self.signals.approval_requested, action)
 
-    def _handle_confirm(self, question: str) -> bool:
-        return self._await_bool_answer(self.signals.confirm_requested, question)
+    def _handle_confirm(self, title: str, description: str = "") -> bool:
+        return self._await_bool_answer(self.signals.confirm_requested, title, description)
 
-    def _await_bool_answer(self, signal, payload: str) -> bool:
+    def _await_bool_answer(self, signal, *payload) -> bool:
         loop = QEventLoop()
         result = {"value": False}  # safe default = "Deny" / "No"
 
@@ -100,7 +114,7 @@ class GuiBridge(QObject):
             loop.quit()
 
         self._answer_callback = _on_answer
-        signal.emit(payload)
+        signal.emit(*payload)
         QTimer.singleShot(_DIALOG_TIMEOUT_MS, loop.quit)
         loop.exec()
         self._answer_callback = None
@@ -117,12 +131,33 @@ class GuiBridge(QObject):
         if cb is not None:
             cb(value)
 
+    def abort_pending(self) -> None:
+        """Unblock any in-flight ``_await_*_answer`` loop so the worker thread can exit.
+
+        Called from ``_on_about_to_quit`` before ``pipeline_thread.wait()`` to
+        avoid the deadlock where the worker is parked in ``QEventLoop.exec()``
+        waiting for the main thread to deliver a dialog answer that will never
+        come. ``deliver_answer(False)`` is safe for both branches:
+
+        - approval/confirm loops type-check via ``bool()`` → ``False`` = Deny / No.
+        - batch-selection loop normalizes via ``list(answer or [])`` → ``[]`` = skip.
+        """
+        if self._answer_callback is not None:
+            self.deliver_answer(False)
+
 
     # ── Pause + batch-selection handlers ───────────────────────────────
 
     def _handle_pause(self, message: str) -> None:
         """Auto-continue in GUI mode. CLI ``Press Enter`` prompts are no-ops here."""
         return
+
+    def _handle_mouse_ready(self) -> None:
+        """Block worker thread until user clicks OK in MouseReadyDialog."""
+        self._await_bool_answer(self.signals.mouse_ready_requested)
+
+    def _emit_mouse_poll_result(self, result: dict) -> None:
+        self.signals.mouse_poll_result_ready.emit(result)
 
     def _handle_batch_selection(self, proposals: list, total: int) -> list[int]:
         """Show ``BatchSelectionDialog`` (via signal) and wait for the selection."""

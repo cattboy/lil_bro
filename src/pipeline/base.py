@@ -53,6 +53,26 @@ class PipelineContext:
     # Set by BootstrapPhase — whether a System Restore Point was created
     restore_point_created: bool = False
 
+    # Set by ConfigPhase — count of auto-fixes successfully applied this run.
+    # FinalBenchPhase skips when this is 0 (nothing changed to benchmark against).
+    fixes_applied: int = 0
+
+    # Set by ScanPhase — mouse polling measured before spec dump in GUI mode
+    mouse_result: Optional[dict] = None
+
+    # Set by BenchmarkOptInPhase — True/False = user's explicit choice; None = not decided.
+    run_benchmarks: Optional[bool] = None
+
+    # Set by ConfigPhase — approved proposals pending execution in ApplyPhase.
+    approved_proposals: list = field(default_factory=list)
+
+    # Set by BaselineBenchPhase when user declines to apply after a benchmark abort.
+    skip_apply: bool = False
+
+    # Set by BaselineBenchPhase when user confirms apply despite benchmark abort.
+    # Phases loop honours this to not break on is_cancelled().
+    cancel_override: bool = False
+
 
 class Phase(Protocol):
     """Structural protocol for pipeline phases."""

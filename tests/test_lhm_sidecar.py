@@ -13,7 +13,7 @@ from src.collectors.sub.lhm_sidecar import (
 
 # ── Port probe tests ─────────────────────────────────────────────────────────
 
-@patch("src.collectors.sub.lhm_sidecar.socket.socket")
+@patch("src.collectors.sub.lhm_process_utils.socket.socket")
 def test_port_in_use_returns_true(mock_socket_cls):
     mock_sock = MagicMock()
     mock_sock.connect_ex.return_value = 0
@@ -22,7 +22,7 @@ def test_port_in_use_returns_true(mock_socket_cls):
     assert _is_port_in_use(8085) is True
 
 
-@patch("src.collectors.sub.lhm_sidecar.socket.socket")
+@patch("src.collectors.sub.lhm_process_utils.socket.socket")
 def test_port_not_in_use_returns_false(mock_socket_cls):
     mock_sock = MagicMock()
     mock_sock.connect_ex.return_value = 1
@@ -33,7 +33,7 @@ def test_port_not_in_use_returns_false(mock_socket_cls):
 
 # ── LHM responding tests ─────────────────────────────────────────────────────
 
-@patch("src.collectors.sub.lhm_sidecar.urllib.request.urlopen")
+@patch("src.collectors.sub.lhm_http.urllib.request.urlopen")
 def test_lhm_responding_valid_json(mock_urlopen):
     mock_resp = MagicMock()
     mock_resp.read.return_value = json.dumps({"Children": []}).encode()
@@ -43,14 +43,14 @@ def test_lhm_responding_valid_json(mock_urlopen):
     assert _is_lhm_responding() is True
 
 
-@patch("src.collectors.sub.lhm_sidecar.urllib.request.urlopen", side_effect=Exception("timeout"))
+@patch("src.collectors.sub.lhm_http.urllib.request.urlopen", side_effect=Exception("timeout"))
 def test_lhm_not_responding(mock_urlopen):
     assert _is_lhm_responding() is False
 
 
 # ── find_lhm_executable ──────────────────────────────────────────────────────
 
-@patch("src.collectors.sub.lhm_sidecar.os.path.isfile")
+@patch("src.collectors.sub.lhm_discovery.os.path.isfile")
 def test_find_lhm_returns_custom_server(mock_isfile):
     """lhm-server.exe found → returns (path, True)."""
     mock_isfile.side_effect = lambda p: p.endswith("lhm-server.exe")
@@ -60,7 +60,7 @@ def test_find_lhm_returns_custom_server(mock_isfile):
     assert is_custom is True
 
 
-@patch("src.collectors.sub.lhm_sidecar.os.path.isfile")
+@patch("src.collectors.sub.lhm_discovery.os.path.isfile")
 def test_find_lhm_returns_full_lhm(mock_isfile):
     """Only full LHM found → returns (path, False)."""
     mock_isfile.side_effect = lambda p: "LibreHardwareMonitor.exe" in p and "lhm-server" not in p
@@ -70,7 +70,7 @@ def test_find_lhm_returns_full_lhm(mock_isfile):
     assert is_custom is False
 
 
-@patch("src.collectors.sub.lhm_sidecar.os.path.isfile", return_value=False)
+@patch("src.collectors.sub.lhm_discovery.os.path.isfile", return_value=False)
 def test_find_lhm_exe_not_found(mock_isfile):
     """Nothing found → returns (None, False)."""
     path, is_custom = find_lhm_executable()

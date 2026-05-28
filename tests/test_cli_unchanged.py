@@ -35,12 +35,15 @@ def test_gui_imports_do_not_install_sinks_or_handlers():
     import src.gui.signals  # noqa: F401
     import src.gui.startup  # noqa: F401
     import src.gui.theme  # noqa: F401
+    import src.gui.theme.helpers  # noqa: F401
+    import src.gui.theme.stylesheet  # noqa: F401
+    import src.gui.theme.tokens  # noqa: F401
     import src.gui.worker  # noqa: F401
     import src.gui.widgets.approval_dialog  # noqa: F401
     import src.gui.widgets.batch_selection_dialog  # noqa: F401
+    import src.gui.widgets.benchmark_row  # noqa: F401
     import src.gui.widgets.confirm_dialog  # noqa: F401
     import src.gui.widgets.output_panel  # noqa: F401
-    import src.gui.widgets.phase_card  # noqa: F401
     import src.gui.widgets.splash  # noqa: F401
     import src.gui.windows.main_window  # noqa: F401
 

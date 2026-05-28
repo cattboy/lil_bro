@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Semantic colors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);}
+  body { width: 700px; padding: 22px 24px; background-image: var(--scanline); }
+  .row { display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .card {
+    background: var(--bg-surface);
+    border:1px solid var(--border); border-radius: var(--radius-md);
+    padding: 14px 16px; position:relative; overflow:hidden;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; margin-bottom: 10px; }
+  .name { font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+          letter-spacing: 0.1em; text-transform: uppercase; }
+  .hex { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+  .role { font-family: var(--font-body); font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="card"><div class="dot" style="background:#4ADE80;box-shadow:0 0 10px rgba(74,222,128,0.6)"></div><div class="name" style="color:#4ADE80">Success</div><div class="hex">#4ADE80</div><div class="role">[OK] · applied</div></div>
+    <div class="card"><div class="dot" style="background:#FFB547;box-shadow:0 0 10px rgba(255,181,71,0.6)"></div><div class="name" style="color:#FFB547">Warning</div><div class="hex">#FFB547</div><div class="role">[WARN] · medium</div></div>
+    <div class="card"><div class="dot" style="background:#FF6B6B;box-shadow:0 0 10px rgba(255,107,107,0.6)"></div><div class="name" style="color:#FF6B6B">Error</div><div class="hex">#FF6B6B</div><div class="role">[FAIL] · high</div></div>
+    <div class="card"><div class="dot" style="background:#60A5FA;box-shadow:0 0 10px rgba(96,165,250,0.6)"></div><div class="name" style="color:#60A5FA">Info</div><div class="hex">#60A5FA</div><div class="role">[INFO] · neutral</div></div>
+  </div>
+</body></html>

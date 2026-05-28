@@ -10,74 +10,185 @@ single-line prompt with a checkable list + three actions:
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QDialog,
-    QDialogButtonBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
+
+from src.gui.theme import repolish
+
+class _FixItem(QFrame):
+    """One clickable fix row: checkbox, sev badge, title/desc, AUTO/MANUAL tag."""
+
+    toggled = Signal()
+
+    def __init__(self, idx: int, proposal: dict, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("fixItem")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        sev = (proposal.get("sev") or proposal.get("severity") or "low").lower()
+        tag = (proposal.get("tag") or proposal.get("category") or "").upper()
+        title = proposal.get("title") or proposal.get("finding") or f"Proposal {idx + 1}"
+        desc = proposal.get("desc") or proposal.get("description") or proposal.get("explanation") or ""
+        mode = "AUTO" if proposal.get("can_auto_fix", True) else "MANUAL"
+        mode = proposal.get("mode", mode)
+
+        self._selected = True
+        self.setProperty("selected", "true")
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(12, 10, 12, 10)
+        row.setSpacing(10)
+
+        self._check_lbl = QLabel("✓")
+        self._check_lbl.setObjectName("checkBox")
+        self._check_lbl.setProperty("checked", "true")
+        self._check_lbl.setFixedSize(22, 22)
+        self._check_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(self._check_lbl, alignment=Qt.AlignmentFlag.AlignTop)
+
+        info_col = QVBoxLayout()
+        info_col.setSpacing(2)
+
+        sev_text = f"{sev.upper()}" + (f"  ·  {tag}" if tag else "")
+        sev_lbl = QLabel(sev_text)
+        sev_lbl.setObjectName("fixSev")
+        sev_lbl.setProperty("sev", sev)
+        info_col.addWidget(sev_lbl)
+
+        title_lbl = QLabel(title)
+        title_lbl.setObjectName("fixTitle")
+        title_lbl.setWordWrap(True)
+        info_col.addWidget(title_lbl)
+
+        if desc:
+            desc_lbl = QLabel(desc)
+            desc_lbl.setObjectName("fixDesc")
+            desc_lbl.setWordWrap(True)
+            info_col.addWidget(desc_lbl)
+
+        row.addLayout(info_col, stretch=1)
+
+        mode_lbl = QLabel(mode)
+        mode_lbl.setObjectName("modeBadge")
+        mode_lbl.setProperty("mode", mode)
+        row.addWidget(mode_lbl, alignment=Qt.AlignmentFlag.AlignTop)
+
+    @property
+    def is_selected(self) -> bool:
+        return self._selected
+
+    def toggle(self) -> None:
+        """Flip selection state and refresh the row's QSS + checkbox glyph."""
+        self._selected = not self._selected
+        self.setProperty("selected", "true" if self._selected else "false")
+        self._check_lbl.setText("✓" if self._selected else "")
+        self._check_lbl.setProperty("checked", "true" if self._selected else "false")
+        repolish(self._check_lbl)
+        repolish(self)
+        self.toggled.emit()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        self.toggle()
+        super().mousePressEvent(event)
 
 
 class BatchSelectionDialog(QDialog):
+    """V2 fix-list approval dialog with severity badges and AUTO/MANUAL tags."""
+
     def __init__(self, proposals: list[dict], parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Apply Optimizations")
+        self.setWindowTitle("Apply These Fixes?")
+        self.setObjectName("batchDialog")
         self.setModal(True)
+        self.setFixedWidth(540)
         self.setAccessibleName("Batch selection dialog")
 
         self._proposals = proposals
+        self._selected: list[bool] = [True] * len(proposals)
         self._selected_indices: list[int] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 16)
-        layout.setSpacing(16)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-        header = QLabel("Choose optimizations to apply")
-        header.setObjectName("sectionHeader")
-        layout.addWidget(header)
+        # ── Header ────────────────────────────────────────────────────
+        hdr = QFrame()
+        hdr.setObjectName("dlgHead")
+        hdr_row = QHBoxLayout(hdr)
+        hdr_row.setContentsMargins(20, 16, 16, 16)
 
-        self._list = QListWidget()
-        self._list.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
-        for i, proposal in enumerate(proposals, start=1):
-            title = proposal.get("title") or proposal.get("finding") or f"Proposal {i}"
-            severity = proposal.get("severity", "")
-            label = f"[{i}] {severity}  {title}".strip()
-            item = QListWidgetItem(label)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            checked = bool(proposal.get("can_auto_fix", True))
-            item.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
-            self._list.addItem(item)
-        layout.addWidget(self._list, stretch=1)
+        title_lbl = QLabel("Apply These Fixes?")
+        title_lbl.setObjectName("dlgTitle")
+        hdr_row.addWidget(title_lbl)
+        hdr_row.addStretch()
 
-        actions = QHBoxLayout()
-        self.apply_all_btn = QPushButton("Apply all")
-        self.skip_btn = QPushButton("Skip all")
-        actions.addWidget(self.apply_all_btn)
-        actions.addWidget(self.skip_btn)
-        actions.addStretch(1)
-        layout.addLayout(actions)
+        close_btn = QPushButton("✕")
+        close_btn.setObjectName("secondary")
+        close_btn.setFixedSize(28, 28)
+        close_btn.clicked.connect(self._on_cancel)
+        hdr_row.addWidget(close_btn)
 
-        buttons = QDialogButtonBox(self)
-        self.apply_btn: QPushButton = buttons.addButton(
-            "Apply selected", QDialogButtonBox.ButtonRole.AcceptRole
-        )
-        self.cancel_btn: QPushButton = buttons.addButton(
-            "Cancel", QDialogButtonBox.ButtonRole.RejectRole
-        )
-        self.apply_btn.setObjectName("primary")
-        self.apply_btn.setDefault(True)
-        buttons.accepted.connect(self._on_apply_selected)
-        buttons.rejected.connect(self._on_cancel)
-        layout.addWidget(buttons)
+        layout.addWidget(hdr)
 
-        self.apply_all_btn.clicked.connect(self._on_apply_all)
-        self.skip_btn.clicked.connect(self._on_cancel)
+        # ── Body ──────────────────────────────────────────────────────
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(20, 8, 20, 8)
+        body_layout.setSpacing(8)
+
+        count = len(proposals)
+        subtitle = QLabel(f"lil_bro identified {count} improvement{'s' if count != 1 else ''}. "
+                          f"Select which to apply:")
+        subtitle.setObjectName("dlgSubtitle")
+        subtitle.setWordWrap(True)
+        body_layout.addWidget(subtitle)
+
+        self._fix_items: list[_FixItem] = []
+        for i, proposal in enumerate(proposals):
+            item = _FixItem(i, proposal, self)
+            item.toggled.connect(lambda idx=i: self._on_item_toggled(idx))
+            self._fix_items.append(item)
+            body_layout.addWidget(item)
+
+        layout.addWidget(body)
+
+        # ── Footer ────────────────────────────────────────────────────
+        foot = QFrame()
+        foot.setObjectName("dlgFoot")
+        foot_row = QHBoxLayout(foot)
+        foot_row.setContentsMargins(20, 12, 20, 16)
+        foot_row.setSpacing(8)
+        foot_row.addStretch()
+
+        self._skip_btn = QPushButton("Skip All")
+        self._skip_btn.setObjectName("secondary")
+        self._skip_btn.clicked.connect(self._on_cancel)
+
+        self._apply_btn = QPushButton(f"Apply {count} Selected")
+        self._apply_btn.setObjectName("primary")
+        self._apply_btn.setDefault(True)
+        self._apply_btn.clicked.connect(self._on_apply_selected)
+
+        foot_row.addWidget(self._skip_btn)
+        foot_row.addWidget(self._apply_btn)
+
+        layout.addWidget(foot)
+
+    # ── State sync ─────────────────────────────────────────────────────
+
+    def _on_item_toggled(self, idx: int) -> None:
+        self._selected[idx] = self._fix_items[idx].is_selected
+        count = sum(self._selected)
+        self._apply_btn.setText(f"Apply {count} Selected")
+        self._apply_btn.setEnabled(count > 0)
 
     # ── Result accessors ───────────────────────────────────────────────
 
@@ -88,20 +199,15 @@ class BatchSelectionDialog(QDialog):
 
     def _on_apply_selected(self) -> None:
         self._selected_indices = [
-            i for i in range(1, self._list.count() + 1)
-            if self._list.item(i - 1).checkState() == Qt.CheckState.Checked
+            i + 1 for i, sel in enumerate(self._selected) if sel
         ]
-        self.accept()
-
-    def _on_apply_all(self) -> None:
-        self._selected_indices = list(range(1, self._list.count() + 1))
         self.accept()
 
     def _on_cancel(self) -> None:
         self._selected_indices = []
         self.reject()
 
-    def keyPressEvent(self, event):
+    def keyPressEvent(self, event):  # noqa: N802
         if event.key() == Qt.Key.Key_Escape:
             self._on_cancel()
             return

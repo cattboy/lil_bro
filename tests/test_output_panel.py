@@ -52,7 +52,7 @@ def test_output_panel_append_line(qtbot):
     panel = OutputPanel()
     qtbot.addWidget(panel)
     panel.append_line(f"{Fore.GREEN}OK done{Style.RESET_ALL}")
-    assert "OK done" in panel.toPlainText()
+    assert "OK done" in panel._text.toPlainText()
 
 
 def test_output_panel_carriage_return_replaces_last_line(qtbot):
@@ -61,7 +61,7 @@ def test_output_panel_carriage_return_replaces_last_line(qtbot):
     qtbot.addWidget(panel)
     panel.append_line("\r[#####.....] 50%")
     panel.append_line("\r[##########] 100%")
-    text = panel.toPlainText()
+    text = panel._text.toPlainText()
     assert "100%" in text
     assert "50%" not in text  # first frame retained, second frame visible
 
@@ -71,4 +71,18 @@ def test_output_panel_clear_log(qtbot):
     qtbot.addWidget(panel)
     panel.append_line("noise")
     panel.clear_log()
-    assert panel.toPlainText() == ""
+    assert panel._text.toPlainText() == ""
+
+
+def test_output_panel_blank_line_is_inserted(qtbot):
+    panel = OutputPanel()
+    qtbot.addWidget(panel)
+    panel.append_line("first line")
+    panel.append_line("")
+    panel.append_line("second line")
+    text = panel._text.toPlainText()
+    assert "first line" in text
+    assert "second line" in text
+    lines = text.splitlines()
+    blank_lines = [l for l in lines if l.strip() == ""]
+    assert len(blank_lines) >= 1, "expected at least one blank line between content lines"

@@ -32,17 +32,14 @@ if os.path.isfile(_npi_exe):
 if os.path.isfile(_pawnio_setup):
     _extra_datas.append((_pawnio_setup, 'tools'))
 
-# ── GUI resources (bundled .ttf fonts, splash image) ------------------
+# ── GUI resources (bundled .ttf fonts) --------------------------------
 _resources_dir = os.path.join(ROOT, 'resources')
 _fonts_dir     = os.path.join(_resources_dir, 'fonts')
-_splash_png    = os.path.join(_resources_dir, 'splash.png')
 
 if os.path.isdir(_fonts_dir):
     for _name in os.listdir(_fonts_dir):
         if _name.lower().endswith('.ttf'):
             _extra_datas.append((os.path.join(_fonts_dir, _name), 'resources/fonts'))
-if os.path.isfile(_splash_png):
-    _extra_datas.append((_splash_png, 'resources'))
 
 
 a = Analysis(
@@ -73,23 +70,33 @@ a = Analysis(
         'src.console_attach',
         'src.gui.app',
         'src.gui.bridge',
+        'src.gui.pipeline_controller',
+        'src.gui.settings',
         'src.gui.signals',
         'src.gui.startup',
+        'src.gui.startup_coordinator',
         'src.gui.theme',
-        'src.gui.settings',
         'src.gui.worker',
         'src.gui.widgets.approval_dialog',
         'src.gui.widgets.ai_setup_dialog',
         'src.gui.widgets.batch_selection_dialog',
         'src.gui.widgets.confirm_dialog',
         'src.gui.widgets.dashboard',
-        'src.gui.widgets.mouse_polling_widget',
+        'src.gui.widgets.monitor_refresh_card',
+        'src.gui.widgets.mouse_poll_card',
+        'src.gui.widgets.mouse_ready_dialog',
         'src.gui.widgets.output_panel',
-        'src.gui.widgets.phase_card',
+        'src.gui.widgets.output_view',
+        'src.gui.widgets.benchmark_row',
         'src.gui.widgets.splash',
+        'src.gui.widgets.stat_card',
+        'src.gui.widgets.status_bar_widget',
         'src.gui.widgets.thermal_chart',
         'src.gui.windows.main_window',
+        'src.agent_tools.mouse',
         'src.agent_tools.quick_status',
+        # src.utils helpers re-exported via formatting
+        'src.utils._console',
     ],
     hookspath=[],
     hooksconfig={},
@@ -142,27 +149,8 @@ except ImportError:
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-# Optional PyInstaller native splash — instant feedback while the
-# Python interpreter and frozen archive bootstrap (3-9 sec on cold
-# start). Only added if the splash asset exists.
-_splash = None
-if os.path.isfile(_splash_png):
-    _splash = Splash(  # noqa: F821 — provided by PyInstaller spec runtime
-        _splash_png,
-        binaries=a.binaries,
-        datas=a.datas,
-        text_pos=None,
-        text_size=12,
-        minify_script=True,
-        always_on_top=True,
-    )
-
-_exe_inputs = [pyz, a.scripts, a.binaries, a.datas, []]
-if _splash is not None:
-    _exe_inputs = [pyz, a.scripts, _splash, _splash.binaries, a.binaries, a.datas, []]
-
 exe = EXE(
-    *_exe_inputs,
+    pyz, a.scripts, a.binaries, a.datas, [],
     name='lil_bro',
     debug=False,
     bootloader_ignore_signals=False,

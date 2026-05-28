@@ -65,5 +65,7 @@ def test_qss_primary_button_uses_accent():
 
 
 def test_load_fonts_no_op_when_resources_missing(tmp_path, monkeypatch):
-    monkeypatch.setattr(theme, "_resources_dir", lambda: tmp_path)
-    theme.load_fonts()  # must not raise
+    # ``load_fonts`` lives in ``theme.helpers`` and binds ``_resources_dir``
+    # from that module's namespace — patch it there, not on the package.
+    monkeypatch.setattr("src.gui.theme.helpers._resources_dir", lambda: tmp_path)
+    theme.load_fonts()  # must not raise  # must not raise

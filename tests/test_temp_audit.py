@@ -69,7 +69,8 @@ def test_clean_temp_folders_locked_file(mock_remove, mock_getsize, mock_exists, 
 
 
 def test_analyze_temp_folders_under_threshold():
-    specs = {"TempFolders": {"total_bytes": 500 * 1024 * 1024, "details": {}}}
+    # Threshold lowered to 248 MB in commit f71cb0c; 200 MB stays comfortably below.
+    specs = {"TempFolders": {"total_bytes": 200 * 1024 * 1024, "details": {}}}
     result = analyze_temp_folders(specs)
     assert result["status"] == "OK"
     assert result["check"] == "temp_folders"

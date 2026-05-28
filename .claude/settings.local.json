@@ -1,4 +1,7 @@
 {
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
   "permissions": {
     "allow": [
       "Bash(git push:*)",
@@ -50,7 +53,17 @@
       "mcp__serena__write_memory",
       "Bash(uv venv:*)",
       "Bash(uv pip:*)",
-      "Bash(grep -n \"_refocus_console_window\" src/benchmarks/cinebench.py)"
+      "Bash(grep -n \"_refocus_console_window\" src/benchmarks/cinebench.py)",
+      "Bash(.venv/Scripts/python.exe -m py_compile src/gui/widgets/monitor_refresh_card.py src/gui/widgets/dashboard.py src/gui/worker.py src/gui/app.py)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/test_spec_dumper.py -q)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -k \"fix_dispatch or spec_dumper or display\" -q)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -k \"dashboard or gui or monitor or worker\" -q)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -k \"monitor or display or dashboard or spec_dumper\" -q)",
+      "Bash(awk NR>=370 && NR<=420 *)",
+      "mcp__claude_ai_Context7__resolve-library-id",
+      "Bash(gh pr *)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -q)",
+      "mcp__serena__restart_language_server"
     ]
   },
   "enabledMcpjsonServers": [

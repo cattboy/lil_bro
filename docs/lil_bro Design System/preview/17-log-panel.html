@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Log panel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0;background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-mono);}
+  body { width: 700px; padding: 20px; background-image: var(--scanline); }
+  .panel { background: var(--bg-deep); border: 1px solid var(--border); border-radius: 8px; overflow:hidden; }
+  .tb { display:flex; align-items:center; justify-content:space-between;
+        padding: 7px 12px; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
+  .ttl { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted); }
+  .btns { display:flex; gap: 5px; }
+  .b { font-size: 10px; padding: 3px 8px; background: transparent;
+       border: 1px solid var(--border); border-radius: 3px; color: var(--text-muted); cursor:pointer; }
+  .body { padding: 10px 14px; font-size: 12px; line-height: 1.85; }
+  .l { display:block; white-space: pre; }
+  .c { color: var(--accent); } .g { color: var(--success); } .y { color: var(--warning); }
+  .r { color: var(--error); } .b2 { color: var(--info); } .m { color: var(--magenta); font-weight: 700; }
+  .w { color: var(--text-secondary); } .d { color: var(--text-muted); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .blink { animation: blink 1s step-end infinite; }
+</style>
+</head>
+<body>
+  <div class="panel">
+    <div class="tb">
+      <div class="ttl">Pipeline Log</div>
+      <div class="btns"><button class="b">Clear</button><button class="b">Copy</button></div>
+    </div>
+    <div class="body">
+<span class="l"><span class="m">══ Phase 2: System Scan ══</span></span>
+<span class="l"><span class="c">  [INFO]</span><span class="w"> Collecting hardware specs...</span></span>
+<span class="l"><span class="g">  [OK]  </span><span class="w"> nvidia-smi found — Driver 552.44</span></span>
+<span class="l"><span class="g">  [OK]  </span><span class="w"> Monitor: ASUS VG27AQ1A @ 165Hz</span></span>
+<span class="l"><span class="y">  [WARN]</span><span class="w"> Power Plan: Balanced — not optimal</span></span>
+<span class="l"><span class="y">  [WARN]</span><span class="w"> XMP not enabled — RAM at 2133 MHz</span></span>
+<span class="l"><span class="m">══ Phase 3: AI Analysis ══</span></span>
+<span class="l"><span class="c">  [INFO]</span><span class="w"> Generating recommendations (6.2s)...</span></span>
+<span class="l"><span class="g">  [OK]  </span><span class="w"> 3 fixes: 1 HIGH, 1 MEDIUM, 1 LOW</span><span class="blink c"> █</span></span>
+    </div>
+  </div>
+</body></html>

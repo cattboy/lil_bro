@@ -103,7 +103,7 @@ def load_model():
         print("  • Your IP will be visible to HuggingFace (the model host) during download only.")
         print("  • After the first run, lil_bro is fully offline.\n")
 
-        if not prompt_confirm("Download model now?"):
+        if not prompt_confirm("Download AI model?", "Downloads ~5 GB of Qwen2.5-7B from HuggingFace. One-time, offline thereafter."):
             print_warning("Model download skipped — AI explanations will not be available this run.")
             return None
 

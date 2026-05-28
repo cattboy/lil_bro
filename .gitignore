@@ -16,6 +16,7 @@ uv.lock
 # .gitignore
 .claude/skills/gstack/
 .claude/skills/browse/dist/
+.claude/scheduled_tasks.lock
 
 #builds
 build/
@@ -45,3 +46,4 @@ lil_bro_config.json
 
 
 /resolve
+/.claude/worktrees/
