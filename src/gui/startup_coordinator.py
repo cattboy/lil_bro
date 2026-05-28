@@ -145,6 +145,14 @@ class StartupCoordinator:
         thread.
         """
         runtime = self._runtime
+        # Guard: refresh during a pipeline run could mutate
+        # runtime["preloaded_specs"]["DisplayCapabilities"] while
+        # PipelineWorker is still iterating ctx.specs (which aliases the
+        # same dict in the snapshot-fallback path from phase_scan). Same
+        # shape of bug as CR-1 for on_monitor_fix_requested.
+        if runtime.get("pipeline_thread") is not None:
+            self._log.warning("Monitor refresh suppressed: pipeline is running")
+            return
         if runtime.get("monitor_refresh_thread") is not None:
             return  # already in-flight; the existing worker will deliver the result
         from src.gui.worker import _MonitorRefreshWorker

@@ -84,6 +84,17 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
         except Exception:
             pass  # safe: monitor-fix-on-quit best-effort
 
+    # Wait for an in-flight monitor refresh (200-800 ms ctypes
+    # EnumDisplayDevicesW probe) so we don't tear down Qt while the
+    # worker thread is mid-syscall. Short wait -- this is read-only work,
+    # not a system mutation.
+    monitor_refresh_thread = runtime.get("monitor_refresh_thread")
+    if monitor_refresh_thread is not None:
+        try:
+            monitor_refresh_thread.wait(2000)
+        except Exception:
+            pass  # safe: monitor-refresh-on-quit best-effort
+
     try:
         main._dashboard.stop_polling()
     except Exception:
@@ -99,7 +110,7 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
     try:
         settings.save_geometry(main)
     except Exception:
-        pass  # safe: QSettings write failure should not block window close  # safe: QSettings write failure should not block window close
+        pass  # safe: QSettings write failure should not block window close  # safe: QSettings write failure should not block window close  # safe: QSettings write failure should not block window close
 
 
 def run(debug: bool = False) -> int:

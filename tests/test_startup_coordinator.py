@@ -118,6 +118,24 @@ class TestRefreshMonitorCard:
         )
         mock_thread_cls.return_value.start.assert_called_once()
 
+
+    def test_refresh_suppressed_when_pipeline_thread_set(self):
+        """A refresh while the pipeline is running would mutate
+        runtime['preloaded_specs'] (which can alias the live ctx.specs in
+        the scan-fallback path), so we drop the click. Same shape of bug
+        as CR-1 for on_monitor_fix_requested."""
+        runtime = {"pipeline_thread": MagicMock()}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._MonitorRefreshWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_monitor_card()
+        mock_worker_cls.assert_not_called()
+        mock_thread_cls.assert_not_called()
+        assert "monitor_refresh_thread" not in runtime
+        coord._log.warning.assert_called_once()
+        msg = coord._log.warning.call_args[0][0]
+        assert "pipeline" in msg.lower()
+
     def test_second_call_is_dropped_while_in_flight(self):
         """A second click while a refresh is already running must NOT spawn
         a second worker -- the in-flight one will deliver the result."""
