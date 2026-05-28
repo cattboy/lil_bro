@@ -74,8 +74,58 @@ Format: Priority | Effort (human / CC) | Context
 **Effort:** M human / M with CC
 **Why:** Users can't currently see what fixes were applied in the current session. The session manifest (2A) accumulates all applied fixes with timestamps, providing the ready data source. A UI panel showing this closes the UX half of the original pipeline-rescan idempotency report.
 **Fix:** Create a new Dashboard-style card or sidebar panel that displays the session manifest: list of applied fixes with timestamps and revert status. Wire it to the `PipelineContext.fixes_applied` and manifest data. Persist the list until the next session starts.
-**Blocked by:** Nothing. Defer until the core pipeline-rescan idempotency work (feat/frontend-ui) lands.
+**Blocked by:** Nothing — unblocked by v0.2.0.0 (pipeline-rescan + atomic manifest landed).
 **Added:** 2026-05-23 (deferred from pipeline-rescan-idempotency-plan.md)
+
+---
+
+### T-017 — Test coverage for new pipeline phases + controller + workers
+**Priority:** P2
+**Effort:** M human / S with CC
+**Why:** /ship coverage audit on v0.2.0.0 measured ~56% line coverage on the new code. Several new classes have zero direct tests: `PipelineController` (236 lines, only exercised indirectly via cancel-flow test), `BenchmarkOptInPhase`, `ApplyPhase`, `BaselineBenchPhase` new branches (`run_benchmarks=False`, `skip_apply`, `cancel_override`), `SystemStatsWorker._tick`, `_MonitorRefreshWorker.run`, `_MousePollWorker.run`, `MonitorRefreshCard.set_display` (WMI/optimal/suboptimal paths), `MonitorEmptyCard`, `SplashDialog`, `StatusBarWidget.set_state`, `GuiBridge.abort_pending`. High-risk concurrency and manifest paths ARE well covered (`revert.py` atomic write, `_manifest_lock`, monitor-fix guards, cancel-flow QueuedConnection regression).
+**Fix:** Open `feat/test-coverage` PR. Write unit tests using qtbot fixtures, prioritizing the new pipeline phases first (ApplyPhase + BenchmarkOptInPhase + BaselineBenchPhase new branches), then PipelineController + workers, then widgets. Target 80%+ coverage on the new code.
+**Blocked by:** Nothing. Pairs well with T-016.
+**Added:** 2026-05-28 (from /ship v0.2.0.0 coverage audit)
+
+---
+
+### T-018 — SystemStatsWorker missing deleteLater wire
+**Priority:** P3
+**Effort:** XS human / XS with CC
+**Why:** Adversarial review on v0.2.0.0 flagged that `SystemStatsWorker` is the only QObject worker without `thread.finished.connect(worker.deleteLater)` wiring (the monitor-fix and monitor-refresh workers both have it). In `Dashboard.stop_polling`, dropping the last Python reference triggers `QObject.__del__` on the GUI thread while the worker thread may still be in `_tick()` — violates Qt's "destroy on owning thread" rule. Safe in practice on CPython, fragile under PyInstaller bundling.
+**Fix:** In `Dashboard.start_polling`, add `self._worker_thread.finished.connect(self._worker.deleteLater)` before `self._worker_thread.start()`. Remove the manual `self._worker = None` in `stop_polling` (let deleteLater run); keep `_worker_thread = None` as the sentinel.
+**Blocked by:** Nothing. Refactor next time touching `src/gui/widgets/dashboard.py`.
+**Added:** 2026-05-28 (from /ship v0.2.0.0 adversarial review)
+
+---
+
+### T-019 — Cinebench output_file path `%` defense + 50 MB output cap
+**Priority:** P4
+**Effort:** S human / XS with CC
+**Why:** Adversarial review on v0.2.0.0 flagged two related Cinebench output-path concerns. (1) The batch wrapper uses `start /b /wait "parentconsole" cmd.exe /C ""{cinebench_path}" {flag} > "{output_file}""`; if `output_file` resolves to a path containing `%` (e.g. running the exe from a `%`-containing CWD), `cmd.exe` would env-expand the redirect. `get_temp_dir()` returns a CWD-relative path, so a `%` in the user's username or working directory could leak. (2) Successful-path reads `output_file.read_text()` with no size cap — Cinebench R24 in verbose mode or a crashing run could produce a multi-MB file. The error path already caps at `raw[:500]`, but `cb_lines` is written to `cinebench_results.txt` without a line cap.
+**Fix:** Add `if '%' in str(output_file)` to the `_run_cinebench` guard alongside the existing `"` check (or `^%`-escape the output path in the batch template). Add `if output_file.stat().st_size > 50_000_000` early-return as a tool-failure error. Cap `cb_lines` to the last 500 lines before writing `results_file`.
+**Blocked by:** Nothing. No live exploit; defense in depth.
+**Added:** 2026-05-28 (from /ship v0.2.0.0 adversarial review)
+
+---
+
+### T-020 — Strip triple-comment tail artifacts from Serena replace edits
+**Priority:** P4 (cosmetic)
+**Effort:** XS human / XS with CC
+**Why:** Adversarial review on v0.2.0.0 noticed three lines with duplicated trailing comments (`worker.py:233`, `thermal_gate.py:89`, `app.py:113`). These were introduced by Serena's `replace_symbol_body` appending the trailing comment on repeated edits instead of replacing it cleanly. The Serena guard blocked the in-flight cleanup attempt because the lines are inside method bodies. No functional impact.
+**Fix:** Use `mcp__serena__replace_symbol_body` on the three enclosing methods (`SystemStatsWorker.start`, `run_thermal_guard`, `_run_app_cleanup`) with the comment line written exactly once. Verify after each replace that the duplicate didn't reappear.
+**Blocked by:** Nothing — opportunistic cleanup next time touching these files.
+**Added:** 2026-05-28 (from /ship v0.2.0.0 adversarial review)
+
+---
+
+### T-021 — Maintainability polish (PEP-8 + `__all__` + docstring direction inversions)
+**Priority:** P4 (cosmetic)
+**Effort:** XS human / XS with CC
+**Why:** /ship maintainability specialist on v0.2.0.0 flagged six low-priority polish items: missing trailing newline at `src/benchmarks/cinebench.py:289`; PEP-8 blank-line gaps in `src/gui/widgets/monitor_refresh_card.py` (between import and class definition, and between method definitions); `src/benchmarks/cinebench_monitor.py:9` docstring reversed direction ("re-exported from cinebench" should be "imported into cinebench so test patches work"); `__all__` declared in three sub-modules (`lhm_http.py`, `lhm_discovery.py`, `lhm_process_utils.py`) but no consumer uses star-import, so `__all__` is decorative; repeated `from src.utils.debug_logger import get_debug_logger` inside `Dashboard` method bodies that could be cached as `self._log` once in `__init__`.
+**Fix:** Address opportunistically the next time each file is touched. None of these affects runtime; they only affect reader clarity.
+**Blocked by:** Nothing.
+**Added:** 2026-05-28 (from /ship v0.2.0.0 maintainability review)
 
 ---
 
