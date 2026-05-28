@@ -36,7 +36,7 @@
 - New system checks belong in `src/agent_tools/` as independent modules.
 - Each check function returns a structured dict with at minimum `status` and `message` keys.
 - Always implement multi-method fallbacks — never hard-fail when a tool (nvidia-smi, dxdiag, etc.) is missing. Fall back to WMI or registry alternatives.
-- Terminal UI only — do not introduce PyQt or GUI dependencies until explicitly requested.
+- GUI via PySide6 (default). CLI mode preserved via `--terminal`. New visual work uses PySide6; do not introduce PyQt.
 
 ### Dashboard Fix Pattern
 When a fix can be triggered from a Dashboard card button (outside the pipeline `ApplyPhase`), follow this pattern — see `_MonitorFixWorker` in `src/gui/worker.py` as the reference implementation:
@@ -114,7 +114,8 @@ ToolSearch: select:mcp__serena__find_symbol   (or whichever tool you need)
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full file tree, 5-phase pipeline, and tech stack.
 
-Key entry points: `src/main.py` → `src/pipeline/phases.py` → phase files → `src/agent_tools/` checks.
+Key entry points (GUI): `src/main.py` → `src/gui/app.py` → `StartupCoordinator` → `PipelineController` → `src/pipeline/phases.py` → phase files → `src/agent_tools/` checks.
+Key entry points (CLI): `src/main.py --terminal` → `src/pipeline/phases.py` → phase files → `src/agent_tools/` checks.
 
 ---
 
@@ -128,7 +129,7 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 
 ## Development Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). Current test count: 651.
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). Current test count: 671.
 
 ---
 
