@@ -80,12 +80,7 @@ Format: Priority | Effort (human / CC) | Context
 ---
 
 ### T-017 — Test coverage for new pipeline phases + controller + workers
-**Priority:** P2
-**Effort:** M human / S with CC
-**Why:** /ship coverage audit on v0.2.0.0 measured ~56% line coverage on the new code. Several new classes have zero direct tests: `PipelineController` (236 lines, only exercised indirectly via cancel-flow test), `BenchmarkOptInPhase`, `ApplyPhase`, `BaselineBenchPhase` new branches (`run_benchmarks=False`, `skip_apply`, `cancel_override`), `SystemStatsWorker._tick`, `_MonitorRefreshWorker.run`, `_MousePollWorker.run`, `MonitorRefreshCard.set_display` (WMI/optimal/suboptimal paths), `MonitorEmptyCard`, `SplashDialog`, `StatusBarWidget.set_state`, `GuiBridge.abort_pending`. High-risk concurrency and manifest paths ARE well covered (`revert.py` atomic write, `_manifest_lock`, monitor-fix guards, cancel-flow QueuedConnection regression).
-**Fix:** Open `feat/test-coverage` PR. Write unit tests using qtbot fixtures, prioritizing the new pipeline phases first (ApplyPhase + BenchmarkOptInPhase + BaselineBenchPhase new branches), then PipelineController + workers, then widgets. Target 80%+ coverage on the new code.
-**Blocked by:** Nothing. Pairs well with T-016.
-**Added:** 2026-05-28 (from /ship v0.2.0.0 coverage audit)
+**Priority:** P2 — **COMPLETED 2026-05-28**
 
 ---
 
@@ -130,6 +125,12 @@ Format: Priority | Effort (human / CC) | Context
 ---
 
 ## Completed
+
+### T-017 — Test coverage for new pipeline phases + controller + workers
+**Completed:** 2026-05-28
+7 new test files added (`test_phase_apply`, `test_phase_benchmark_optin`, `test_phase_baseline`, `test_pipeline_worker`, `test_system_stats_worker`, `test_workers_misc`, `test_widgets_coverage`). 37 new tests; suite grew from 671 → 708. Coverage on new code: `phase_apply` 100%, `phase_benchmark_optin` 100%, `phase_baseline` 98%, `gui/worker.py` 82%, `bridge.py` 81%, `status_bar_widget` 95%, `monitor_refresh_card` 98%; total 90% across target modules (target was 80%+).
+
+---
 
 ### T-014 — Reconcile `phase_changed` signal naming and dual-signal handler
 **Completed**: 2026-05-20
