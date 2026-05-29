@@ -29,13 +29,7 @@ Format: Priority | Effort (human / CC) | Context
 ---
 
 ### T-011 — Global Win32 hotkey for cancel (deferred from /plan-eng-review D1)
-**Priority:** P3 (conditional on observed need)
-**Effort:** S human / S with CC
-**Why:** Current app-scoped `QShortcut(Qt.WindowShortcut)` for Esc/Q only fires when `MainWindow` is the active window. `_minimize_cinebench_window` minimizes Cinebench at launch so lil_bro returns to the foreground, but if Cinebench re-grabs focus during its 10-minute run, the keyboard cancel path goes silent. The Stop button still works regardless of focus.
-**Trigger criteria:** any v1 user reports "I pressed Esc but nothing happened during Cinebench" — verify Cinebench was foreground at the moment.
-**Fix:** add `ctypes.windll.user32.RegisterHotKey(MOD_NONE, VK_ESCAPE)` + a message-loop thread that emits `MainWindow.stop_requested` on `WM_HOTKEY`. Unregister in `_on_pipeline_finished`. Same pattern for `VK_Q`. Keep the existing app-scoped QShortcuts as fallback when MainWindow has focus.
-**Blocked by:** v1 telemetry / user reports.
-**Added:** 2026-05-19 (from /plan-eng-review for cancel-benchmark plan)
+**Priority:** P3 — **COMPLETED 2026-05-28**
 
 ---
 
@@ -45,16 +39,6 @@ Format: Priority | Effort (human / CC) | Context
 **Why:** Some users know up-front they don't have 10+ minutes for the benchmark. A toggle defaulting to ON in the sidebar lets them skip baseline + final benchmarks before clicking Start, complementing the in-flight cancel feature (which addresses the case where they realize mid-run). Pre-flight skip + in-flight cancel = full coverage of "I don't want to wait" user paths.
 **Fix:** add `QCheckBox("Run benchmarks", checked=True)` to sidebar above the Start Optimization button; expose via `MainWindow.benchmarks_enabled` property; have `BaselineBenchPhase` and `FinalBenchPhase` short-circuit and return `PhaseResult(status="skipped", message="benchmark disabled by user")` when the flag is False. Persist preference via `QSettings`.
 **Blocked by:** Nothing. Natural follow-up PR to the cancel feature (T-011 work).
-**Added:** 2026-05-19 (from /plan-eng-review outside-voice for cancel-benchmark plan)
-
----
-
-### T-013 — Convert `PipelineWorker._cancel_requested` bool to `threading.Event`
-**Priority:** P3
-**Effort:** XS human / XS with CC
-**Why:** Outside-voice review flagged that `request_cancel()` is called across thread boundaries — most paths are mediated by Qt's `AutoConnection` (which picks `QueuedConnection` and routes the slot to the worker thread), but `app.py` `closeEvent` calls `request_cancel()` directly from the GUI thread, writing the bool from one thread while the polling code reads it from another. CPython's GIL makes single-bool writes/reads atomic in practice, but `threading.Event` makes the semantics explicit and unifies with the existing `abort_event = threading.Event()` pattern already used inside `cinebench.py`.
-**Fix:** replace `self._cancel_requested: bool = False` with `self._cancel_event = threading.Event()`. Update `request_cancel()` to `self._cancel_event.set()`. Update `_state.set_cancel_check` callsite to `lambda: self._cancel_event.is_set()`. Update existing `test_worker_request_cancel_sets_flag` accordingly.
-**Blocked by:** Nothing. Refactor next time touching `src/gui/worker.py`.
 **Added:** 2026-05-19 (from /plan-eng-review outside-voice for cancel-benchmark plan)
 
 ---
@@ -105,6 +89,12 @@ Format: Priority | Effort (human / CC) | Context
 ---
 
 ## Completed
+
+### T-013 — Convert `PipelineWorker._cancel_requested` bool to `threading.Event`
+**Completed:** 2026-05-29
+Swapped the bool cancel flag for a `threading.Event` inside `PipelineWorker` (`src/gui/worker.py`), preserving the public API: `__init__` creates `self._cancel_event = threading.Event()`; `cancel_requested` returns `self._cancel_event.is_set()`; `request_cancel()` calls `self._cancel_event.set()`; `run()` installs `_state.set_cancel_check(self._cancel_event.is_set)` (bound method, no lambda); added module-level `import threading`. **Zero test changes were needed** — correcting this entry's original "Fix" note, which said to update `test_worker_request_cancel_sets_flag`. Because the `cancel_requested` property is kept and `threading.Event.is_set()` returns the real `True`/`False` singletons, that test's `is False`/`is True` identity assertions still pass. Correctness-neutral refactor (the bool was already GIL-atomic and only ever read between work units); the win is explicit cross-thread semantics + unification with the `abort_event = threading.Event()` idiom in `cinebench.py`/`cinebench_monitor.py`/`thermal_monitor.py`. The TODO's premise had also drifted: the Stop path now uses an explicit `DirectConnection` (`pipeline_controller.py`) by design, so the GUI-thread flag write is the normal path, not a `closeEvent` edge case. Also refreshed the now-stale `_cancel_requested`/"bool" wording in the `start_pipeline` DirectConnection comment. A Sonnet devil's-advocate pass validated the plan (PASS-WITH-NITS; the one nit was the stale "Fix" instruction, corrected here). Suite: 710 passed, unchanged.
+
+---
 
 ### T-021 — Maintainability polish (PEP-8 + `__all__` + docstring direction inversions)
 **Completed:** 2026-05-28
@@ -181,3 +171,15 @@ The original proposal was `return_str=False` param on every `print_*` function. 
 ### T-005 — Phase execution status visible to orchestrator
 **Completed**: 2026-04-11
 `PhaseResult` dataclass added to `src/pipeline/base.py`; all 5 phase `run()` methods return it; orchestrator in `phases.py` captures and logs non-completed results via debug logger.
+
+---
+
+### T-011 — Global Win32 hotkey for cancel (deferred from /plan-eng-review D1)
+**Completed**: 2026-05-29
+**Priority:** P3 — **COMPLETED 2026-05-28** (conditional on observed need)
+**Effort:** S human / S with CC
+**Why:** Current app-scoped `QShortcut(Qt.WindowShortcut)` for Esc/Q only fires when `MainWindow` is the active window. `_minimize_cinebench_window` minimizes Cinebench at launch so lil_bro returns to the foreground, but if Cinebench re-grabs focus during its 10-minute run, the keyboard cancel path goes silent. The Stop button still works regardless of focus.
+**Trigger criteria:** any v1 user reports "I pressed Esc but nothing happened during Cinebench" — verify Cinebench was foreground at the moment.
+**Fix:** add `ctypes.windll.user32.RegisterHotKey(MOD_NONE, VK_ESCAPE)` + a message-loop thread that emits `MainWindow.stop_requested` on `WM_HOTKEY`. Unregister in `_on_pipeline_finished`. Same pattern for `VK_Q`. Keep the existing app-scoped QShortcuts as fallback when MainWindow has focus.
+**Blocked by:** v1 telemetry / user reports.
+**Added:** 2026-05-19 (from /plan-eng-review for cancel-benchmark plan)
