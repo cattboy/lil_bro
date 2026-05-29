@@ -26,6 +26,7 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-qt>=4.4.0",
+    "pytest-cov>=5.0.0",
     "pyinstaller>=6.4.0",
     "installer",
 ]
@@ -51,6 +52,13 @@ dotnet-download = "https://dotnet.microsoft.com/download/dotnet/8.0"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 qt_api = "pyside6"
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["src/gui/*"]
+
+[tool.coverage.report]
+fail_under = 74
 
 [tool.uv]
 required-environments = [
