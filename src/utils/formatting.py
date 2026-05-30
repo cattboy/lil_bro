@@ -167,61 +167,61 @@ def _emit(text: str, sink: Callable[[str], None] | None = None, end: str = "\n")
         print(text, end=end, flush=(end == ""))
 
 
-def print_header(title: str, output_sink: Callable[[str], None] | None = None):
+def print_header(title: str, output_sink: Callable[[str], None] | None = None) -> None:
     """Prints a styled header for sections."""
     _emit(f"\n{Fore.CYAN}{Style.BRIGHT}== {title} =={Style.RESET_ALL}", sink=output_sink)
 
-def print_success(message: str, output_sink: Callable[[str], None] | None = None):
+def print_success(message: str, output_sink: Callable[[str], None] | None = None) -> None:
     """Prints a success message in green."""
     icon = "OK" if _ASCII_FALLBACK else "✓"
     _emit(f"{Fore.GREEN}{icon} {message}{Style.RESET_ALL}", sink=output_sink)
 
-def print_warning(message: str, output_sink: Callable[[str], None] | None = None):
+def print_warning(message: str, output_sink: Callable[[str], None] | None = None) -> None:
     """Prints a warning message in yellow."""
     icon = "WARN" if _ASCII_FALLBACK else "⚠"
     _emit(f"{Fore.YELLOW}{icon} {message}{Style.RESET_ALL}", sink=output_sink)
 
-def print_error(message: str, output_sink: Callable[[str], None] | None = None):
+def print_error(message: str, output_sink: Callable[[str], None] | None = None) -> None:
     """Prints an error message in red."""
     icon = "FAIL" if _ASCII_FALLBACK else "✗"
     _emit(f"{Fore.RED}{icon} {message}{Style.RESET_ALL}", sink=output_sink)
 
-def print_info(message: str, output_sink: Callable[[str], None] | None = None):
+def print_info(message: str, output_sink: Callable[[str], None] | None = None) -> None:
     """Prints an informational message."""
     icon = "INFO" if _ASCII_FALLBACK else "ℹ"
     _emit(f"{Fore.BLUE}{icon} {message}{Style.RESET_ALL}", sink=output_sink)
 
-def print_step(message: str, output_sink: Callable[[str], None] | None = None):
+def print_step(message: str, output_sink: Callable[[str], None] | None = None) -> None:
     """Prints a step indicator without a newline, useful for long-running ops."""
     _emit(f"{Fore.WHITE}{Style.DIM}• {message}... {Style.RESET_ALL}", sink=output_sink, end="")
 
-def print_step_done(success: bool = True, output_sink: Callable[[str], None] | None = None):
+def print_step_done(success: bool = True, output_sink: Callable[[str], None] | None = None) -> None:
     """Completes a step indicator line."""
     if success:
         _emit(f"{Fore.GREEN}Done!{Style.RESET_ALL}", sink=output_sink)
     else:
         _emit(f"{Fore.RED}Failed!{Style.RESET_ALL}", sink=output_sink)
 
-def print_dim(message: str, output_sink: Callable[[str], None] | None = None):
+def print_dim(message: str, output_sink: Callable[[str], None] | None = None) -> None:
     """Prints muted secondary text."""
     _emit(f"{Style.DIM}{message}{Style.RESET_ALL}", sink=output_sink)
 
-def print_accent(message: str, output_sink: Callable[[str], None] | None = None):
+def print_accent(message: str, output_sink: Callable[[str], None] | None = None) -> None:
     """Prints accent-colored (cyan) text for highlights and subtitles."""
     _emit(f"{Fore.CYAN}{message}{Style.RESET_ALL}", sink=output_sink)
 
-def print_prompt(message: str, output_sink: Callable[[str], None] | None = None):
+def print_prompt(message: str, output_sink: Callable[[str], None] | None = None) -> None:
     """Prints an input prompt without a newline (cursor stays on the same line)."""
     _emit(f"{Fore.CYAN}> {message}{Style.RESET_ALL}", sink=output_sink, end="")
 
 def print_key_value(label: str, value: str, value_color=Fore.CYAN,
-                    output_sink: Callable[[str], None] | None = None):
+                    output_sink: Callable[[str], None] | None = None) -> None:
     """Prints a label: value pair with a dim label and colored value."""
     padded = f"{label}:"
     _emit(f"  {Style.DIM}{padded:<8}{Style.RESET_ALL}{value_color}{value}{Style.RESET_ALL}",
           sink=output_sink)
 
-def print_section_divider(label: str = None, output_sink: Callable[[str], None] | None = None):
+def print_section_divider(label: str = None, output_sink: Callable[[str], None] | None = None) -> None:
     """Prints a terminal-width divider line with an optional centered label."""
     cols = max(20, shutil.get_terminal_size(fallback=(80, 24)).columns)
     dash = "-" if _ASCII_FALLBACK else "─"
@@ -233,7 +233,7 @@ def print_section_divider(label: str = None, output_sink: Callable[[str], None] 
     _emit(f"{Style.DIM}{line}{Style.RESET_ALL}", sink=output_sink)
 
 def print_audit_summary(ok: int, warnings: int, unknowns: int,
-                        output_sink: Callable[[str], None] | None = None):
+                        output_sink: Callable[[str], None] | None = None) -> None:
     """Prints a compound-colored audit result line."""
     _emit("", sink=output_sink)
     _emit(
@@ -253,7 +253,7 @@ def print_audit_summary(ok: int, warnings: int, unknowns: int,
     )
 
 def print_finding(label: str, message: str, status: str,
-                  output_sink: Callable[[str], None] | None = None):
+                  output_sink: Callable[[str], None] | None = None) -> None:
     """Prints a finding with a status-colored bracket label and plain message."""
     status_color = {
         "OK":      Fore.GREEN,
@@ -264,7 +264,7 @@ def print_finding(label: str, message: str, status: str,
 
 def print_proposal(num: int, severity: str, title: str,
                    explanation: str, action: str, can_auto_fix: bool,
-                   output_sink: Callable[[str], None] | None = None):
+                   output_sink: Callable[[str], None] | None = None) -> None:
     """Prints a full proposal block with severity-colored bold header."""
     severity_color = {
         "HIGH":   Fore.RED,

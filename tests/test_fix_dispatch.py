@@ -54,6 +54,18 @@ class TestFixTempFolders:
         mock_clean.assert_called_once_with({})
 
 
+    @patch("src.utils.revert.append_fix_to_manifest")
+    @patch("src.agent_tools.temp_audit.clean_temp_folders")
+    def test_temp_folders_fix_manifest_entry_captured(self, mock_clean, mock_append):
+        """Manifest entry written with revertible=False for temp_folders fix."""
+        specs = {"TempFolders": {"details": {"/tmp": 1000}}}
+        assert execute_fix("temp_folders", specs) is True
+        mock_append.assert_called_once()
+        entry = mock_append.call_args[0][0]
+        assert entry["fix"] == "temp_folders"
+        assert entry["revertible"] is False
+
+
 class TestFixDisplay:
     @patch("src.agent_tools.display_setter.apply_display_mode")
     @patch("src.agent_tools.display_setter.find_best_mode")

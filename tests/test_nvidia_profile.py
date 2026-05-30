@@ -796,3 +796,44 @@ class TestParseNipRetry:
         with pytest.raises(UnicodeDecodeError):
             nip_io.parse_nip_with_retry("ignored", attempts=2, delay=0.01)
 
+
+# ── 12. nvidia_npi constant contracts ────────────────────────────────────────
+
+class TestNvidiaNpiConstants:
+    """Regression contracts for SETTING_IDS, calculate_fps_cap, DLSS_PRESETS."""
+
+    def test_setting_ids_has_expected_keys(self):
+        from src.utils.nvidia_npi import SETTING_IDS
+        expected = {
+            "gsync_global_feature", "gsync_global_mode", "gsync_app_mode",
+            "gsync_app_state", "gsync_app_requested", "gsync_indicator_overlay",
+            "gsync_support_indicator", "vsync", "vsync_tear_control",
+            "vsync_smooth_afr", "fps_limiter_v3", "rebar_enable",
+            "dlss_preset_profile", "dlss_preset_letter", "power_mgmt",
+        }
+        assert set(SETTING_IDS.keys()) == expected
+
+    def test_setting_ids_values_are_ints(self):
+        from src.utils.nvidia_npi import SETTING_IDS
+        assert all(isinstance(v, int) for v in SETTING_IDS.values())
+
+    def test_fps_cap_240hz(self):
+        from src.utils.nvidia_npi import calculate_fps_cap
+        assert calculate_fps_cap(240) == 226
+
+    def test_fps_cap_360hz(self):
+        from src.utils.nvidia_npi import calculate_fps_cap
+        assert calculate_fps_cap(360) == 328
+
+    def test_fps_cap_480hz(self):
+        from src.utils.nvidia_npi import calculate_fps_cap
+        assert calculate_fps_cap(480) == 424
+
+    def test_dlss_presets_structure(self):
+        from src.utils.nvidia_npi import DLSS_PRESETS
+        for gen in ("20", "30", "40", "50"):
+            assert gen in DLSS_PRESETS
+            letter, value = DLSS_PRESETS[gen]
+            assert isinstance(letter, str)
+            assert isinstance(value, int)
+

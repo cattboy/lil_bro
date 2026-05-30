@@ -26,6 +26,7 @@ between work units. Cinebench is not graceful-cancellable — documented.
 
 from __future__ import annotations
 
+import threading
 import traceback
 from typing import Any
 
@@ -58,19 +59,19 @@ class PipelineWorker(QObject):
         self._lhm = lhm
         self._llm = llm
         self._preloaded_specs = preloaded_specs or {}
-        self._cancel_requested = False
+        self._cancel_event = threading.Event()
 
     @property
     def cancel_requested(self) -> bool:
-        return self._cancel_requested
+        return self._cancel_event.is_set()
 
     def request_cancel(self) -> None:
         """Cooperative cancel — phases poll this between work units."""
-        self._cancel_requested = True
+        self._cancel_event.set()
 
     def run(self) -> None:
         from src.pipeline import _state
-        _state.set_cancel_check(lambda: self._cancel_requested)
+        _state.set_cancel_check(self._cancel_event.is_set)
         try:
             self.pipeline_started.emit()
             from src.pipeline.phases import run_optimization_pipeline
@@ -230,7 +231,7 @@ class SystemStatsWorker(QObject):
             self._timer.timeout.connect(self._tick)
             self._timer.start(_POLL_INTERVAL_MS)
         log.info("SystemStatsWorker.start: timer armed, firing first tick now")
-        self._tick()  # immediate first sample  # immediate first sample  # immediate first sample
+        self._tick()  # immediate first sample
 
     def _tick(self) -> None:
         log = get_debug_logger()

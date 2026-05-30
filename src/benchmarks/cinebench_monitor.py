@@ -6,8 +6,9 @@ during ``BenchmarkRunner._run_cinebench`` and share an ``abort_event`` for
 cancellation.
 
 Note: ``_keyboard_abort_watcher``, ``_benchmark_progress_printer``,
-``_minimize_cinebench_window``, ``SW_HIDE``, ``SW_MINIMIZE`` are re-exported
-from ``cinebench`` for tests that ``@patch("src.benchmarks.cinebench.<name>")``.
+``_minimize_cinebench_window``, ``SW_HIDE``, ``SW_MINIMIZE`` are imported
+into ``cinebench`` from this module so that tests patching
+``@patch("src.benchmarks.cinebench.<name>")`` intercept the right binding.
 The runner code in ``cinebench._run_cinebench`` references these by bare name
 so the patches bite.
 """

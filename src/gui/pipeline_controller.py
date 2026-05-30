@@ -170,9 +170,9 @@ class PipelineController:
         # blocked inside the synchronous run_optimization_pipeline call,
         # so a QueuedConnection slot would sit in the queue until run()
         # returned (which is what we're trying to cancel: deadlock).
-        # DirectConnection runs request_cancel on the GUI thread, writing
-        # _cancel_requested from there. The worker's polling loop reads
-        # the bool on its next iteration. Same mechanism the existing
+        # DirectConnection runs request_cancel on the GUI thread, calling
+        # _cancel_event.set() from there. The worker's polling loop reads
+        # the Event on its next iteration. Same mechanism the existing
         # closeEvent path uses (direct call, no signal).
         main.stop_requested.connect(
             pipeline_worker.request_cancel,

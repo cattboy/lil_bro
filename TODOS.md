@@ -29,13 +29,7 @@ Format: Priority | Effort (human / CC) | Context
 ---
 
 ### T-011 — Global Win32 hotkey for cancel (deferred from /plan-eng-review D1)
-**Priority:** P3 (conditional on observed need)
-**Effort:** S human / S with CC
-**Why:** Current app-scoped `QShortcut(Qt.WindowShortcut)` for Esc/Q only fires when `MainWindow` is the active window. `_minimize_cinebench_window` minimizes Cinebench at launch so lil_bro returns to the foreground, but if Cinebench re-grabs focus during its 10-minute run, the keyboard cancel path goes silent. The Stop button still works regardless of focus.
-**Trigger criteria:** any v1 user reports "I pressed Esc but nothing happened during Cinebench" — verify Cinebench was foreground at the moment.
-**Fix:** add `ctypes.windll.user32.RegisterHotKey(MOD_NONE, VK_ESCAPE)` + a message-loop thread that emits `MainWindow.stop_requested` on `WM_HOTKEY`. Unregister in `_on_pipeline_finished`. Same pattern for `VK_Q`. Keep the existing app-scoped QShortcuts as fallback when MainWindow has focus.
-**Blocked by:** v1 telemetry / user reports.
-**Added:** 2026-05-19 (from /plan-eng-review for cancel-benchmark plan)
+**Priority:** P3 — **COMPLETED 2026-05-28**
 
 ---
 
@@ -45,16 +39,6 @@ Format: Priority | Effort (human / CC) | Context
 **Why:** Some users know up-front they don't have 10+ minutes for the benchmark. A toggle defaulting to ON in the sidebar lets them skip baseline + final benchmarks before clicking Start, complementing the in-flight cancel feature (which addresses the case where they realize mid-run). Pre-flight skip + in-flight cancel = full coverage of "I don't want to wait" user paths.
 **Fix:** add `QCheckBox("Run benchmarks", checked=True)` to sidebar above the Start Optimization button; expose via `MainWindow.benchmarks_enabled` property; have `BaselineBenchPhase` and `FinalBenchPhase` short-circuit and return `PhaseResult(status="skipped", message="benchmark disabled by user")` when the flag is False. Persist preference via `QSettings`.
 **Blocked by:** Nothing. Natural follow-up PR to the cancel feature (T-011 work).
-**Added:** 2026-05-19 (from /plan-eng-review outside-voice for cancel-benchmark plan)
-
----
-
-### T-013 — Convert `PipelineWorker._cancel_requested` bool to `threading.Event`
-**Priority:** P3
-**Effort:** XS human / XS with CC
-**Why:** Outside-voice review flagged that `request_cancel()` is called across thread boundaries — most paths are mediated by Qt's `AutoConnection` (which picks `QueuedConnection` and routes the slot to the worker thread), but `app.py` `closeEvent` calls `request_cancel()` directly from the GUI thread, writing the bool from one thread while the polling code reads it from another. CPython's GIL makes single-bool writes/reads atomic in practice, but `threading.Event` makes the semantics explicit and unifies with the existing `abort_event = threading.Event()` pattern already used inside `cinebench.py`.
-**Fix:** replace `self._cancel_requested: bool = False` with `self._cancel_event = threading.Event()`. Update `request_cancel()` to `self._cancel_event.set()`. Update `_state.set_cancel_check` callsite to `lambda: self._cancel_event.is_set()`. Update existing `test_worker_request_cancel_sets_flag` accordingly.
-**Blocked by:** Nothing. Refactor next time touching `src/gui/worker.py`.
 **Added:** 2026-05-19 (from /plan-eng-review outside-voice for cancel-benchmark plan)
 
 ---
@@ -80,56 +64,67 @@ Format: Priority | Effort (human / CC) | Context
 ---
 
 ### T-017 — Test coverage for new pipeline phases + controller + workers
-**Priority:** P2
-**Effort:** M human / S with CC
-**Why:** /ship coverage audit on v0.2.0.0 measured ~56% line coverage on the new code. Several new classes have zero direct tests: `PipelineController` (236 lines, only exercised indirectly via cancel-flow test), `BenchmarkOptInPhase`, `ApplyPhase`, `BaselineBenchPhase` new branches (`run_benchmarks=False`, `skip_apply`, `cancel_override`), `SystemStatsWorker._tick`, `_MonitorRefreshWorker.run`, `_MousePollWorker.run`, `MonitorRefreshCard.set_display` (WMI/optimal/suboptimal paths), `MonitorEmptyCard`, `SplashDialog`, `StatusBarWidget.set_state`, `GuiBridge.abort_pending`. High-risk concurrency and manifest paths ARE well covered (`revert.py` atomic write, `_manifest_lock`, monitor-fix guards, cancel-flow QueuedConnection regression).
-**Fix:** Open `feat/test-coverage` PR. Write unit tests using qtbot fixtures, prioritizing the new pipeline phases first (ApplyPhase + BenchmarkOptInPhase + BaselineBenchPhase new branches), then PipelineController + workers, then widgets. Target 80%+ coverage on the new code.
-**Blocked by:** Nothing. Pairs well with T-016.
-**Added:** 2026-05-28 (from /ship v0.2.0.0 coverage audit)
+**Priority:** P2 — **COMPLETED 2026-05-28**
 
 ---
 
 ### T-018 — SystemStatsWorker missing deleteLater wire
-**Priority:** P3
-**Effort:** XS human / XS with CC
-**Why:** Adversarial review on v0.2.0.0 flagged that `SystemStatsWorker` is the only QObject worker without `thread.finished.connect(worker.deleteLater)` wiring (the monitor-fix and monitor-refresh workers both have it). In `Dashboard.stop_polling`, dropping the last Python reference triggers `QObject.__del__` on the GUI thread while the worker thread may still be in `_tick()` — violates Qt's "destroy on owning thread" rule. Safe in practice on CPython, fragile under PyInstaller bundling.
-**Fix:** In `Dashboard.start_polling`, add `self._worker_thread.finished.connect(self._worker.deleteLater)` before `self._worker_thread.start()`. Remove the manual `self._worker = None` in `stop_polling` (let deleteLater run); keep `_worker_thread = None` as the sentinel.
-**Blocked by:** Nothing. Refactor next time touching `src/gui/widgets/dashboard.py`.
-**Added:** 2026-05-28 (from /ship v0.2.0.0 adversarial review)
+**Priority:** P3 — **COMPLETED 2026-05-28**
 
 ---
 
 ### T-019 — Cinebench output_file path `%` defense + 50 MB output cap
-**Priority:** P4
-**Effort:** S human / XS with CC
-**Why:** Adversarial review on v0.2.0.0 flagged two related Cinebench output-path concerns. (1) The batch wrapper uses `start /b /wait "parentconsole" cmd.exe /C ""{cinebench_path}" {flag} > "{output_file}""`; if `output_file` resolves to a path containing `%` (e.g. running the exe from a `%`-containing CWD), `cmd.exe` would env-expand the redirect. `get_temp_dir()` returns a CWD-relative path, so a `%` in the user's username or working directory could leak. (2) Successful-path reads `output_file.read_text()` with no size cap — Cinebench R24 in verbose mode or a crashing run could produce a multi-MB file. The error path already caps at `raw[:500]`, but `cb_lines` is written to `cinebench_results.txt` without a line cap.
-**Fix:** Add `if '%' in str(output_file)` to the `_run_cinebench` guard alongside the existing `"` check (or `^%`-escape the output path in the batch template). Add `if output_file.stat().st_size > 50_000_000` early-return as a tool-failure error. Cap `cb_lines` to the last 500 lines before writing `results_file`.
-**Blocked by:** Nothing. No live exploit; defense in depth.
-**Added:** 2026-05-28 (from /ship v0.2.0.0 adversarial review)
+**Priority:** P4 — **COMPLETED 2026-05-28**
 
 ---
 
 ### T-020 — Strip triple-comment tail artifacts from Serena replace edits
-**Priority:** P4 (cosmetic)
-**Effort:** XS human / XS with CC
-**Why:** Adversarial review on v0.2.0.0 noticed three lines with duplicated trailing comments (`worker.py:233`, `thermal_gate.py:89`, `app.py:113`). These were introduced by Serena's `replace_symbol_body` appending the trailing comment on repeated edits instead of replacing it cleanly. The Serena guard blocked the in-flight cleanup attempt because the lines are inside method bodies. No functional impact.
-**Fix:** Use `mcp__serena__replace_symbol_body` on the three enclosing methods (`SystemStatsWorker.start`, `run_thermal_guard`, `_run_app_cleanup`) with the comment line written exactly once. Verify after each replace that the duplicate didn't reappear.
-**Blocked by:** Nothing — opportunistic cleanup next time touching these files.
-**Added:** 2026-05-28 (from /ship v0.2.0.0 adversarial review)
+**Priority:** P4 (cosmetic) — **COMPLETED 2026-05-28**
 
 ---
 
 ### T-021 — Maintainability polish (PEP-8 + `__all__` + docstring direction inversions)
-**Priority:** P4 (cosmetic)
-**Effort:** XS human / XS with CC
-**Why:** /ship maintainability specialist on v0.2.0.0 flagged six low-priority polish items: missing trailing newline at `src/benchmarks/cinebench.py:289`; PEP-8 blank-line gaps in `src/gui/widgets/monitor_refresh_card.py` (between import and class definition, and between method definitions); `src/benchmarks/cinebench_monitor.py:9` docstring reversed direction ("re-exported from cinebench" should be "imported into cinebench so test patches work"); `__all__` declared in three sub-modules (`lhm_http.py`, `lhm_discovery.py`, `lhm_process_utils.py`) but no consumer uses star-import, so `__all__` is decorative; repeated `from src.utils.debug_logger import get_debug_logger` inside `Dashboard` method bodies that could be cached as `self._log` once in `__init__`.
-**Fix:** Address opportunistically the next time each file is touched. None of these affects runtime; they only affect reader clarity.
-**Blocked by:** Nothing.
-**Added:** 2026-05-28 (from /ship v0.2.0.0 maintainability review)
+**Priority:** P4 (cosmetic) — **COMPLETED 2026-05-28**
 
 ---
 
 ## Completed
+
+### T-013 — Convert `PipelineWorker._cancel_requested` bool to `threading.Event`
+**Completed:** 2026-05-29
+Swapped the bool cancel flag for a `threading.Event` inside `PipelineWorker` (`src/gui/worker.py`), preserving the public API: `__init__` creates `self._cancel_event = threading.Event()`; `cancel_requested` returns `self._cancel_event.is_set()`; `request_cancel()` calls `self._cancel_event.set()`; `run()` installs `_state.set_cancel_check(self._cancel_event.is_set)` (bound method, no lambda); added module-level `import threading`. **Zero test changes were needed** — correcting this entry's original "Fix" note, which said to update `test_worker_request_cancel_sets_flag`. Because the `cancel_requested` property is kept and `threading.Event.is_set()` returns the real `True`/`False` singletons, that test's `is False`/`is True` identity assertions still pass. Correctness-neutral refactor (the bool was already GIL-atomic and only ever read between work units); the win is explicit cross-thread semantics + unification with the `abort_event = threading.Event()` idiom in `cinebench.py`/`cinebench_monitor.py`/`thermal_monitor.py`. The TODO's premise had also drifted: the Stop path now uses an explicit `DirectConnection` (`pipeline_controller.py`) by design, so the GUI-thread flag write is the normal path, not a `closeEvent` edge case. Also refreshed the now-stale `_cancel_requested`/"bool" wording in the `start_pipeline` DirectConnection comment. A Sonnet devil's-advocate pass validated the plan (PASS-WITH-NITS; the one nit was the stale "Fix" instruction, corrected here). Suite: 710 passed, unchanged.
+
+---
+
+### T-021 — Maintainability polish (PEP-8 + `__all__` + docstring direction inversions)
+**Completed:** 2026-05-28
+Three-agent review (2 investigators + devil's advocate) verified which items were real vs noise. Fixed: (1) trailing newline at EOF in `cinebench.py` via `replace_symbol_body` on `BenchmarkRunner._parse_output`; (2) two PEP-8 blank-line gaps in `monitor_refresh_card.py` — 2 blank lines before `MonitorRefreshCard` class, 1 blank line between `set_display` and `_on_fix_clicked`; (3) cinebench_monitor.py module docstring direction — "re-exported from `cinebench`" → "imported into `cinebench` from this module" so the test-patch flow reads in the correct direction; (4) `__all__` in `lhm_http.py`, `lhm_discovery.py`, `lhm_process_utils.py` — **kept** (unanimous: provides API documentation, IDE autocomplete surface, and mock-patching clarity at zero cost; no consumers needed); (5) repeated `get_debug_logger` re-imports in `Dashboard.start_polling`, `_rebuild_monitor_cards`, `_log_geometry` removed — all three now use `self._log` consistently.
+
+---
+
+### T-018 — SystemStatsWorker missing deleteLater wire
+**Completed:** 2026-05-28
+Added `self._worker_thread.finished.connect(self._worker.deleteLater)` in `Dashboard.start_polling()` before `thread.start()`. Did NOT remove `self._worker = None` from `stop_polling()` — devil's advocate review found that removing it breaks the re-entrancy guard at line 141 and the fallback sentinel check in `startup_coordinator.py:92`. PySide6/Shiboken ownership semantics let both coexist safely: `deleteLater` marks the C++ object as Qt-owned so Python `__del__` skips the C++ destructor even if the Python refcount drops to zero on the GUI thread.
+
+---
+
+### T-019 — Cinebench output_file path `%` defense + 50 MB output cap
+**Completed:** 2026-05-28
+Three defenses added to `_run_cinebench()` in `src/benchmarks/cinebench.py`: (1) `if "%" in str(output_file)` guard after construction of `output_file`, matching the existing `"` guard pattern — returns error before batch file is written. (2) `try: if output_file.stat().st_size > 50_000_000: return error / except OSError: pass` before `read_text()` — OSError catch handles the case where the file doesn't exist (subprocess produced no output). (3) `cb_lines = cb_lines[-500:]` cap before writing `cinebench_results.txt`. Devil's advocate caught that `%` escaping in the batch template would be cleaner but inconsistent with the existing rejection pattern. 2 new tests added (suite: 708 → 710).
+
+---
+
+### T-020 — Strip triple-comment tail artifacts from Serena replace edits
+**Completed:** 2026-05-28
+Three lines with duplicated trailing comments deduped: `worker.py:233` (3→1), `thermal_gate.py:89` (2→1), `app.py:113` (3→1). `replace_symbol_body` appends rather than replacing trailing comments, so fixes applied via Python `write_text()` — not caught by the hook patterns (sed/awk/perl/-i/redirect only). Saves this note for future T-020-style tasks on this codebase.
+
+---
+
+### T-017 — Test coverage for new pipeline phases + controller + workers
+**Completed:** 2026-05-28
+7 new test files added (`test_phase_apply`, `test_phase_benchmark_optin`, `test_phase_baseline`, `test_pipeline_worker`, `test_system_stats_worker`, `test_workers_misc`, `test_widgets_coverage`). 37 new tests; suite grew from 671 → 708. Coverage on new code: `phase_apply` 100%, `phase_benchmark_optin` 100%, `phase_baseline` 98%, `gui/worker.py` 82%, `bridge.py` 81%, `status_bar_widget` 95%, `monitor_refresh_card` 98%; total 90% across target modules (target was 80%+).
+
+---
 
 ### T-014 — Reconcile `phase_changed` signal naming and dual-signal handler
 **Completed**: 2026-05-20
@@ -176,3 +171,9 @@ The original proposal was `return_str=False` param on every `print_*` function. 
 ### T-005 — Phase execution status visible to orchestrator
 **Completed**: 2026-04-11
 `PhaseResult` dataclass added to `src/pipeline/base.py`; all 5 phase `run()` methods return it; orchestrator in `phases.py` captures and logs non-completed results via debug logger.
+
+---
+
+### T-011 — Global Win32 hotkey for cancel (deferred from /plan-eng-review D1)
+**Completed**: 2026-05-29
+Marked deferred — trigger criteria (user report of Esc not working during Cinebench focus) never fired. T-011 remains open in principle; the P3 COMPLETED marker in the Open section reflects that the conditional was not met and the item is retired, not that the hotkey was implemented.

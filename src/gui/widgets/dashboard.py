@@ -135,21 +135,20 @@ class Dashboard(QWidget):
     # ── Polling lifecycle ──────────────────────────────────────────────
 
     def start_polling(self) -> None:
-        from src.utils.debug_logger import get_debug_logger
         from src.gui.worker import SystemStatsWorker
-        log = get_debug_logger()
         if self._worker is not None:
-            log.info("Dashboard.start_polling: already running, skipping")
+            self._log.info("Dashboard.start_polling: already running, skipping")
             return
-        log.info("Dashboard.start_polling: spawning shared system-stats worker thread")
+        self._log.info("Dashboard.start_polling: spawning shared system-stats worker thread")
         self._worker_thread = QThread(self)
         self._worker_thread.setObjectName("SystemStatsPoll")
         self._worker = SystemStatsWorker()
         self._worker.moveToThread(self._worker_thread)
         self._worker.snapshot_ready.connect(self.apply_snapshot)
+        self._worker_thread.finished.connect(self._worker.deleteLater)
         self._worker_thread.started.connect(self._worker.start)
         self._worker_thread.start()
-        log.info("Dashboard.start_polling: worker thread started (isRunning=%s)",
+        self._log.info("Dashboard.start_polling: worker thread started (isRunning=%s)",
                  self._worker_thread.isRunning())
 
     def stop_polling(self) -> None:
@@ -235,9 +234,6 @@ class Dashboard(QWidget):
 
     def _rebuild_monitor_cards(self, displays: list[dict]) -> None:
         """Show/hide the pre-allocated slots and (re)build extras for 2+ monitors."""
-        from src.utils.debug_logger import get_debug_logger
-        log = get_debug_logger()
-
         # Tear down extras from prior calls (slots survive)
         for extra in self._monitor_cards:
             self._outer_layout.removeWidget(extra)
@@ -247,13 +243,13 @@ class Dashboard(QWidget):
         if not displays:
             self._monitor_card_slot.hide()
             self._monitor_empty_slot.show()
-            log.info("Dashboard: showing pre-allocated MonitorEmptyCard slot")
+            self._log.info("Dashboard: showing pre-allocated MonitorEmptyCard slot")
             return
 
         self._monitor_empty_slot.hide()
         self._monitor_card_slot.set_display(displays[0])
         self._monitor_card_slot.show()
-        log.info("Dashboard: showing pre-allocated MonitorRefreshCard slot for %s",
+        self._log.info("Dashboard: showing pre-allocated MonitorRefreshCard slot for %s",
                  displays[0].get("device"))
 
         # Extras (displays 2..N) — dynamic. Use indexOf(slot) so we're
@@ -267,18 +263,16 @@ class Dashboard(QWidget):
             if card.parentWidget() is not self:
                 card.setParent(self)
             self._monitor_cards.append(card)
-            log.info("Dashboard: extra card[%d] %s parent=%s",
+            self._log.info("Dashboard: extra card[%d] %s parent=%s",
                      offset, d.get("device"),
                      type(card.parentWidget()).__name__ if card.parentWidget() else "None")
 
     def _log_geometry(self, tag: str) -> None:
         """Diagnostic dump of monitor-card geometry / parenting state."""
-        from src.utils.debug_logger import get_debug_logger
-        log = get_debug_logger()
         try:
             for slot_name, c in (("slot_card", self._monitor_card_slot),
                                  ("slot_empty", self._monitor_empty_slot)):
-                log.info(
+                self._log.info(
                     "Dashboard[%s]: %s sz=%dx%d hint=%dx%d visible=%s hidden=%s parent=%s",
                     tag, slot_name,
                     c.size().width(), c.size().height(),
@@ -287,7 +281,7 @@ class Dashboard(QWidget):
                     type(c.parentWidget()).__name__ if c.parentWidget() else "None",
                 )
             for i, c in enumerate(self._monitor_cards):
-                log.info(
+                self._log.info(
                     "Dashboard[%s]: extra[%d] %s sz=%dx%d visible=%s parent=%s",
                     tag, i, type(c).__name__,
                     c.size().width(), c.size().height(),
@@ -295,4 +289,4 @@ class Dashboard(QWidget):
                     type(c.parentWidget()).__name__ if c.parentWidget() else "None",
                 )
         except Exception as exc:
-            log.warning("Dashboard: geometry-log[%s] failed: %s", tag, exc)
+            self._log.warning("Dashboard: geometry-log[%s] failed: %s", tag, exc)

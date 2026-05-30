@@ -34,6 +34,9 @@ dist/
 /tools/PawnIO_Latest_Check/_extract_temp/
 /tools/PawnIO_Latest_Check/resources/PawnIO_setup.exe
 
+# Test artifacts
+.coverage
+
 #Dcos
 /docs/LibreHardwareMonitor/
 /docs/completed/

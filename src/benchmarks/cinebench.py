@@ -107,6 +107,27 @@ class BenchmarkRunner:
             print_error(reason)
             log.error("Cinebench: %s", reason)
             return {"status": "error", "benchmark": "cinebench", "message": reason}
+        if "%" in str(self.cinebench_path):
+            reason = (
+                f"Cinebench path contains an unsupported character ('%'): "
+                f"{self.cinebench_path}"
+            )
+            print_error(reason)
+            log.error("Cinebench: %s", reason)
+            return {"status": "error", "benchmark": "cinebench", "message": reason}
+
+        # output_file is derived from get_temp_dir() which uses Path.cwd(). A '%'
+        # in the CWD (e.g. a username folder) would be env-expanded by cmd.exe
+        # inside the batch redirect target, corrupting the output path.
+        output_file = get_temp_dir() / "cinebench_output.txt"
+        if "%" in str(output_file):
+            reason = (
+                f"Cinebench output path contains an unsupported character ('%'): "
+                f"{output_file}"
+            )
+            print_error(reason)
+            log.error("Cinebench: %s", reason)
+            return {"status": "error", "benchmark": "cinebench", "message": reason}
 
         mode = "All Tests" if full_suite else "CPU Single-Core"
         print_step(f"Running Cinebench ({mode})")
@@ -120,9 +141,6 @@ class BenchmarkRunner:
         # Build CLI args per docs/vendor-supplied/cinebench.md
         cb_flag = "g_CinebenchAllTests=true" if full_suite else "g_CinebenchCpu1Test=true"
         cb_exe = os.path.basename(self.cinebench_path)  # for image-name kill on abort/timeout
-
-        # Output file -- receives the full Cinebench console log
-        output_file = get_temp_dir() / "cinebench_output.txt"
 
         # Batch file wraps the invocation so we get the Windows console log.
         # 'start /b /wait "parentconsole"' is required per vendor docs to enable output.
@@ -249,10 +267,20 @@ class BenchmarkRunner:
                     "message": reason,
                 }
 
+            # Guard 2: oversized output file — Cinebench crash/verbose loop
+            try:
+                if output_file.stat().st_size > 50_000_000:
+                    reason = "Cinebench output exceeds 50 MB — aborting to avoid excessive memory use."
+                    print_error(reason)
+                    log.error("Cinebench: %s", reason)
+                    return {"status": "error", "benchmark": "cinebench", "message": reason}
+            except OSError:
+                pass  # file absent (subprocess produced no output) — handled below
+
             raw = output_file.read_text(encoding="utf-8", errors="replace") if output_file.exists() else ""
             scores = self._parse_output(raw, full_suite)
 
-            # Guard 2: no cancel signal but no scores -- tool failure (EULA screen, AV quarantine, driver crash)
+            # Guard 3: no cancel signal but no scores -- tool failure (EULA screen, AV quarantine, driver crash)
             if not scores:
                 reason = "Cinebench exited without producing scores -- benchmark may have been interrupted."
                 print_step_done(False)
@@ -270,6 +298,7 @@ class BenchmarkRunner:
 
             # Write filtered results file (FINDSTR "CB" equivalent) for human reference
             cb_lines = [ln for ln in raw.splitlines() if re.match(r"^\s*CB\s+", ln)]
+            cb_lines = cb_lines[-500:]
             results_file = get_lil_bro_dir() / "cinebench_results.txt"
             results_file.write_text(
                 "\n".join(cb_lines) + "\n" if cb_lines else "No CB scores found.\n",

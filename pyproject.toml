@@ -26,6 +26,7 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-qt>=4.4.0",
+    "pytest-cov>=5.0.0",
     "pyinstaller>=6.4.0",
     "installer",
 ]
@@ -52,8 +53,27 @@ dotnet-download = "https://dotnet.microsoft.com/download/dotnet/8.0"
 testpaths = ["tests"]
 qt_api = "pyside6"
 
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+fail_under = 74
+
 [tool.uv]
 required-environments = [
     "sys_platform == 'win32'",
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
+
+[tool.ruff]
+line-length = 100
+
+# E501 = line too long. Suppressed per-file for modules whose long lines are
+# all in user-facing strings or logging calls where mid-sentence wrapping hurts
+# readability more than it helps.
+[tool.ruff.lint.per-file-ignores]
+"src/bootstrapper.py" = ["E501"]
+"src/agent_tools/mouse.py" = ["E501"]
+"src/agent_tools/power_plan.py" = ["E501"]
+"src/collectors/sub/wmi_dumper.py" = ["E501"]
+"src/collectors/sub/dxdiag_dumper.py" = ["E501"]

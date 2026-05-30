@@ -1,4 +1,9 @@
-"""5-phase optimization pipeline orchestrator."""
+"""Optimization pipeline orchestrator.
+
+7 internal phases: Bootstrap, Scan, Config, BenchmarkOptIn, BaselineBench, Apply, Final.
+5 user-visible phase cards are shown in the dashboard (Bootstrap and BenchmarkOptIn are
+infrastructure steps, not displayed as named cards).
+"""
 from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
