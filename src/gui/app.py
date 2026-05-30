@@ -50,14 +50,16 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
 
     Cancel-on-quit: signal the worker, drain any pending dialog loop to break
     a potential deadlock (main waits for worker; worker waits for main to
-    deliver a dialog answer), then wait for the thread to exit before tearing
-    down LHM. Test plan: "Window close (X) during running pipeline → triggers
-    cancel signal; LHM sidecar cleaned up via aboutToQuit."
+    deliver a dialog answer), then quit the worker's event loop and wait for
+    the thread to exit before tearing down LHM.
+    Test plan: "Window close (X) during running pipeline → triggers cancel
+    signal; LHM sidecar cleaned up via aboutToQuit."
 
-    The 15-second wait gives the cooperative cancel (abort_event) time to reach
-    a running Cinebench polling loop and exit gracefully. Hard-killing a
-    mid-write Cinebench process risks result file corruption, so we prefer to
-    wait rather than force-terminate.
+    Cinebench is force-killed by its own poll loop within ~0.5 s of the cancel
+    flag being set (proc.kill + taskkill). The 2 s wait here is a backstop for
+    exec()-loop exit, not a grace period. thread.quit() must be called directly
+    because _on_pipeline_finished (the normal quit path) is a GUI-thread slot
+    that cannot fire while the GUI thread is blocked inside wait().
     """
     pipeline_worker = runtime.get("pipeline_worker")
     pipeline_thread = runtime.get("pipeline_thread")
@@ -65,8 +67,9 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
         try:
             pipeline_worker.request_cancel()
             bridge.abort_pending()
-            if not pipeline_thread.wait(15000):
-                log.warning("Pipeline thread did not exit in 15s after cancel request")
+            pipeline_thread.quit()  # post quit to exec(); bypasses the blocked _on_pipeline_finished slot
+            if not pipeline_thread.wait(2000):  # backstop: Cinebench kill takes ~1 s; 2 s is generous
+                log.warning("Pipeline thread still running after 2s cancel; OS will reap on exit")
         except Exception:
             log.warning("Pipeline cancel-on-quit failed", exc_info=True)
 
@@ -74,8 +77,9 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
     if revert_thread is not None:
         try:
             bridge.abort_pending()
-            if not revert_thread.wait(15000):
-                log.warning("Revert thread did not exit in 15s after abort request")
+            revert_thread.quit()  # revert is cooperative; exits between steps; quit() lets exec() drain
+            if not revert_thread.wait(2000):
+                log.warning("Revert thread did not exit in 2s after abort")
         except Exception:
             pass  # safe: revert-on-quit best-effort; thread may already be done
 
@@ -117,7 +121,7 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
     try:
         settings.save_geometry(main)
     except Exception:
-        pass  # safe: QSettings write failure should not block window close
+        pass  # safe: QSettings write failure should not block window close  # safe: QSettings write failure should not block window close
 
 
 def run(debug: bool = False) -> int:
