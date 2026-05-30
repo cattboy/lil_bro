@@ -1,286 +1,63 @@
 # Contributing to lil_bro
 
-This is a solo project in active development. This file covers everything you need to run, test, and build it locally.
+Thanks for your interest in contributing to lil_bro. We appreciate bug reports, suggestions, and pull requests.
 
 ---
 
-## Requirements
+## How to contribute
 
-- **Python 3.11+** (3.13 tested)
-- **uv** — fast Python package manager ([install](https://docs.astral.sh/uv/getting-started/installation/))
-- **Windows 10/11** — this tool is Windows-only (uses WMI, winreg, ctypes Win32 APIs)
-- **.NET 8 SDK** — required to build the bundled `lhm-server.exe` thermal sensor sidecar
+### Issues
 
-### Installing .NET 8 SDK (winget)
+Bug reports, false positives, UI glitches, and accessibility problems are welcome. When opening an issue, please include:
 
-The fastest way on Windows 10/11 is via winget:
+- **What you saw** — the problem or unexpected behavior
+- **What you expected** — how it should work
+- **Your system details** — Windows version, GPU model, driver version
+- **Steps to reproduce** (if applicable)
 
-```powershell
-winget install Microsoft.DotNet.SDK.8
-```
+### Pull Requests
 
-To verify the install or check what SDK versions are present:
+For anything beyond a trivial fix (typo, one-line improvement), please open an issue first so we can discuss the change before you invest time in it.
 
-```powershell
-dotnet --list-sdks
-```
-
-You need at least one `8.x.xxx` entry. The SDK includes all runtimes — no separate runtime install is needed.
-
-> **Note:** If you only need to run the pre-built `lhm-server.exe` (already included in `tools/lhm-server/`), you do not need the SDK. The SDK is only required if you want to rebuild the sidecar from source.
+Once approved:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Write or update tests to cover your changes (see [DEVELOPMENT.md](DEVELOPMENT.md) for test commands)
+5. Submit a pull request with a clear description of what you changed and why
 
 ---
 
-## Setup
+## Ground rules
 
+- **Every new system check** in `src/agent_tools/` must return a structured dict with `check`, `status`, `message`, and `can_auto_fix` keys. See [DEVELOPMENT.md](DEVELOPMENT.md#writing-new-checks) for the full recipe.
+- **Safety first** — every system modification must route through `prompt_approval()` before executing. No silent changes.
+- **No telemetry or external APIs** — only driver version checks (NVIDIA/AMD/Intel) and the one-time GGUF model download are permitted.
+- **Keep all test/sample data fictional and obviously illustrative.** Do not introduce real customer names, real metrics, or real internal data.
+- **Match existing patterns.** See [DEVELOPMENT.md](DEVELOPMENT.md) for architecture, code structure, and design patterns.
+
+---
+
+## Developer setup
+
+For full instructions on setting up the dev environment, running tests, and building the .exe, see [DEVELOPMENT.md](DEVELOPMENT.md).
+
+Quick start:
 ```bash
-# Create the virtual environment
 uv venv
-
-# Activate it (PowerShell or Git Bash)
 .venv/Scripts/activate
-
-# Install runtime + dev deps
 uv pip install -e ".[dev]"
-
-# Optional: also install LLM support (llama-cpp-python, ~4.5 GB model download on first run)
-uv pip install -e ".[dev,llm]"
-```
-
-All dependencies are defined in `pyproject.toml`. Never use `pip install` directly.
-
-**One-command setup** (installs Python, uv, .NET 8 SDK, WDK, and initializes submodules):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File install_deps.ps1
-```
-
----
-
-## Running the tool
-
-```bash
-# From the project root, with venv active:
-python -m src.main
-```
-
-Or use the entry point registered by pyproject.toml:
-
-```bash
-lil_bro
-```
-
-To enable debug logging (writes `./lil_bro_debug.log` at CWD root):
-
-```bash
-python -m src.main --debug
-# or, for the built exe:
-lil_bro.exe --debug
-```
-
----
-
-## Running tests
-
-All tests are mocked — no real system modifications, no hardware required.
-
-```bash
-# Full suite
 python -m pytest tests/ -v
-
-# Single module
-python -m pytest tests/test_game_mode.py -v
-
-# With coverage (if pytest-cov installed)
-python -m pytest tests/ --cov=src --cov-report=term-missing
 ```
-
-Current suite: **671 tests**, all passing.
 
 ---
 
-## Building the portable .exe
+## Developer Certificate of Origin
 
-The build pipeline uses PyInstaller. Output lands in `dist/lil_bro.exe`.
-
-```bash
-# Full build + SHA-256 integrity manifest
-python build.py
-
-# Clean previous build artifacts first, then build
-python build.py --clean
-```
-
-`build.py` does the following automatically:
-1. *(Optional)* Cleans previous `dist/` and `build/` artifacts when `--clean` is passed
-2. Fetches the latest signed `PawnIO.sys` from namazso/PawnIO.Setup GitHub releases (falls back to WDK source build if offline or 7-Zip is absent)
-3. Builds `lhm-server.exe` via `tools/lhm-server/build.ps1` (embeds PawnIO.sys)
-4. Runs `PyInstaller lil_bro.spec --noconfirm`
-5. Generates `dist/integrity.json` with the SHA-256 hash of the exe
-
-The `.spec` file (`lil_bro.spec`) is the PyInstaller build configuration — edit it if you need to add data files or hidden imports.
-
-**Note:** `llama-cpp-python` has not been fully validated under PyInstaller bundling yet. Test on target hardware before distributing a build with LLM support.
+By contributing, you certify that you have the right to submit your contribution under this project's MIT License and that you agree to license your contribution under those terms.
 
 ---
 
-## Project structure
+## Code of Conduct
 
-```
-src/
-  main.py           — Thin entry point; GUI by default, --terminal for CLI
-  console_attach.py — Win32 console attach helper for --terminal mode
-  bootstrapper.py   — UAC escalation + System Restore Point creation
-  gui/              — PySide6 desktop application
-    app.py          — Application setup + lifecycle
-    pipeline_controller.py — Wires PipelineWorker signals to UI
-    startup_coordinator.py — Manages splash → main window transition
-    bridge.py       — Qt signal bridge between pipeline and GUI
-    signals.py      — Shared signal definitions
-    settings.py     — QSettings persistence
-    startup.py      — Startup orchestrator worker
-    worker.py       — PipelineWorker, _MonitorFixWorker, _MonitorRefreshWorker
-    theme/          — QSS theme package (tokens, stylesheet, dialogs, helpers)
-    widgets/        — Reusable UI widgets (dashboard, stat cards, output panel, ...)
-    windows/        — Top-level windows (main_window.py)
-  pipeline/         — Modular 5-phase orchestrator with Phase protocol
-    _state.py       — Shared LLM state (get_llm/set_llm)
-    base.py         — PipelineContext dataclass + Phase protocol
-    approval.py     — Proposal display, selection parsing, fix execution
-    fix_dispatch.py — Check→fix dispatch registry (@register_fix decorator)
-    thermal_gate.py — Pre-benchmark thermal safety gate
-    phase_bootstrap.py  — Phase 1: UAC + System Restore Point
-    phase_scan.py       — Phase 2: Hardware data collection
-    phase_baseline.py   — Phase 3: Baseline benchmark + thermals
-    phase_config.py     — Phase 4: All optimization checks + LLM proposals
-    phase_final.py      — Phase 5: Verification benchmark
-    phase_revert.py     — Phase 6: Interactive revert flow (--revert or menu)
-    phases.py           — 5-phase orchestrator
-  agent_tools/      — One file per system check (display, game_mode, power_plan, nvidia_profile, ...)
-  collectors/       — Hardware data collection (WMI, dxdiag, nvidia-smi, NVIDIA Profile, EDID, ...)
-    sub/
-      lhm_sidecar.py    — LHM process lifecycle
-      lhm_http.py       — HTTP polling against LHM localhost:8085
-      lhm_discovery.py  — LHM install discovery
-      lhm_process_utils.py — LHM process management helpers
-  llm/              — Optional LLM integration (model loader + action proposer)
-  benchmarks/       — Cinebench runner + thermal monitor
-    cinebench.py          — BenchmarkRunner orchestration
-    cinebench_discovery.py — Cinebench install detection
-    cinebench_parser.py   — Cinebench result parsing
-    cinebench_monitor.py  — Background thermal polling during benchmark
-    thermal_monitor.py    — LHM temperature polling
-  utils/            — Shared helpers (formatting, logging, paths, progress bar, platform, ...)
-    _console.py     — Internal console formatting helpers (extracted from formatting.py)
-tests/              — Unit tests (all mocked) — 671 total
-docs/               — Design notes, plans, vendor reference docs (NPI settings, etc.)
-tools/
-  PawnIO/           — PawnIO kernel driver source + WDK build script
-  PawnIO_Latest_Check/ — Auto-updater: fetches signed PawnIO.sys from GitHub releases
-  lhm-server/       — Custom C# thermal sensor server (LibreHardwareMonitorLib + PawnIO)
-  nvidiaProfileInspector/ — Bundled NVIDIA Profile Inspector (C# WPF GPU profile editor)
-build.py            — .exe build pipeline (lhm-server + PyInstaller + integrity manifest)
-install_deps.ps1    — One-command dev setup (Python, uv, .NET 8, WDK, submodules)
-lil_bro.spec        — PyInstaller spec
-pyproject.toml      — Single source of truth for all dependencies
-```
-
-See `CLAUDE.md` for the full architecture reference used by the AI assistant.
-
----
-
-## Key rules
-
-- **Safety first** — every system modification goes through `prompt_approval()` before executing.
-- **No silent changes** — a System Restore Point is created before any fixes are applied.
-- **Always use `uv`** — never `pip install` directly.
-- **GUI via PySide6** — GUI is the default; `--terminal` flag preserves the CLI path. New UI work uses PySide6 (not PyQt).
-- **Offline** — no telemetry, no external APIs beyond driver version checks and the one-time GGUF model download.
-
----
-
-## PawnIO driver (thermal sensor access)
-
-lhm-server.exe uses LibreHardwareMonitorLib to read CPU/GPU temperatures. On modern Windows, ring-0 hardware access requires the **PawnIO kernel driver**. The driver is embedded inside lhm-server.exe and auto-installed on first admin launch.
-
-### Signed vs. unsigned PawnIO.sys
-
-PawnIO.sys is a **kernel driver** — Windows enforces strict code-signing requirements:
-
-| Build type | Source | Loads without test-signing? |
-|---|---|---|
-| Official release | [pawnio.eu](https://pawnio.eu) | Yes (WHQL-signed) |
-| Built from source | `tools/PawnIO/build.ps1` | **No** — unsigned, blocked with error 577 |
-
-**For development**, you have two options:
-1. **Enable test-signing** on your dev machine (see below) to use the source-built driver
-2. **Download the signed release** from pawnio.eu and place it at `tools/PawnIO/dist/PawnIO.sys`
-
-**For production/distribution**, always use the officially signed PawnIO.sys from pawnio.eu.
-
-### Enabling test-signing mode (development only)
-
-Test-signing allows Windows to load unsigned kernel drivers. This is a boot-time setting that affects your entire system.
-
-**Enable:**
-```powershell
-# Requires admin (elevated PowerShell)
-bcdedit /set testsigning on
-# Reboot required
-shutdown /r /t 0
-```
-
-**Disable:**
-```powershell
-bcdedit /set testsigning off
-shutdown /r /t 0
-```
-
-**What to expect:**
-- A "Test Mode" watermark appears in the bottom-right corner of the desktop
-- All unsigned/test-signed kernel drivers can load (not just PawnIO)
-- Secure Boot must allow it — most consumer/gaming PCs do; some enterprise UEFI configs may block it
-- No special certificates or tools are needed
-
-**Requirements:**
-- Windows 10/11 (any edition)
-- Admin privileges to run `bcdedit`
-- Secure Boot not locked to reject test-signing (rare on consumer hardware)
-- A reboot after each toggle
-
-### Cleaning up a broken PawnIO service
-
-If you previously ran lhm-server with an unsigned PawnIO.sys (without test-signing), a broken service entry may exist. The retry logic in lhm-server will auto-clean this, but you can also clean it up manually:
-
-```powershell
-# Requires admin
-sc delete PawnIO
-del C:\Windows\System32\drivers\PawnIO.sys
-```
-
-### Build workflow
-
-```
-tools/PawnIO_Latest_Check/update_pawnio.ps1  # Download signed PawnIO.sys from GitHub releases
-tools/PawnIO/build.ps1                       # OR build PawnIO.sys from source (WDK + CMake required)
-tools/lhm-server/build.ps1                   # Build lhm-server.exe (embeds PawnIO.sys if present)
-python build.py                              # Full pipeline: PawnIO -> lhm-server -> lil_bro.exe
-```
-
-**Recommended:** Run `update_pawnio.ps1` to fetch the latest signed PawnIO.sys from GitHub. It checks for new releases, verifies SHA256, and extracts the x64 signed driver to `tools/PawnIO/dist/PawnIO.sys`.
-
-The lhm-server build auto-triggers `tools/PawnIO/build.ps1` (source build) if `tools/PawnIO/dist/PawnIO.sys` is missing. If you prefer the signed binary, run `update_pawnio.ps1` first.
-
----
-
-## Writing new checks
-
-1. Create `src/agent_tools/your_check.py`
-2. Implement a pure `analyze_your_check(specs: dict) -> dict` function (no system calls, reads from specs)
-3. Return a dict with at minimum `check`, `status`, `message`, `can_auto_fix` keys
-4. Wire it into `phase_config.py` — add your check function to the run phase method
-5. Add a handler function and registry entry to `src/pipeline/fix_dispatch.py` using `@register_fix("your_check")` decorator if `can_auto_fix: True`
-6. Add a fallback template to `FALLBACK_PROPOSALS` in `action_proposer.py` for offline/LLM-fallback scenarios
-7. Write mocked tests in `tests/test_your_check.py`
-
-The Phase protocol (in `base.py`) ensures your check's findings flow cleanly through the orchestrator: Phase 4 (Config) → Fix dispatch → Approval UX → Phase 5 (Verification).
+This project follows our [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold it.

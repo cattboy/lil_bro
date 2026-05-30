@@ -16,27 +16,24 @@ A **local, privacy-first AI agent** that optimizes your gaming PC for peak perfo
 
 All processing happens locally. The only external calls are optional driver version checks against vendor websites (NVIDIA/AMD/Intel) and the one-time AI model download on first run (skippable).
 
-## Architecture
-
-- **GUI:** PySide6 desktop app (default); `--terminal` flag restores the original CLI experience
-- **Brain:** `llama-cpp-python` running `Qwen2.5-Coder-7B-Instruct.Q4_K_M.gguf` (~4.5 GB, optional — downloaded on first run)
-- **Orchestrator:** Python 3.11+
-- **Sidecar Tools:** Custom lhm-server.exe (LibreHardwareMonitor + PawnIO for ring-0 thermal access); bundled NVIDIA Profile Inspector (C# WPF for GPU profile editing)
-- **Packaging:** PyInstaller portable .exe
-
 ## Status
 
 🟢 **v0.2.0.0 — PySide6 Desktop GUI + Pipeline Rescan Idempotency** — Full windowed app with dashboard (live thermals, mouse polling, monitor refresh tiles), optimization pipeline with phase-card progress, batch fix selection dialog, and animated splash screen. Running the pipeline twice in one session now finds nothing the second time. Dashboard "Fix Now" buttons are race-guarded and revertible. CLI mode preserved via `--terminal`. 671 tests passing.
 
-Previous: **v0.1.1.0** — NVIDIA settings no longer falsely flag after a specs reload; Cinebench cleanup, zombie-process kill, and AMD-only NPI init error all fixed. NPI helpers consolidated into `src/utils/nvidia_npi.py`.
+## How to Run
 
-Previous: **v0.1.0.0** — Full revert/undo system. Session manifest (`session_latest.json`) records every fix; `phase_revert.py` walks you through reverting each one individually. Windows System Restore fallback offered on partial failure.
+1. **Download** `lil_bro.exe` from [Releases](https://github.com/anthropics/lil_bro/releases)
+2. **Double-click** the `.exe` to launch
+   - A **UAC (User Access Control) prompt** will appear — this is expected and required. lil_bro needs admin privileges to analyze and modify system settings.
+3. **Follow the on-screen prompts** — the app will analyze your system and propose optimizations
+4. **Review and approve** fixes before they're applied
 
-## Development
+### CLI Mode (Terminal)
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for dev environment setup, test commands, and how to build the `.exe`.
-
-See `docs/office-hours-design-20260323.md` for the full product design and roadmap.
+For a command-line interface instead of the graphical app:
+```
+lil_bro.exe --terminal
+```
 
 ## Debugging
 
@@ -55,3 +52,18 @@ lil_bro.exe --debug
 Both log files are preserved after each run:
 - `lil_bro_actions.log` — audit trail of every system modification lil_bro made
 - `lil_bro_debug.log` — process lifecycle, GUI startup, pipeline flow, and exception traces
+
+## Further Reading
+
+- **[DEVELOPMENT.md](DEVELOPMENT.md)** — Architecture, developer setup, test commands, and build instructions
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — How to report bugs, submit pull requests, and contribute
+
+## License
+
+This project is licensed under the **MIT License**. See [LICENSE.md](LICENSE.md) for full details.
+
+Copyright © 2026 cattboy
+
+## Code of Conduct
+
+We are committed to providing a welcoming, inclusive, and harassment-free environment for all contributors and users. Please see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for our full Code of Conduct and enforcement procedures.
