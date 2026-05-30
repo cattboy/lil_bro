@@ -338,6 +338,6 @@ def prompt_pause(message: str = "") -> None:
     try:
         input()
     except (EOFError, RuntimeError, OSError):
-        pass  # no stdin available — skip silently  # no stdin available — skip silently
+        pass  # no stdin available — skip silently
 
 

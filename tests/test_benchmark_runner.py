@@ -83,7 +83,6 @@ def test_runner_auto_discovery(mock_find):
 @patch("src.benchmarks.cinebench.Path.exists", return_value=True)
 @patch("src.benchmarks.cinebench.subprocess.Popen")
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
-
 def test_run_cinebench_success(mock_isfile, mock_popen, mock_exists, mock_write, mock_read, mock_approve):
     """Cinebench runs and returns success with parsed CB score."""
     mock_proc = MagicMock()
@@ -105,7 +104,6 @@ def test_run_cinebench_success(mock_isfile, mock_popen, mock_exists, mock_write,
 @patch("src.benchmarks.cinebench.Path.exists", return_value=True)
 @patch("src.benchmarks.cinebench.subprocess.Popen")
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
-
 def test_run_cinebench_full_suite(mock_isfile, mock_popen, mock_exists, mock_write, mock_read, mock_approve):
     """full_suite=True passes AllTests flag and parses multi-core score."""
     mock_proc = MagicMock()
@@ -164,10 +162,20 @@ def test_run_cinebench_percent_in_output_path(mock_isfile, mock_get_temp_dir, mo
 
 
 @patch("src.benchmarks.cinebench.prompt_approval", return_value=True)
+@patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
+def test_run_cinebench_percent_in_cinebench_path(mock_isfile, mock_approve):
+    """cinebench_path containing percent returns error before constructing the batch wrapper."""
+    runner = BenchmarkRunner(cinebench_path=r"C:\Users\John%Admin%\CB\Cinebench.exe")
+    result = runner.run_benchmark(full_suite=False)
+    assert result["status"] == "error"
+    assert result["benchmark"] == "cinebench"
+    assert "%" in result["message"]
+
+
+@patch("src.benchmarks.cinebench.prompt_approval", return_value=True)
 @patch("src.benchmarks.cinebench.subprocess.Popen")
 @patch("src.benchmarks.cinebench.os.path.isfile", return_value=True)
 @patch("src.benchmarks.cinebench.get_temp_dir")
-
 def test_run_cinebench_output_file_too_large(mock_get_temp_dir, mock_isfile, mock_popen, mock_approve):
     """output_file exceeding 50 MB returns error before reading into memory."""
     mock_proc = MagicMock()

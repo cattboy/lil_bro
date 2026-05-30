@@ -55,7 +55,6 @@ qt_api = "pyside6"
 
 [tool.coverage.run]
 source = ["src"]
-omit = ["src/gui/*"]
 
 [tool.coverage.report]
 fail_under = 74

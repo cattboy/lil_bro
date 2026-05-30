@@ -107,6 +107,14 @@ class BenchmarkRunner:
             print_error(reason)
             log.error("Cinebench: %s", reason)
             return {"status": "error", "benchmark": "cinebench", "message": reason}
+        if "%" in str(self.cinebench_path):
+            reason = (
+                f"Cinebench path contains an unsupported character ('%'): "
+                f"{self.cinebench_path}"
+            )
+            print_error(reason)
+            log.error("Cinebench: %s", reason)
+            return {"status": "error", "benchmark": "cinebench", "message": reason}
 
         # output_file is derived from get_temp_dir() which uses Path.cwd(). A '%'
         # in the CWD (e.g. a username folder) would be env-expanded by cmd.exe

@@ -176,10 +176,4 @@ The original proposal was `return_str=False` param on every `print_*` function. 
 
 ### T-011 — Global Win32 hotkey for cancel (deferred from /plan-eng-review D1)
 **Completed**: 2026-05-29
-**Priority:** P3 — **COMPLETED 2026-05-28** (conditional on observed need)
-**Effort:** S human / S with CC
-**Why:** Current app-scoped `QShortcut(Qt.WindowShortcut)` for Esc/Q only fires when `MainWindow` is the active window. `_minimize_cinebench_window` minimizes Cinebench at launch so lil_bro returns to the foreground, but if Cinebench re-grabs focus during its 10-minute run, the keyboard cancel path goes silent. The Stop button still works regardless of focus.
-**Trigger criteria:** any v1 user reports "I pressed Esc but nothing happened during Cinebench" — verify Cinebench was foreground at the moment.
-**Fix:** add `ctypes.windll.user32.RegisterHotKey(MOD_NONE, VK_ESCAPE)` + a message-loop thread that emits `MainWindow.stop_requested` on `WM_HOTKEY`. Unregister in `_on_pipeline_finished`. Same pattern for `VK_Q`. Keep the existing app-scoped QShortcuts as fallback when MainWindow has focus.
-**Blocked by:** v1 telemetry / user reports.
-**Added:** 2026-05-19 (from /plan-eng-review for cancel-benchmark plan)
+Marked deferred — trigger criteria (user report of Esc not working during Cinebench focus) never fired. T-011 remains open in principle; the P3 COMPLETED marker in the Open section reflects that the conditional was not met and the item is retired, not that the hotkey was implemented.

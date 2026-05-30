@@ -11,7 +11,7 @@ class TestPrintBanner:
              patch("src.pipeline.banner.Style", create=True):
             print_banner()
         out = capsys.readouterr().out
-        assert "lil_bro" in out or "lil" in out.lower() or "_" in out
+        assert "lil_bro" in out
 
     def test_contains_privacy_notice(self, capsys):
         from src.pipeline.banner import print_banner

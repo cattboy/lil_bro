@@ -89,7 +89,7 @@ class TestMousePollWorker:
         results: list[dict] = []
         worker.finished.connect(lambda r: results.append(r))
 
-        poll_result = {"current_hz": 1000, "status": "ok", "message": ""}
+        poll_result = {"current_hz": 1000, "status": "OK", "message": ""}
         with patch(
             "src.agent_tools.mouse.check_polling_rate",
             return_value=poll_result,
