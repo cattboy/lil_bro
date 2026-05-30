@@ -192,3 +192,128 @@ class TestCleanupStaleMei:
         _cleanup_stale_mei()
         assert our_mei.exists(), "Must not delete current process _MEIPASS"
         assert not other_mei.exists(), "Must delete orphaned _MEI dirs"
+
+
+# ---------------------------------------------------------------------------
+# _cleanup_cwd_tempdir
+# ---------------------------------------------------------------------------
+
+class TestCleanupCwdTempdir:
+
+    def test_removes_lil_bro_dir_when_present(self, tmp_path, monkeypatch):
+        from src.pipeline.post_run_cleanup import _cleanup_cwd_tempdir
+        lil_bro_dir = tmp_path / "lil_bro"
+        lil_bro_dir.mkdir()
+        (lil_bro_dir / "artifact.tmp").touch()
+        monkeypatch.chdir(tmp_path)
+        with patch("src.pipeline.post_run_cleanup.action_logger"):
+            _cleanup_cwd_tempdir()
+        assert not lil_bro_dir.exists()
+
+    def test_noop_when_dir_absent(self, tmp_path, monkeypatch):
+        from src.pipeline.post_run_cleanup import _cleanup_cwd_tempdir
+        monkeypatch.chdir(tmp_path)
+        _cleanup_cwd_tempdir()  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# _run_sc — return codes
+# ---------------------------------------------------------------------------
+
+class TestRunSc:
+
+    def _call(self, returncode: int):
+        from src.pipeline.post_run_cleanup import _run_sc
+        mock_result = MagicMock()
+        mock_result.returncode = returncode
+        with patch("subprocess.run", return_value=mock_result):
+            return _run_sc("stop", "PawnIO")
+
+    def test_true_on_success(self):
+        assert self._call(0) is True
+
+    def test_true_on_service_not_exist(self):
+        assert self._call(1060) is True
+
+    def test_true_on_not_started(self):
+        assert self._call(1062) is True
+
+    def test_true_on_marked_for_deletion(self):
+        assert self._call(1072) is True
+
+    def test_false_on_unexpected_code(self):
+        assert self._call(5) is False
+
+    def test_false_when_subprocess_raises(self):
+        from src.pipeline.post_run_cleanup import _run_sc
+        with patch("subprocess.run", side_effect=Exception("timeout")):
+            assert _run_sc("stop", "PawnIO") is False
+
+
+# ---------------------------------------------------------------------------
+# _find_pawnio_oem_inf
+# ---------------------------------------------------------------------------
+
+class TestFindPawnioOemInf:
+
+    def _run_with_stdout(self, stdout: str, returncode: int = 0):
+        from src.pipeline.post_run_cleanup import _find_pawnio_oem_inf
+        mock_result = MagicMock()
+        mock_result.returncode = returncode
+        mock_result.stdout = stdout
+        with patch("subprocess.run", return_value=mock_result):
+            return _find_pawnio_oem_inf()
+
+    def test_returns_oem_inf_when_pawnio_found(self):
+        stdout = (
+            "Published Name:  oem12.inf\n"
+            "Original Name:   pawnio.inf\n"
+            "Provider Name:   PawnIO\n"
+            "\n"
+            "Published Name:  oem5.inf\n"
+            "Original Name:   other.inf\n"
+            "Provider Name:   SomeOther\n"
+        )
+        assert self._run_with_stdout(stdout) == "oem12.inf"
+
+    def test_returns_none_when_no_pawnio_entry(self):
+        stdout = (
+            "Published Name:  oem5.inf\n"
+            "Original Name:   other.inf\n"
+            "Provider Name:   SomeOther\n"
+        )
+        assert self._run_with_stdout(stdout) is None
+
+    def test_returns_none_when_subprocess_fails(self):
+        from src.pipeline.post_run_cleanup import _find_pawnio_oem_inf
+        with patch("subprocess.run", side_effect=Exception("pnputil missing")):
+            assert _find_pawnio_oem_inf() is None
+
+
+# ---------------------------------------------------------------------------
+# post_run_cleanup — orchestrator
+# ---------------------------------------------------------------------------
+
+class TestPostRunCleanup:
+
+    def test_none_lhm_does_not_raise(self, tmp_path, monkeypatch):
+        from src.pipeline.post_run_cleanup import post_run_cleanup
+        monkeypatch.chdir(tmp_path)
+        with patch("src.pipeline.post_run_cleanup._uninstall_pawnio"), \
+             patch("src.pipeline.post_run_cleanup._cleanup_cwd_tempdir"), \
+             patch("src.pipeline.post_run_cleanup._cleanup_stale_mei"), \
+             patch("src.pipeline.post_run_cleanup.print_info"), \
+             patch("src.pipeline.post_run_cleanup.print_dim"):
+            post_run_cleanup(lhm=None)  # must not raise
+
+    def test_lhm_stop_called_when_provided(self, tmp_path, monkeypatch):
+        from src.pipeline.post_run_cleanup import post_run_cleanup
+        mock_lhm = MagicMock()
+        monkeypatch.chdir(tmp_path)
+        with patch("src.pipeline.post_run_cleanup._uninstall_pawnio"), \
+             patch("src.pipeline.post_run_cleanup._cleanup_cwd_tempdir"), \
+             patch("src.pipeline.post_run_cleanup._cleanup_stale_mei"), \
+             patch("src.pipeline.post_run_cleanup.print_info"), \
+             patch("src.pipeline.post_run_cleanup.print_dim"):
+            post_run_cleanup(lhm=mock_lhm)
+        mock_lhm.stop.assert_called_once()

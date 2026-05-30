@@ -65,3 +65,16 @@ required-environments = [
     "sys_platform == 'win32'",
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
+
+[tool.ruff]
+line-length = 100
+
+# E501 = line too long. Suppressed per-file for modules whose long lines are
+# all in user-facing strings or logging calls where mid-sentence wrapping hurts
+# readability more than it helps.
+[tool.ruff.lint.per-file-ignores]
+"src/bootstrapper.py" = ["E501"]
+"src/agent_tools/mouse.py" = ["E501"]
+"src/agent_tools/power_plan.py" = ["E501"]
+"src/collectors/sub/wmi_dumper.py" = ["E501"]
+"src/collectors/sub/dxdiag_dumper.py" = ["E501"]

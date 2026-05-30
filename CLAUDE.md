@@ -129,7 +129,7 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 
 ## Development Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). Current test count: 671.
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). Current test count: 785.
 
 ---
 

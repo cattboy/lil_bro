@@ -53,6 +53,11 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
     deliver a dialog answer), then wait for the thread to exit before tearing
     down LHM. Test plan: "Window close (X) during running pipeline → triggers
     cancel signal; LHM sidecar cleaned up via aboutToQuit."
+
+    The 15-second wait gives the cooperative cancel (abort_event) time to reach
+    a running Cinebench polling loop and exit gracefully. Hard-killing a
+    mid-write Cinebench process risks result file corruption, so we prefer to
+    wait rather than force-terminate.
     """
     pipeline_worker = runtime.get("pipeline_worker")
     pipeline_thread = runtime.get("pipeline_thread")
@@ -60,7 +65,8 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
         try:
             pipeline_worker.request_cancel()
             bridge.abort_pending()
-            pipeline_thread.wait(5000)
+            if not pipeline_thread.wait(15000):
+                log.warning("Pipeline thread did not exit in 15s after cancel request")
         except Exception:
             log.warning("Pipeline cancel-on-quit failed", exc_info=True)
 
@@ -68,7 +74,8 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
     if revert_thread is not None:
         try:
             bridge.abort_pending()
-            revert_thread.wait(5000)
+            if not revert_thread.wait(15000):
+                log.warning("Revert thread did not exit in 15s after abort request")
         except Exception:
             pass  # safe: revert-on-quit best-effort; thread may already be done
 
@@ -110,7 +117,7 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
     try:
         settings.save_geometry(main)
     except Exception:
-        pass  # safe: QSettings write failure should not block window close
+        pass  # safe: QSettings write failure should not block window close  # safe: QSettings write failure should not block window close
 
 
 def run(debug: bool = False) -> int:
