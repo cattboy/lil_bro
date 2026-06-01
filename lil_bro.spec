@@ -90,6 +90,7 @@ a = Analysis(
         'src.gui.widgets.output_panel',
         'src.gui.widgets.output_view',
         'src.gui.widgets.benchmark_row',
+        'src.gui.widgets.revert_view',
         'src.gui.widgets.splash',
         'src.gui.widgets.stat_card',
         'src.gui.widgets.status_bar_widget',

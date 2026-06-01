@@ -39,6 +39,7 @@ class PipelineController:
         self._main._run_button.setEnabled(enabled)
         self._main._revert_button.setEnabled(enabled)
         self._main._ai_setup_button.setEnabled(enabled)
+        self._main._revert_view.set_revert_enabled(enabled)
 
     # ── Approval / confirm / batch dialogs ─────────────────────────────
 

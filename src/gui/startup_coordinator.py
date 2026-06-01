@@ -100,7 +100,7 @@ class StartupCoordinator:
         """Re-read the manifest and feed the Applied Fixes card (GUI thread)."""
         try:
             from src.utils.revert import load_manifest
-            self._main._dashboard.set_last_run(load_manifest())
+            self._main._revert_view.set_last_run(load_manifest())
         except Exception as exc:
             self._log.warning("Applied Fixes refresh failed: %s", exc, exc_info=True)
 
@@ -181,7 +181,7 @@ class StartupCoordinator:
         # Dashboard.__init__; the QFileSystemWatcher keeps it fresh thereafter.
         try:
             from src.utils.revert import load_manifest
-            main._dashboard.set_last_run(load_manifest())
+            main._revert_view.set_last_run(load_manifest())
         except Exception as exc:
             log.warning("Could not seed Applied Fixes card: %s", exc, exc_info=True)
 

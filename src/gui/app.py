@@ -224,8 +224,10 @@ def run(debug: bool = False) -> int:
 
     # ── Nav button wiring ──────────────────────────────────────────────
     main._run_button.clicked.connect(pipeline.start_pipeline)
-    main._revert_button.clicked.connect(pipeline.start_revert)
     main._ai_setup_button.clicked.connect(pipeline.open_ai_setup)
+    # Sidebar revert button navigates to the revert page (wired in _build_sidebar).
+    # The in-page revert action button triggers the actual revert run.
+    main._revert_view.revert_requested.connect(pipeline.start_revert)
 
     app.aboutToQuit.connect(
         lambda: _run_app_cleanup(main, bridge, runtime, log, settings, pawnio_was_preinstalled)
