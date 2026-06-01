@@ -70,6 +70,7 @@ a = Analysis(
         'src.console_attach',
         'src.gui.app',
         'src.gui.bridge',
+        'src.gui.cap_notifier',
         'src.gui.pipeline_controller',
         'src.gui.settings',
         'src.gui.signals',

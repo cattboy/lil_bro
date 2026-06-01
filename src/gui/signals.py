@@ -28,3 +28,5 @@ class PipelineSignals(QObject):
     pipeline_finished = Signal()
     pipeline_failed = Signal(str, str, str)
     init_step = Signal(str, str)
+
+    log_cap_reached = Signal()  # action log hit the 100 MB cap; show a non-modal warning

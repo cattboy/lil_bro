@@ -177,3 +177,32 @@ The original proposal was `return_str=False` param on every `print_*` function. 
 ### T-011 — Global Win32 hotkey for cancel (deferred from /plan-eng-review D1)
 **Completed**: 2026-05-29
 Marked deferred — trigger criteria (user report of Esc not working during Cinebench focus) never fired. T-011 remains open in principle; the P3 COMPLETED marker in the Open section reflects that the conditional was not met and the item is retired, not that the hotkey was implemented.
+
+---
+
+### T-022 — GUI notification when the action log hits the 100 MB size cap
+**Priority:** P3 — **COMPLETED 2026-06-01** (renumbered from a duplicate T-016)
+**Shipped:** `ActionLogger` gained a Qt-free `_gui_notify_fn` callback; the cap branch emits
+`PipelineSignals.log_cap_reached`, whose queued slot (`CapNotifier`, `src/gui/cap_notifier.py`)
+shows a **non-modal** `QMessageBox` on the main thread. Chose non-modal over the originally
+proposed modal: the cap is a should-never-happen event and a blocking modal mid-pipeline is too
+interruptive. Also wired `action_logger._echo_fn` in GUI mode (previously CLI-only, so the warning
+— and all `ActionLogger` text — was invisible in the GUI) and added a `debug_logger.error` trace.
+Rejected `QMetaObject.invokeMethod(app, callable)` — `startup_coordinator.py:17-21` documents that
+PySide6 can't reliably route a queued connection to a bare callable.
+**Added:** 2026-05-31 · **Done:** 2026-06-01
+
+---
+
+### T-023 — DESIGN.md-aligned styling pass for all QMessageBox dialogs
+**Priority:** P3
+**Effort:** S human / S with CC
+**Why:** The app's `QMessageBox` dialogs (the new cap warning in `src/gui/cap_notifier.py` and the
+debug-log notice at `src/gui/windows/main_window.py:279`) use stock OS chrome, which clashes with
+the dark / JetBrains-Mono / coral (`#FF6B6B`) system defined in `DESIGN.md`. Stock chrome is
+acceptable for a rare error dialog but is off-brand.
+**Fix:** Give all `QMessageBox` dialogs one DESIGN.md-aligned pass — dark theme, JetBrains Mono,
+`#FF6B6B` error accent — via shared QSS or a thin styled-dialog helper. Audit for any other stock
+dialogs at the same time.
+**Blocked by:** Nothing.
+**Added:** 2026-06-01 (from /plan-ceo-review D7 on T-022)

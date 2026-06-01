@@ -21,11 +21,13 @@ from PySide6.QtWidgets import QApplication
 
 from src.gui import theme
 from src.gui.bridge import GuiBridge
+from src.gui.cap_notifier import CapNotifier
 from src.gui.pipeline_controller import PipelineController
 from src.gui.signals import PipelineSignals
 from src.gui.startup import StartupOrchestrator
 from src.gui.startup_coordinator import StartupCompleter, StartupCoordinator
 from src.gui.windows.main_window import MainWindow
+from src.utils.action_logger import action_logger
 
 
 def _install_exception_hooks(log) -> None:
@@ -243,6 +245,19 @@ def run(debug: bool = False) -> int:
     completer_done = StartupCompleter(startup.on_finished, parent=main)
     runtime["_startup_completer"] = completer_done
     orchestrator.finished.connect(completer_done.on_finished, Qt.ConnectionType.QueuedConnection)
+
+    # Action-log cap → non-modal GUI warning. ActionLogger is Qt-free and runs on the
+    # pipeline worker thread; it emits log_cap_reached, whose queued slot shows the dialog
+    # on the main thread. Also route ActionLogger's text into the output panel — _echo_fn
+    # was previously wired only in CLI mode, so cap warnings were invisible in the GUI.
+    cap_notifier = CapNotifier(parent=main)
+    runtime["_cap_notifier"] = cap_notifier
+    bridge.signals.log_cap_reached.connect(
+        cap_notifier.show_cap_reached, Qt.ConnectionType.QueuedConnection
+    )
+    action_logger._gui_notify_fn = bridge.signals.log_cap_reached.emit
+    action_logger._echo_fn = bridge._emit_output
+
     thread.start()
 
     # Splash runs first; main window appears only after startup completes
