@@ -223,7 +223,7 @@ def run(debug: bool = False) -> int:
     main._dashboard.stats_ready.connect(main._live_stat_row.apply_snapshot)
 
     # ── Nav button wiring ──────────────────────────────────────────────
-    main._run_button.clicked.connect(pipeline.start_pipeline)
+    main._run_button.clicked.connect(pipeline.confirm_start_pipeline)
     main._ai_setup_button.clicked.connect(pipeline.open_ai_setup)
     # Sidebar revert button navigates to the revert page (wired in _build_sidebar).
     # The in-page revert action button triggers the actual revert run.

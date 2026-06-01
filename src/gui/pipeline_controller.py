@@ -107,6 +107,36 @@ class PipelineController:
 
     # ── Pipeline run ───────────────────────────────────────────────────
 
+    def confirm_start_pipeline(self) -> None:
+        """Prompt before starting the pipeline.
+
+        Wired to the sidebar Run button. The button's own
+        ``show_output()`` connection has already navigated to the output
+        view, so the modal prompt appears over it. Only an explicit
+        confirm starts the run; declining leaves the user idle on the
+        output page. Guards mirror ``start_pipeline`` so we never prompt
+        while a run is in flight or before startup has finished.
+        """
+        runtime = self._runtime
+        main = self._main
+        if runtime.get("pipeline_thread") is not None:
+            return
+        if runtime.get("lhm") is None:
+            main.status_bar_widget.set_state(
+                "ok", "Startup still in progress — please wait…"
+            )
+            return
+        dialog = ConfirmDialog(
+            "Start Optimization?",
+            "lil_bro will analyze your system and propose fixes. Nothing "
+            "changes without your approval at each step.",
+            parent=main,
+            yes_label="Start Optimization",
+            no_label="Not Yet",
+        )
+        if dialog.exec():
+            self.start_pipeline()
+
     def start_pipeline(self) -> None:
         runtime = self._runtime
         main = self._main
