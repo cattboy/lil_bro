@@ -54,12 +54,8 @@ Format: Priority | Effort (human / CC) | Context
 ---
 
 ### T-016 — Persistent "what was applied / last run" UI panel
-**Priority:** P2
-**Effort:** M human / M with CC
-**Why:** Users can't currently see what fixes were applied in the current session. The session manifest (2A) accumulates all applied fixes with timestamps, providing the ready data source. A UI panel showing this closes the UX half of the original pipeline-rescan idempotency report.
-**Fix:** Create a new Dashboard-style card or sidebar panel that displays the session manifest: list of applied fixes with timestamps and revert status. Wire it to the `PipelineContext.fixes_applied` and manifest data. Persist the list until the next session starts.
-**Blocked by:** Nothing — unblocked by v0.2.0.0 (pipeline-rescan + atomic manifest landed).
-**Added:** 2026-05-23 (deferred from pipeline-rescan-idempotency-plan.md)
+**Priority:** P2 — **COMPLETED 2026-06-01**
+Read-only `LastRunCard` (`src/gui/widgets/last_run_card.py`) mirrors the session manifest: one row per applied fix with name, time, before→after transition (e.g. `60 Hz → 144 Hz`), and revert status; header shows the session date + System Restore availability. Pre-allocated in `Dashboard.__init__`, fed via `Dashboard.set_last_run()`. Live refresh via a single `QFileSystemWatcher` on the backups dir (150 ms debounce, parented to main) in `StartupCoordinator`, seeded once in `on_finished` (covers fast + slow startup, no `app.run()` edit). Three CEO-review expansions surfaced manifest data the baseline discarded: per-fix before→after, restore-point header line, inline non-revertible reason. 24 new tests; suite 833 green. Reviewed: office-hours design doc 9/10 → CEO SELECTIVE EXPANSION → eng review CLEAR. **Note:** the manifest persists across runs until a revert (by design), so the card shows accumulated fixes headed by the original session date — it does NOT clear on launch (would hide still-revertible fixes). Deferred: session-boundary grouping → **T-024**.
 
 ---
 
@@ -85,6 +81,31 @@ Format: Priority | Effort (human / CC) | Context
 
 ### T-021 — Maintainability polish (PEP-8 + `__all__` + docstring direction inversions)
 **Priority:** P4 (cosmetic) — **COMPLETED 2026-05-28**
+
+---
+
+### T-023 — DESIGN.md-aligned styling pass for all QMessageBox dialogs
+**Priority:** P3
+**Effort:** S human / S with CC
+**Why:** The app's `QMessageBox` dialogs (the cap warning in `src/gui/cap_notifier.py` and the
+debug-log notice at `src/gui/windows/main_window.py:279`) use stock OS chrome, which clashes with
+the dark / JetBrains-Mono / coral (`#FF6B6B`) system defined in `DESIGN.md`. Stock chrome is
+acceptable for a rare error dialog but is off-brand.
+**Fix:** Give all `QMessageBox` dialogs one DESIGN.md-aligned pass — dark theme, JetBrains Mono,
+`#FF6B6B` error accent — via shared QSS or a thin styled-dialog helper. Audit for any other stock
+dialogs at the same time.
+**Blocked by:** Nothing.
+**Added:** 2026-06-01 (from /plan-ceo-review D7 on T-022)
+
+---
+
+### T-024 — Session-boundary grouping in the Applied Fixes card
+**Priority:** P3
+**Effort:** M human / S-M with CC
+**Why:** The session manifest accumulates fixes across multiple pipeline runs until a revert, but stores a single `session_id` with no per-run delimiter, so `LastRunCard` (T-016) shows one flat list headed by the original date. Grouping rows by run would make multi-run accumulation legible.
+**Fix:** Add a per-run marker to the manifest data layer (`src/utils/revert.py` / `src/pipeline/fix_dispatch.py` — e.g. a run index stamped on each entry at `_record_*` time), then group rows by run in `LastRunCard.set_manifest` with subtle run-separator headers.
+**Blocked by:** The data-layer change — out of scope for the read-only card (T-016).
+**Added:** 2026-06-01 (deferred from /plan-ceo-review on T-016; numbered T-024 — T-022/T-023 already taken on feat/log-size-caps)
 
 ---
 
@@ -190,19 +211,4 @@ interruptive. Also wired `action_logger._echo_fn` in GUI mode (previously CLI-on
 — and all `ActionLogger` text — was invisible in the GUI) and added a `debug_logger.error` trace.
 Rejected `QMetaObject.invokeMethod(app, callable)` — `startup_coordinator.py:17-21` documents that
 PySide6 can't reliably route a queued connection to a bare callable.
-**Added:** 2026-05-31 · **Done:** 2026-06-01
-
----
-
-### T-023 — DESIGN.md-aligned styling pass for all QMessageBox dialogs
-**Priority:** P3
-**Effort:** S human / S with CC
-**Why:** The app's `QMessageBox` dialogs (the new cap warning in `src/gui/cap_notifier.py` and the
-debug-log notice at `src/gui/windows/main_window.py:279`) use stock OS chrome, which clashes with
-the dark / JetBrains-Mono / coral (`#FF6B6B`) system defined in `DESIGN.md`. Stock chrome is
-acceptable for a rare error dialog but is off-brand.
-**Fix:** Give all `QMessageBox` dialogs one DESIGN.md-aligned pass — dark theme, JetBrains Mono,
-`#FF6B6B` error accent — via shared QSS or a thin styled-dialog helper. Audit for any other stock
-dialogs at the same time.
-**Blocked by:** Nothing.
-**Added:** 2026-06-01 (from /plan-ceo-review D7 on T-022)
+**Added:** 2026-05-31 · **Done:** 2026-06-01 · **Branch:** `feat/log-size-caps` (commit 88b5d7c, unmerged) — bundled with the action/debug/spec size-cap work

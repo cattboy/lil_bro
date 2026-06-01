@@ -101,6 +101,16 @@ class Dashboard(QWidget):
         self._mouse_poll_card = MousePollCard(parent=self)
         outer.addWidget(self._mouse_poll_card)
 
+        # ── Applied-fixes PRE-ALLOCATED slot ───────────────────────────
+        # Read-only list of fixes applied this session (T-016). Pre-allocated
+        # here for the same reason as the monitor slots below: dynamic widget
+        # creation during splash.exec()'s nested loop fails to parent in the
+        # bundled exe. Hidden until set_last_run() finds a session manifest.
+        from src.gui.widgets.last_run_card import LastRunCard
+        self._last_run_card = LastRunCard(parent=self)
+        self._last_run_card.hide()
+        outer.addWidget(self._last_run_card)
+
         # ── Monitor refresh PRE-ALLOCATED slots ───────────────────────
         # Created here during Dashboard.__init__ alongside the stat tiles
         # / polling card / thermal chart — all of which parent correctly.
@@ -162,6 +172,19 @@ class Dashboard(QWidget):
         self._worker_thread.wait(1000)
         self._worker = None
         self._worker_thread = None
+
+    # ── Applied-fixes card ──────────────────────────────────────────────
+
+    def set_last_run(self, manifest) -> None:
+        """Feed the session manifest into the Applied Fixes card.
+
+        Single GUI entry point: shows the card when the manifest has applied
+        fixes to display, hides it otherwise (None / empty / corrupt manifest).
+        Called at startup and on every QFileSystemWatcher tick (see
+        StartupCoordinator). Runs on the GUI thread, so direct mutation is safe.
+        """
+        visible = self._last_run_card.set_manifest(manifest)
+        self._last_run_card.setVisible(visible)
 
     # ── Render slot ────────────────────────────────────────────────────
 
