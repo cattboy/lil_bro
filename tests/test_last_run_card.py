@@ -212,20 +212,22 @@ class TestRendering:
         assert "Brand New Thing" in _texts(card)
 
 
-# ── Dashboard.set_last_run visibility toggle ─────────────────────────────────
-class TestDashboardSetLastRun:
+# ── RevertView.set_last_run visibility toggle ────────────────────────────────
+class TestRevertViewSetLastRun:
     def test_toggle_visibility(self, qtbot):
-        from src.gui.widgets.dashboard import Dashboard
+        from src.gui.widgets.revert_view import RevertView
         with patch("src.gui.widgets.last_run_card.repolish"):
-            dash = Dashboard()
-            qtbot.addWidget(dash)
-            # None / empty → hidden
-            dash.set_last_run(None)
-            assert dash._last_run_card.isHidden()
-            # valid manifest → shown
-            dash.set_last_run({
+            view = RevertView()
+            qtbot.addWidget(view)
+            # None / empty → card hidden, placeholder shown
+            view.set_last_run(None)
+            assert view._last_run_card.isHidden()
+            assert not view._no_fixes_lbl.isHidden()
+            # valid manifest → card shown, placeholder hidden
+            view.set_last_run({
                 "schema_version": 1, "session_date": "2026-06-01T00:00:00",
                 "fixes": [{"fix": "display", "revertible": True,
                            "before": {"hz": 60}, "after": {"hz": 144}}],
             })
-            assert not dash._last_run_card.isHidden()
+            assert not view._last_run_card.isHidden()
+            assert view._no_fixes_lbl.isHidden()

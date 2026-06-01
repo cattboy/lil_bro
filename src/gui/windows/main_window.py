@@ -168,6 +168,15 @@ class MainWindow(QMainWindow):
         self._revert_button.clicked.connect(self.show_revert)
         self._nav_exit.clicked.connect(self.close)
 
+        # Page-nav buttons that share the single "active page" highlight, each
+        # paired with the navState it rests at when not the active page. The
+        # revert button keeps its warning tint when idle, not a blank state.
+        self._nav_pages = [
+            (self._nav_dashboard, ""),
+            (self._run_button, ""),
+            (self._revert_button, "warning"),
+        ]
+
         # Default active state
         self._set_nav_active(self._nav_dashboard)
 
@@ -184,8 +193,8 @@ class MainWindow(QMainWindow):
         return btn
 
     def _set_nav_active(self, active_btn: QPushButton) -> None:
-        for btn in (self._nav_dashboard, self._run_button):
-            state = "active" if btn is active_btn else ""
+        for btn, resting in self._nav_pages:
+            state = "active" if btn is active_btn else resting
             btn.setProperty("navState", state)
             repolish(btn)
 
@@ -236,6 +245,7 @@ class MainWindow(QMainWindow):
 
     def show_revert(self) -> None:
         self._content.setCurrentIndex(self.REVERT_INDEX)
+        self._set_nav_active(self._revert_button)
 
     # ── Benchmark score proxy (wired by app.py via benchmark_score_ready) ──
 

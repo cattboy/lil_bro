@@ -178,12 +178,9 @@ class StartupCoordinator:
         # Seed the Applied Fixes card (T-016). on_finished fires exactly once per
         # session on both the fast and slow startup paths, so seeding here covers
         # both without editing app.run(). The card is pre-allocated in
-        # Dashboard.__init__; the QFileSystemWatcher keeps it fresh thereafter.
-        try:
-            from src.utils.revert import load_manifest
-            main._revert_view.set_last_run(load_manifest())
-        except Exception as exc:
-            log.warning("Could not seed Applied Fixes card: %s", exc, exc_info=True)
+        # RevertView.__init__; the QFileSystemWatcher keeps it fresh thereafter.
+        # Reuses _reload_last_run -- the same load_manifest + set_last_run path.
+        self._reload_last_run()
 
         log.info("GUI Startup: on_finished exit")
 

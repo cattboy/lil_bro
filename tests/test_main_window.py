@@ -35,6 +35,21 @@ def test_main_window_run_button_uses_active_nav_state(qtbot):
     assert window._run_button.property("navState") == ""
 
 
+def test_main_window_revert_button_highlights_on_revert_page(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    # Idle resting state: the revert nav keeps its warning tint.
+    assert window._revert_button.property("navState") == "warning"
+    # Navigating to the revert page lights it up like the other page nav.
+    window.show_revert()
+    assert window._revert_button.property("navState") == "active"
+    assert window._nav_dashboard.property("navState") == ""
+    # Leaving restores the warning tint, not a blank state.
+    window.show_dashboard()
+    assert window._revert_button.property("navState") == "warning"
+    assert window._nav_dashboard.property("navState") == "active"
+
+
 def test_main_window_actions_wired(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
