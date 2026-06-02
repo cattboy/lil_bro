@@ -20,6 +20,7 @@ from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import QApplication
 
 from src.gui import theme
+from src.gui._foreground import bring_to_foreground
 from src.gui.bridge import GuiBridge
 from src.gui.cap_notifier import CapNotifier
 from src.gui.pipeline_controller import PipelineController
@@ -269,6 +270,11 @@ def run(debug: bool = False) -> int:
     # Pump the queue once so the show event propagates and any already-queued
     # completer.on_finished event is delivered before we check startup_done.
     app.processEvents()
+
+    # Surface the main window. A bare show() can be denied by the Windows
+    # foreground-lock when the user clicked another app during the splash,
+    # leaving lil_bro behind other windows or only flashing in the taskbar.
+    bring_to_foreground(main)
 
     if not runtime.get("startup_done"):
         # Slow-path: on_finished has not fired yet. It will wire the monitor
