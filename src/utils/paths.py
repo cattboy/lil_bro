@@ -60,7 +60,8 @@ def get_backups_dir() -> Path:
     """Return ``./lil_bro_backups/``, creating it if needed.
 
     CWD-root directory — survives ``post_run_cleanup.py`` deletion of ``./lil_bro/``.
-    Used for NVIDIA .nip backups and the session manifest.
+    Holds the NVIDIA ``lil_bro_nv_profile_*.nip`` backups. (The session manifest
+    lives at the CWD root, not here — see ``get_session_backup_path``.)
     """
     d = Path.cwd() / "lil_bro_backups"
     d.mkdir(parents=True, exist_ok=True)
@@ -68,5 +69,11 @@ def get_backups_dir() -> Path:
 
 
 def get_session_backup_path() -> Path:
-    """Return the path to the session manifest: ``./lil_bro_backups/session_latest.json``."""
-    return get_backups_dir() / "session_latest.json"
+    """Return the session manifest path: ``./lil_bro_session_manifest.json`` (CWD root).
+
+    The manifest is the per-session revert record. It lives at the CWD root --
+    beside ``lil_bro_actions.log`` / ``lil_bro_debug.log`` and outside the
+    ``./lil_bro/`` working dir -- so it survives ``post_run_cleanup.py`` and is
+    easy to find next to the .exe.
+    """
+    return Path.cwd() / "lil_bro_session_manifest.json"

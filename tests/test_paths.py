@@ -6,6 +6,7 @@ from src.utils.paths import (
     get_specs_path,
     get_action_log_path,
     get_debug_log_path,
+    get_session_backup_path,
 )
 
 
@@ -56,3 +57,11 @@ def test_cwd_based_path(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     result = get_lil_bro_dir()
     assert result == Path.cwd() / "lil_bro"
+
+
+def test_get_session_backup_path(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    result = get_session_backup_path()
+    assert result.name == "lil_bro_session_manifest.json"
+    assert result == tmp_path / "lil_bro_session_manifest.json"  # CWD root, survives cleanup
+    assert "lil_bro_backups" not in str(result)  # no longer nested in a sub dir

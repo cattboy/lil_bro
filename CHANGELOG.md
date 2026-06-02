@@ -2,6 +2,14 @@
 
 All notable changes to lil_bro are documented here.
 
+## [Unreleased]
+
+### Changed
+- **Session manifest moved to the CWD root and renamed** — the per-session revert record now writes to `lil_bro_session_manifest.json` next to the `.exe` and the logs (`lil_bro_actions.log` / `lil_bro_debug.log`), instead of being buried in `./lil_bro_backups/session_latest.json`. Every persistent lil_bro sidecar at the root now shares the `lil_bro_` prefix. NVIDIA profile backups follow suit (`lil_bro_nv_profile_*.nip`), kept inside `./lil_bro_backups/`.
+- The Applied Fixes card's live-refresh watcher now watches the CWD root and guards on the manifest's `(mtime, size)` signature, so unrelated CWD activity (log writes, `_MEI*` / `./lil_bro/` temp dirs) no longer triggers a reload.
+
+---
+
 ## [0.2.0.0] - 2026-05-28
 
 ### Added
