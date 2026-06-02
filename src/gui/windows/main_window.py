@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -98,6 +99,34 @@ class MainWindow(QMainWindow):
             shortcut.activated.connect(self._on_stop_clicked)
             self._stop_shortcuts.append(shortcut)
 
+        # WASD navigation layer. A single app-level event filter maps
+        # W -> proceed (click the active surface's default button) and
+        # S -> back/escape (reject a dialog, or route here to _on_stop_clicked,
+        # mirroring the Esc/Q hotkeys above). Installed on the QApplication so
+        # it covers every screen and modal; the filter stays inert inside text
+        # fields. See src/gui/input/wasd_filter.py for the full contract.
+        from src.gui.input.wasd_filter import WASDInputFilter
+        self._wasd_filter = WASDInputFilter(self)
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self._wasd_filter)
+
+        # Page-nav hotkeys: 1 -> Dashboard, 2 -> Start Optimization. These
+        # .click() the sidebar buttons so they fire the buttons' full wiring
+        # (page switch + pipeline start), the same "drive the action" approach
+        # as the W/S filter. WindowShortcut scope means they fire only when the
+        # main window is active -- not while a modal dialog (which owns digits
+        # 1-9 for fix selection) has focus. _run_button is disabled mid-run via
+        # set_flow_controls, so pressing 2 then is a harmless no-op.
+        self._nav_shortcuts = []
+        for key, button in (
+            (Qt.Key.Key_1, self._nav_dashboard),
+            (Qt.Key.Key_2, self._run_button),
+        ):
+            shortcut = QShortcut(QKeySequence(key), self)
+            shortcut.activated.connect(button.click)
+            self._nav_shortcuts.append(shortcut)
+
     def _inject_status_bar(self, widget) -> None:
         """Pin the custom status bar widget to the bottom of the main window."""
         from PySide6.QtWidgets import QVBoxLayout
@@ -132,10 +161,10 @@ class MainWindow(QMainWindow):
         col.addWidget(brand)
 
         # Primary nav
-        self._run_button = self._nav_btn("▶  Start Optimization", accent=True)
-        self._stop_button = self._nav_btn("■  Stop (Esc)", state="danger")
+        self._run_button = self._nav_btn("▶  Start Optimization (2)", accent=True)
+        self._stop_button = self._nav_btn("■  Stop (Esc / S)", state="danger")
         self._stop_button.setVisible(False)
-        self._nav_dashboard = self._nav_btn("◆  Dashboard")
+        self._nav_dashboard = self._nav_btn("◆  Dashboard (1)")
         col.addWidget(self._nav_dashboard)
         col.addWidget(self._run_button)
         col.addWidget(self._stop_button)
@@ -272,7 +301,7 @@ class MainWindow(QMainWindow):
             self._run_button.setText("▣  Working…")
             self._run_button.setProperty("navState", "active")
         else:
-            self._run_button.setText("▶  Start Optimization")
+            self._run_button.setText("▶  Start Optimization (2)")
             self._run_button.setProperty("navState", "")
         repolish(self._run_button)
         self._stop_button.setVisible(running)

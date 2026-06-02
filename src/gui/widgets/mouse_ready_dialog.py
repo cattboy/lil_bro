@@ -49,7 +49,7 @@ class MouseReadyDialog(QDialog):
         desc_lbl.setWordWrap(True)
         layout.addWidget(desc_lbl)
 
-        ok_btn = QPushButton("OK — Start Moving Mouse")
+        ok_btn = QPushButton("OK — Start Moving Mouse (W)")
         ok_btn.setObjectName("primary")
         ok_btn.setDefault(True)
         ok_btn.clicked.connect(self.accept)

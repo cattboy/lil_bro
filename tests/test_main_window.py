@@ -263,3 +263,64 @@ def test_esc_shortcut_noop_when_idle(qtbot):
     esc_shortcut.activated.emit()
     qtbot.wait(50)
     assert received == [], "stop_requested fired while pipeline was idle"
+
+
+# ── Page-nav number hotkeys (1 = Dashboard, 2 = Start Optimization) ───────────
+
+def test_nav_shortcuts_use_window_scope(qtbot):
+    """1 and 2 are bound with WindowShortcut scope so modals keep their digits.
+
+    A modal BatchSelectionDialog owns digits 1-9 for fix selection; nav
+    shortcuts must not be application-wide or they would steal those keys.
+    """
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeySequence
+    window = MainWindow()
+    qtbot.addWidget(window)
+    assert len(window._nav_shortcuts) == 2
+    bound = set()
+    for shortcut in window._nav_shortcuts:
+        assert shortcut.context() == Qt.ShortcutContext.WindowShortcut
+        for key in (Qt.Key.Key_1, Qt.Key.Key_2):
+            if (shortcut.key().matches(QKeySequence(key))
+                    == QKeySequence.SequenceMatch.ExactMatch):
+                bound.add(key)
+    assert bound == {Qt.Key.Key_1, Qt.Key.Key_2}
+
+
+def test_nav_shortcut_1_shows_dashboard(qtbot):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeySequence
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show_output()
+    assert window._content.currentIndex() == MainWindow.OUTPUT_INDEX
+    shortcut = next(
+        s for s in window._nav_shortcuts
+        if s.key().matches(QKeySequence(Qt.Key.Key_1))
+        == QKeySequence.SequenceMatch.ExactMatch
+    )
+    shortcut.activated.emit()
+    assert window._content.currentIndex() == MainWindow.DASHBOARD_INDEX
+
+
+def test_nav_shortcut_2_shows_output(qtbot):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeySequence
+    window = MainWindow()
+    qtbot.addWidget(window)
+    assert window._content.currentIndex() == MainWindow.DASHBOARD_INDEX
+    shortcut = next(
+        s for s in window._nav_shortcuts
+        if s.key().matches(QKeySequence(Qt.Key.Key_2))
+        == QKeySequence.SequenceMatch.ExactMatch
+    )
+    shortcut.activated.emit()
+    assert window._content.currentIndex() == MainWindow.OUTPUT_INDEX
+
+
+def test_nav_buttons_show_number_hints(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    assert "(1)" in window._nav_dashboard.text()
+    assert "(2)" in window._run_button.text()

@@ -66,3 +66,34 @@ def test_default_check_state_all_selected(qtbot):
     qtbot.addWidget(dialog)
     assert dialog._fix_items[0].is_selected
     assert dialog._fix_items[1].is_selected
+
+
+def test_number_key_toggles_matching_fix(qtbot):
+    dialog = BatchSelectionDialog(_proposals(3))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QTest.qWait(10)
+    # Pressing "2" deselects the second fix (default is all-selected).
+    QTest.keyClick(dialog, Qt.Key.Key_2)
+    assert dialog._fix_items[1].is_selected is False
+    dialog._apply_btn.click()
+    QTest.qWait(10)
+    assert dialog.selected_indices() == [1, 3]
+
+
+def test_number_key_out_of_range_is_ignored(qtbot):
+    dialog = BatchSelectionDialog(_proposals(2))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QTest.qWait(10)
+    # Only two fixes -> "5" must not toggle anything or raise.
+    QTest.keyClick(dialog, Qt.Key.Key_5)
+    assert dialog._fix_items[0].is_selected
+    assert dialog._fix_items[1].is_selected
+
+
+def test_fix_item_shows_number_badge(qtbot):
+    dialog = BatchSelectionDialog(_proposals(3))
+    qtbot.addWidget(dialog)
+    assert dialog._fix_items[0]._num_lbl.text() == "1"
+    assert dialog._fix_items[2]._num_lbl.text() == "3"
