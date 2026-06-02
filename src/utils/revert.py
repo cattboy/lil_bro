@@ -209,9 +209,9 @@ def _write_manifest(manifest: dict) -> None:
     Writes to a ``.tmp`` sibling first, then ``os.replace`` swaps it in. A
     plain ``write_text`` is non-atomic on Windows (CreateFile -> WriteFile ->
     CloseHandle); a kill between WriteFile and CloseHandle leaves
-    ``session_latest.json`` truncated, and ``_read_raw_manifest`` then treats
-    the corrupt file as absent -- silently losing every revert entry from this
-    session.
+    ``lil_bro_session_manifest.json`` truncated, and ``_read_raw_manifest`` then
+    treats the corrupt file as absent -- silently losing every revert entry from
+    this session.
     """
     path = get_session_backup_path()
     tmp = path.with_name(path.name + ".tmp")

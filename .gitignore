@@ -44,6 +44,7 @@ dist/
 #logs
 lil_bro_actions.log
 lil_bro_debug.log
+lil_bro_session_manifest.json
 lil_bro.spec
 lil_bro_config.json
 

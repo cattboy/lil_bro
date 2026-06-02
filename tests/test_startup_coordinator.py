@@ -167,3 +167,46 @@ class TestRefreshMonitorCard:
         coord = _make_coordinator({})
         coord._on_refresh_failed("EnumDisplayDevicesW returned 0")
         coord._log.warning.assert_called_once()
+
+
+class TestManifestSignatureGuard:
+    """The Applied Fixes watcher (T-016) now watches the busy CWD root, so
+    _on_backups_changed reloads only when the manifest's (mtime_ns, size)
+    signature actually changes -- unrelated CWD churn (log writes, _MEI* and
+    ./lil_bro/ temp dirs) costs one os.stat, never a reload."""
+
+    def test_manifest_sig_returns_mtime_size_when_present(self, tmp_path):
+        manifest = tmp_path / "lil_bro_session_manifest.json"
+        manifest.write_text("{}")
+        coord = _make_coordinator({})
+        with patch("src.utils.paths.get_session_backup_path", return_value=manifest):
+            sig = coord._manifest_sig()
+        st = manifest.stat()
+        assert sig == (st.st_mtime_ns, st.st_size)
+
+    def test_manifest_sig_returns_none_when_absent(self, tmp_path):
+        missing = tmp_path / "nope.json"
+        coord = _make_coordinator({})
+        with patch("src.utils.paths.get_session_backup_path", return_value=missing):
+            assert coord._manifest_sig() is None
+
+    def test_backups_changed_skips_reload_when_signature_unchanged(self):
+        """Unrelated CWD activity: signature unchanged -> no debounce, no reload."""
+        coord = _make_coordinator({})
+        coord._last_run_watcher = None  # skip the defensive re-add branch
+        coord._last_run_debounce = MagicMock()
+        coord._last_manifest_sig = (111, 222)
+        with patch.object(coord, "_manifest_sig", return_value=(111, 222)):
+            coord._on_backups_changed("/cwd")
+        coord._last_run_debounce.start.assert_not_called()
+
+    def test_backups_changed_reloads_when_signature_changed(self):
+        """A real manifest write (or delete) changes the signature -> reload."""
+        coord = _make_coordinator({})
+        coord._last_run_watcher = None
+        coord._last_run_debounce = MagicMock()
+        coord._last_manifest_sig = (111, 222)
+        with patch.object(coord, "_manifest_sig", return_value=(333, 444)):
+            coord._on_backups_changed("/cwd")
+        coord._last_run_debounce.start.assert_called_once()
+        assert coord._last_manifest_sig == (333, 444)

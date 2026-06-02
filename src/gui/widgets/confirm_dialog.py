@@ -64,11 +64,11 @@ class ConfirmDialog(QDialog):
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
-        self.no_btn = QPushButton(no_label)
+        self.no_btn = QPushButton(f"{no_label} (S)")
         self.no_btn.setObjectName("secondary")
         self.no_btn.clicked.connect(self.reject)
 
-        self.yes_btn = QPushButton(yes_label)
+        self.yes_btn = QPushButton(f"{yes_label} (W)")
         self.yes_btn.setObjectName("primary")
         self.yes_btn.setDefault(True)
         self.yes_btn.clicked.connect(self.accept)
