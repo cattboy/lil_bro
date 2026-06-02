@@ -18,6 +18,7 @@ Usage:
 """
 
 import logging
+from logging.handlers import RotatingFileHandler
 
 from .paths import get_debug_log_path
 
@@ -37,7 +38,7 @@ def enable_debug_logging(level: int = logging.DEBUG) -> None:
     _logger = None  # Force re-init: module-level log = get_debug_logger() calls that
                     # fired before this (e.g. lhm_sidecar at import time) cached a
                     # NullHandler.  Resetting here lets get_debug_logger() attach the
-                    # FileHandler to the same logger instance, which all existing
+                    # handler to the same logger instance, which all existing
                     # references will immediately see (logging resolves by name).
 
 
@@ -63,7 +64,7 @@ def get_debug_logger() -> logging.Logger:
     # Debug mode: write to persistent log file at CWD root
     logger.setLevel(_debug_level)
     log_path = get_debug_log_path()
-    handler = logging.FileHandler(log_path, encoding="utf-8")
+    handler = RotatingFileHandler(log_path, maxBytes=50 * 1024 * 1024, backupCount=1, encoding="utf-8")
     handler.setLevel(_debug_level)
     handler.setFormatter(
         logging.Formatter(

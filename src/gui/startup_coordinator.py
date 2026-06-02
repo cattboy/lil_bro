@@ -43,6 +43,66 @@ class StartupCoordinator:
         self._log = log
         self._orchestrator = orchestrator
         self._pipeline = pipeline
+        # Applied Fixes card (T-016): a QFileSystemWatcher refreshes it live; a
+        # single-shot QTimer debounces the double directoryChanged per write.
+        self._last_run_watcher = None
+        self._last_run_debounce = None
+        self._init_last_run_watcher()
+
+    # ── Applied Fixes card (T-016) ──────────────────────────────────────
+
+    def _init_last_run_watcher(self) -> None:
+        """Watch the backups dir so the Applied Fixes card refreshes on every
+        manifest write (a fix) or delete (a revert).
+
+        Watches the *directory*, not the file: an atomic ``os.replace`` swaps the
+        inode and a file-level watch silently stops after the first change on
+        Windows. Each write fires ``directoryChanged`` twice (the ``.tmp`` create
+        then the rename), so a 150 ms single-shot timer collapses the pair into
+        one reload. Parented to the main window so Qt tears it down with it.
+        """
+        from PySide6.QtCore import QObject
+
+        # Unit tests construct the coordinator with a mock main; the real Qt
+        # watcher/timer require a genuine QObject parent. Skip there -- production
+        # always passes the MainWindow.
+        if not isinstance(self._main, QObject):
+            self._log.debug("Applied Fixes watcher skipped: main is not a QObject")
+            return
+        try:
+            from PySide6.QtCore import QFileSystemWatcher, QTimer
+            from src.utils.paths import get_backups_dir
+
+            backups_dir = str(get_backups_dir())  # creates the dir if missing
+            self._last_run_debounce = QTimer(self._main)
+            self._last_run_debounce.setSingleShot(True)
+            self._last_run_debounce.setInterval(150)
+            self._last_run_debounce.timeout.connect(self._reload_last_run)
+
+            self._last_run_watcher = QFileSystemWatcher([backups_dir], self._main)
+            self._last_run_watcher.directoryChanged.connect(self._on_backups_changed)
+        except Exception as exc:
+            self._log.warning("Applied Fixes watcher init failed: %s", exc, exc_info=True)
+
+    def _on_backups_changed(self, _path: str) -> None:
+        # Some platforms drop the watch after a delete/recreate; re-add defensively.
+        try:
+            from src.utils.paths import get_backups_dir
+            d = str(get_backups_dir())
+            if self._last_run_watcher is not None and d not in self._last_run_watcher.directories():
+                self._last_run_watcher.addPath(d)
+        except Exception:
+            pass  # best-effort re-add; the reload is still scheduled below
+        if self._last_run_debounce is not None:
+            self._last_run_debounce.start()
+
+    def _reload_last_run(self) -> None:
+        """Re-read the manifest and feed the Applied Fixes card (GUI thread)."""
+        try:
+            from src.utils.revert import load_manifest
+            self._main._revert_view.set_last_run(load_manifest())
+        except Exception as exc:
+            self._log.warning("Applied Fixes refresh failed: %s", exc, exc_info=True)
 
     # ── Orchestrator step / completion ─────────────────────────────────
 
@@ -114,6 +174,13 @@ class StartupCoordinator:
                 log.info("GUI Startup: monitor card wired (late-fire path)")
             except Exception as exc:
                 log.warning("Could not wire monitor card (late path): %s", exc, exc_info=True)
+
+        # Seed the Applied Fixes card (T-016). on_finished fires exactly once per
+        # session on both the fast and slow startup paths, so seeding here covers
+        # both without editing app.run(). The card is pre-allocated in
+        # RevertView.__init__; the QFileSystemWatcher keeps it fresh thereafter.
+        # Reuses _reload_last_run -- the same load_manifest + set_last_run path.
+        self._reload_last_run()
 
         log.info("GUI Startup: on_finished exit")
 

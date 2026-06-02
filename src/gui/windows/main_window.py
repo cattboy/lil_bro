@@ -38,6 +38,7 @@ class MainWindow(QMainWindow):
 
     DASHBOARD_INDEX = 0
     OUTPUT_INDEX = 1
+    REVERT_INDEX = 2
 
     # Emitted when the user requests cancellation of the running pipeline.
     # Connected to PipelineWorker.request_cancel in app.py. Fires from the
@@ -164,7 +165,17 @@ class MainWindow(QMainWindow):
         self._run_button.clicked.connect(self.show_output)
         self._stop_button.clicked.connect(self._on_stop_clicked)
         self._nav_log.clicked.connect(self._open_debug_log)
+        self._revert_button.clicked.connect(self.show_revert)
         self._nav_exit.clicked.connect(self.close)
+
+        # Page-nav buttons that share the single "active page" highlight, each
+        # paired with the navState it rests at when not the active page. The
+        # revert button keeps its warning tint when idle, not a blank state.
+        self._nav_pages = [
+            (self._nav_dashboard, ""),
+            (self._run_button, ""),
+            (self._revert_button, "warning"),
+        ]
 
         # Default active state
         self._set_nav_active(self._nav_dashboard)
@@ -182,8 +193,8 @@ class MainWindow(QMainWindow):
         return btn
 
     def _set_nav_active(self, active_btn: QPushButton) -> None:
-        for btn in (self._nav_dashboard, self._run_button):
-            state = "active" if btn is active_btn else ""
+        for btn, resting in self._nav_pages:
+            state = "active" if btn is active_btn else resting
             btn.setProperty("navState", state)
             repolish(btn)
 
@@ -192,6 +203,7 @@ class MainWindow(QMainWindow):
     def _build_content(self) -> QStackedWidget:
         from src.gui.widgets.dashboard import Dashboard
         from src.gui.widgets.output_view import OutputView
+        from src.gui.widgets.revert_view import RevertView
 
         stack = QStackedWidget()
         stack.setAccessibleName("Content area")
@@ -214,6 +226,10 @@ class MainWindow(QMainWindow):
         self._output_panel = self._output_view._output_panel
         stack.addWidget(self._output_view)
 
+        # ── Revert view ──────────────────────────────────────────────
+        self._revert_view = RevertView()
+        stack.addWidget(self._revert_view)
+
         stack.setCurrentIndex(self.DASHBOARD_INDEX)
         return stack
 
@@ -226,6 +242,10 @@ class MainWindow(QMainWindow):
     def show_output(self) -> None:
         self._content.setCurrentIndex(self.OUTPUT_INDEX)
         self._set_nav_active(self._run_button)
+
+    def show_revert(self) -> None:
+        self._content.setCurrentIndex(self.REVERT_INDEX)
+        self._set_nav_active(self._revert_button)
 
     # ── Benchmark score proxy (wired by app.py via benchmark_score_ready) ──
 

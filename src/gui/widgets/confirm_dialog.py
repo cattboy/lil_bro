@@ -19,7 +19,8 @@ from PySide6.QtWidgets import QHBoxLayout  # noqa: E402
 class ConfirmDialog(QDialog):
     """V2 confirm dialog: ⚡ accent icon, restore-point context, Yes/Skip buttons."""
 
-    def __init__(self, title: str, description: str = "", parent=None) -> None:
+    def __init__(self, title: str, description: str = "", parent=None,
+                 yes_label: str = "Yes, Continue", no_label: str = "Skip") -> None:
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setModal(True)
@@ -63,11 +64,11 @@ class ConfirmDialog(QDialog):
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
-        self.no_btn = QPushButton("Skip")
+        self.no_btn = QPushButton(no_label)
         self.no_btn.setObjectName("secondary")
         self.no_btn.clicked.connect(self.reject)
 
-        self.yes_btn = QPushButton("Yes, Continue")
+        self.yes_btn = QPushButton(yes_label)
         self.yes_btn.setObjectName("primary")
         self.yes_btn.setDefault(True)
         self.yes_btn.clicked.connect(self.accept)

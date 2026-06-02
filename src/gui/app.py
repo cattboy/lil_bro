@@ -21,11 +21,13 @@ from PySide6.QtWidgets import QApplication
 
 from src.gui import theme
 from src.gui.bridge import GuiBridge
+from src.gui.cap_notifier import CapNotifier
 from src.gui.pipeline_controller import PipelineController
 from src.gui.signals import PipelineSignals
 from src.gui.startup import StartupOrchestrator
 from src.gui.startup_coordinator import StartupCompleter, StartupCoordinator
 from src.gui.windows.main_window import MainWindow
+from src.utils.action_logger import action_logger
 
 
 def _install_exception_hooks(log) -> None:
@@ -221,9 +223,11 @@ def run(debug: bool = False) -> int:
     main._dashboard.stats_ready.connect(main._live_stat_row.apply_snapshot)
 
     # ── Nav button wiring ──────────────────────────────────────────────
-    main._run_button.clicked.connect(pipeline.start_pipeline)
-    main._revert_button.clicked.connect(pipeline.start_revert)
+    main._run_button.clicked.connect(pipeline.confirm_start_pipeline)
     main._ai_setup_button.clicked.connect(pipeline.open_ai_setup)
+    # Sidebar revert button navigates to the revert page (wired in _build_sidebar).
+    # The in-page revert action button triggers the actual revert run.
+    main._revert_view.revert_requested.connect(pipeline.start_revert)
 
     app.aboutToQuit.connect(
         lambda: _run_app_cleanup(main, bridge, runtime, log, settings, pawnio_was_preinstalled)
@@ -243,6 +247,19 @@ def run(debug: bool = False) -> int:
     completer_done = StartupCompleter(startup.on_finished, parent=main)
     runtime["_startup_completer"] = completer_done
     orchestrator.finished.connect(completer_done.on_finished, Qt.ConnectionType.QueuedConnection)
+
+    # Action-log cap → non-modal GUI warning. ActionLogger is Qt-free and runs on the
+    # pipeline worker thread; it emits log_cap_reached, whose queued slot shows the dialog
+    # on the main thread. Also route ActionLogger's text into the output panel — _echo_fn
+    # was previously wired only in CLI mode, so cap warnings were invisible in the GUI.
+    cap_notifier = CapNotifier(parent=main)
+    runtime["_cap_notifier"] = cap_notifier
+    bridge.signals.log_cap_reached.connect(
+        cap_notifier.show_cap_reached, Qt.ConnectionType.QueuedConnection
+    )
+    action_logger._gui_notify_fn = bridge.signals.log_cap_reached.emit
+    action_logger._echo_fn = bridge._emit_output
+
     thread.start()
 
     # Splash runs first; main window appears only after startup completes

@@ -132,3 +132,27 @@ def test_dump_system_specs_writes_json(
     assert "WMI" in data
     assert "NVIDIA" in data
     assert "CollectionTime" in data
+
+
+@patch("src.collectors.spec_dumper.get_wmi_specs", return_value={})
+@patch("src.collectors.spec_dumper.get_dxdiag", return_value={})
+@patch("src.collectors.spec_dumper.get_nvidia_smi", return_value=[])
+@patch("src.collectors.spec_dumper.get_amd_smi", return_value=[])
+@patch("src.collectors.spec_dumper.get_lhm_data", return_value={})
+@patch("src.collectors.spec_dumper.get_monitor_refresh_capabilities", return_value=[])
+@patch("src.collectors.spec_dumper.get_active_power_plan", return_value=("guid-abc", "High Performance"))
+@patch("src.collectors.spec_dumper.get_game_mode_status", return_value=True)
+@patch("src.collectors.spec_dumper.get_temp_sizes", return_value={"total_bytes": 0, "details": {}})
+@patch("src.collectors.spec_dumper.get_nvidia_profile", return_value={})
+def test_dump_system_specs_warns_on_large_file(
+    mock_nv_profile, mock_temps, mock_gms, mock_pp, mock_mon,
+    mock_lhm, mock_amd, mock_nv, mock_dx, mock_wmi, tmp_path
+):
+    from unittest.mock import patch as _patch, MagicMock
+    output_file = str(tmp_path / "specs.json")
+    mock_logger = MagicMock()
+    with _patch("src.collectors.spec_dumper.get_debug_logger", return_value=mock_logger), \
+         _patch("src.collectors.spec_dumper.os.path.getsize", return_value=11 * 1024 * 1024):
+        dump_system_specs(output_file)
+    warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
+    assert any("unexpectedly large" in c for c in warning_calls)
