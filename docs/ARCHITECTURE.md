@@ -10,6 +10,7 @@ src/
   _version.py            — Single source of truth for version string
   gui/                   — PySide6 desktop application
     app.py               — Application setup + app lifecycle
+    _foreground.py       — Surfaces the main window after splash close (Qt raise + Win32 AttachThreadInput/SetForegroundWindow, taskbar-flash fallback); isolated ctypes, no-op off-Windows
     pipeline_controller.py — Wires PipelineWorker signals to UI panels
     startup_coordinator.py — Manages splash → main window transition; owns dashboard fix threads
     bridge.py            — Qt signal bridge between pipeline and GUI
@@ -17,6 +18,8 @@ src/
     settings.py          — QSettings persistence (window geometry, preferences)
     startup.py           — Startup orchestrator worker (theme → settings → bridge → LLM → spec dump)
     worker.py            — PipelineWorker, _MonitorFixWorker, _MonitorRefreshWorker
+    input/               — App-wide keyboard navigation layer
+      wasd_filter.py     — WASDInputFilter: app-level event filter mapping W→proceed (clicks the active surface's default button) / S→back (dialog reject, or main-window stop); inert in text fields; installed on QApplication from MainWindow
     theme/               — QSS theme package
       __init__.py        — Public re-exports
       tokens.py          — Design token constants (colors, fonts, spacing)
@@ -108,7 +111,7 @@ src/
     subprocess_utils.py  — Centralized subprocess runner with timeout and error handling
     pawnio_check.py      — PawnIO kernel driver installation detection (registry check)
 build.py               — Automated build pipeline (5 steps: PawnIO update → lhm-server → PyInstaller → integrity manifest)
-lil_bro.spec           — PyInstaller onefile build specification (hiddenimports covers all src/gui/widgets/*)
+lil_bro.spec           — PyInstaller onefile build specification (hiddenimports covers all src/gui/widgets/* plus the lazily-imported src/gui/input/wasd_filter)
 install_deps.ps1       — One-command dev setup (Python, uv, .NET 8, WDK, submodules)
 tools/
   PawnIO/              — PawnIO kernel driver source + WDK build script (fallback path)
