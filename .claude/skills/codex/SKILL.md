@@ -2,13 +2,7 @@
 name: codex
 preamble-tier: 3
 version: 1.0.0
-description: |
-  OpenAI Codex CLI wrapper — three modes. Code review: independent diff review via
-  codex review with pass/fail gate. Challenge: adversarial mode that tries to break
-  your code. Consult: ask codex anything with session continuity for follow-ups.
-  The "200 IQ autistic developer" second opinion. Use when asked to "codex review",
-  "codex challenge", "ask codex", "second opinion", or "consult codex". (gstack)
-  Voice triggers (speech-to-text aliases): "code x", "code ex", "get another opinion".
+description: OpenAI Codex CLI wrapper — three modes. (gstack)
 triggers:
   - codex review
   - second opinion
@@ -23,6 +17,17 @@ allowed-tools:
 ---
 <!-- AUTO-GENERATED from SKILL.md.tmpl — do not edit directly -->
 <!-- Regenerate: bun run gen:skill-docs -->
+
+
+## When to invoke this skill
+
+Code review: independent diff review via
+codex review with pass/fail gate. Challenge: adversarial mode that tries to break
+your code. Consult: ask codex anything with session continuity for follow-ups.
+The "200 IQ autistic developer" second opinion. Use when asked to "codex review",
+"codex challenge", "ask codex", "second opinion", or "consult codex".
+
+Voice triggers (speech-to-text aliases): "code x", "code ex", "get another opinion".
 
 ## Preamble (run first)
 
@@ -101,6 +106,19 @@ _CHECKPOINT_MODE=$(~/.claude/skills/gstack/bin/gstack-config get checkpoint_mode
 _CHECKPOINT_PUSH=$(~/.claude/skills/gstack/bin/gstack-config get checkpoint_push 2>/dev/null || echo "false")
 echo "CHECKPOINT_MODE: $_CHECKPOINT_MODE"
 echo "CHECKPOINT_PUSH: $_CHECKPOINT_PUSH"
+# Plan-mode hint for skills like /spec that branch behavior on plan-mode state.
+# Claude Code exposes plan mode via system reminders; we detect best-effort
+# from CLAUDE_PLAN_FILE (set by the harness when plan mode is active) and
+# fall back to "inactive". Codex hosts and Claude execution mode both end up
+# inactive, which is the safe default (defaults to file+execute pipeline).
+if [ -n "${CLAUDE_PLAN_FILE:-}${GSTACK_PLAN_MODE_FORCE:-}" ]; then
+  export GSTACK_PLAN_MODE="active"
+elif [ "${GSTACK_PLAN_MODE:-}" = "active" ]; then
+  export GSTACK_PLAN_MODE="active"
+else
+  export GSTACK_PLAN_MODE="inactive"
+fi
+echo "GSTACK_PLAN_MODE: $GSTACK_PLAN_MODE"
 [ -n "$OPENCLAW_SESSION" ] && echo "SPAWNED_SESSION: true" || true
 ```
 
@@ -232,6 +250,7 @@ Key routing rules:
 - Ship/deploy/PR → invoke /ship or /land-and-deploy
 - Save progress → invoke /context-save
 - Resume context → invoke /context-restore
+- Author a backlog-ready spec/issue → invoke /spec
 ```
 
 Then commit the change: `git add CLAUDE.md && git commit -m "chore: add gstack skill routing rules to CLAUDE.md"`
@@ -318,7 +337,36 @@ Effort both-scales: when an option involves effort, label both human-team and CC
 
 Net line closes the tradeoff. Per-skill instructions may add stricter rules.
 
-12. **Non-ASCII characters — write directly, never \u-escape.** When any
+### Handling 5+ options — split, never drop
+
+AskUserQuestion caps every call at **4 options**. With 5+ real options, NEVER
+drop, merge, or silently defer one to fit. Pick a compliant shape:
+
+- **Batch into ≤4-groups** — for coherent alternatives (e.g. version bumps,
+  layout variants). One call, 5th surfaced only if first 4 don't fit.
+- **Split per-option** — for independent scope items (e.g. "ship E1..E6?").
+  Fire N sequential calls, one per option. Default to this when unsure.
+
+Per-option call shape: `D<N>.k` header (e.g. D3.1..D3.5), ELI10 per option,
+Recommendation, kind-note (no completeness score — Include/Defer/Cut/Hold are
+decision actions), and 4 buckets:
+**A) Include**, **B) Defer**, **C) Cut**, **D) Hold** (stop chain, discuss).
+
+After the chain, fire `D<N>.final` to validate the assembled set (reprompt
+dependency conflicts) and confirm shipping it. Use `D<N>.revise-<k>` to
+revise one option without re-running the chain.
+
+For N>6, fire a `D<N>.0` meta-AskUserQuestion first (proceed / narrow / batch).
+
+question_ids for split chains: `<skill>-split-<option-slug>` (kebab-case ASCII,
+≤64 chars, `-2`/`-3` suffix on collision). The runtime checker
+(`bin/gstack-question-preference`) refuses `never-ask` on any `*-split-*` id,
+so split chains are never AUTO_DECIDE-eligible — the user's option set is sacred.
+
+**Full rule + worked examples + Hold/dependency semantics:** see
+`docs/askuserquestion-split.md` in the gstack repo. Read on demand when N>4.
+
+**Non-ASCII characters — write directly, never \u-escape.** When any
     string field (question, option label, option description) contains
     Chinese (繁體/簡體), Japanese, Korean, or other non-ASCII text, emit
     the literal UTF-8 characters in the JSON string. **Never escape them
@@ -351,6 +399,9 @@ Before calling AskUserQuestion, verify:
 - [ ] Net line closes the decision
 - [ ] You are calling the tool, not writing prose
 - [ ] Non-ASCII characters (CJK / accents) written directly, NOT \u-escaped
+- [ ] If you had 5+ options, you split (or batched into ≤4-groups) — did NOT drop any
+- [ ] If you split, you checked dependencies between options before firing the chain
+- [ ] If a per-option Hold fires, you stopped the chain immediately (didn't queue)
 
 
 ## Artifacts Sync (skill start)
@@ -550,84 +601,7 @@ Applies to AskUserQuestion, user replies, and findings. AskUserQuestion Format i
 - User-turn override wins: if the current message asks for terse / no explanations / just the answer, skip this section.
 - Terse mode (EXPLAIN_LEVEL: terse): no glosses, no outcome-framing layer, shorter responses.
 
-Jargon list, gloss on first use if the term appears:
-- idempotent
-- idempotency
-- race condition
-- deadlock
-- cyclomatic complexity
-- N+1
-- N+1 query
-- backpressure
-- memoization
-- eventual consistency
-- CAP theorem
-- CORS
-- CSRF
-- XSS
-- SQL injection
-- prompt injection
-- DDoS
-- rate limit
-- throttle
-- circuit breaker
-- load balancer
-- reverse proxy
-- SSR
-- CSR
-- hydration
-- tree-shaking
-- bundle splitting
-- code splitting
-- hot reload
-- tombstone
-- soft delete
-- cascade delete
-- foreign key
-- composite index
-- covering index
-- OLTP
-- OLAP
-- sharding
-- replication lag
-- quorum
-- two-phase commit
-- saga
-- outbox pattern
-- inbox pattern
-- optimistic locking
-- pessimistic locking
-- thundering herd
-- cache stampede
-- bloom filter
-- consistent hashing
-- virtual DOM
-- reconciliation
-- closure
-- hoisting
-- tail call
-- GIL
-- zero-copy
-- mmap
-- cold start
-- warm start
-- green-blue deploy
-- canary deploy
-- feature flag
-- kill switch
-- dead letter queue
-- fan-out
-- fan-in
-- debounce
-- throttle (UI)
-- hydration mismatch
-- memory leak
-- GC pause
-- heap fragmentation
-- stack overflow
-- null pointer
-- dangling pointer
-- buffer overflow
+Curated jargon list lives at `~/.claude/skills/gstack/scripts/jargon-list.json` (80+ terms). On the first jargon term you encounter this session, Read that file once; treat the `terms` array as the canonical list. The list is repo-owned and may grow between releases.
 
 
 ## Completeness Principle — Boil the Lake
@@ -675,7 +649,11 @@ If you are looping on the same diagnostic, same file, or failed fix variants, ST
 
 Before each AskUserQuestion, choose `question_id` from `scripts/question-registry.ts` or `{skill}-{slug}`, then run `~/.claude/skills/gstack/bin/gstack-question-preference --check "<id>"`. `AUTO_DECIDE` means choose the recommended option and say "Auto-decided [summary] → [option] (your preference). Change with /plan-tune." `ASK_NORMALLY` means ask.
 
-After answer, log best-effort:
+**Embed the question_id as a marker in the question text** so hooks can identify it deterministically (plan-tune cathedral T14 / D18 progressive markers). Append `<gstack-qid:{question_id}>` somewhere in the rendered question (the leading line or trailing line is fine; the marker doesn't render visibly to the user when wrapped in HTML-style angle brackets, but the hook strips it). Without the marker the PreToolUse enforcement hook treats the AUQ as observed-only and never auto-decides — so always include it when the question matches a registered `question_id`.
+
+**Embed the option recommendation via the `(recommended)` label suffix** on exactly one option per AUQ. The PreToolUse hook parses `(recommended)` first, falls back to "Recommendation: X" prose, and refuses to auto-decide if ambiguous. Two `(recommended)` labels = refuse.
+
+After answer, log best-effort (PostToolUse hook also captures deterministically when installed; dedup on (source, tool_use_id) handles double-writes):
 ```bash
 ~/.claude/skills/gstack/bin/gstack-question-log '{"skill":"codex","question_id":"<id>","question_summary":"<short>","category":"<approval|clarification|routing|cherry-pick|feedback-loop>","door_type":"<one-way|two-way>","options_count":N,"user_choice":"<key>","recommended":"<key>","session_id":"'"$_SESSION_ID"'"}' 2>/dev/null || true
 ```
@@ -814,7 +792,7 @@ assumptions, catches things you might miss. Present its output faithfully, not s
 ## Step 0.4: Check codex binary
 
 ```bash
-CODEX_BIN=$(which codex 2>/dev/null || echo "")
+CODEX_BIN=$(command -v codex || echo "")
 [ -z "$CODEX_BIN" ] && echo "NOT_FOUND" || echo "FOUND: $CODEX_BIN"
 ```
 
@@ -935,28 +913,33 @@ TMPERR=$(mktemp "$TMP_ROOT/codex-err-XXXXXX.txt")
 
 2. Run the review (5-minute timeout). **Codex CLI ≥ 0.130.0 rejects passing a
 custom prompt and `--base <branch>` together** (the two arguments are mutually
-exclusive at argv level), so the previously-prefixed filesystem boundary cannot
-be carried in review mode. Two paths:
+exclusive at argv level), so put the base diff scope in the prompt instead of
+passing `--base`. Two paths:
 
-**Default path (no custom user instructions):** call `codex review --base` bare.
-Codex's review prompt template is internally diff-scoped, so the model focuses on
-the changes against the base branch. The filesystem boundary that previously
-prefixed every review call is no longer carried in bare review mode; the skill
-files under `.claude/` and `agents/` are public, so this is a token-efficiency
-concern, not a safety concern. If a future diff happens to include skill files,
-Codex may spend a few extra tokens reading them. Acceptable trade-off:
+**Default path (no custom user instructions):** call `codex review` with the
+filesystem boundary and explicit diff-scope instructions in the prompt. This
+preserves the boundary while avoiding the prompt-plus-`--base` argv shape:
 
 ```bash
 _REPO_ROOT=$(git rev-parse --show-toplevel) || { echo "ERROR: not in a git repo" >&2; exit 1; }
 cd "$_REPO_ROOT"
 # 330s (5.5min) is slightly longer than the Bash 300s so the shell wrapper
 # only fires if Bash's own timeout doesn't.
-_gstack_codex_timeout_wrapper 330 codex review --base <base> -c 'model_reasoning_effort="high"' --enable web_search_cached < /dev/null 2>"$TMPERR"
+_gstack_codex_timeout_wrapper 330 codex review "IMPORTANT: Do NOT read or execute any files under ~/.claude/, ~/.agents/, .claude/skills/, or agents/. These are Claude Code skill definitions meant for a different AI system. Do NOT modify agents/openai.yaml. Stay focused on repository code only.
+
+Review the changes on this branch against the base branch <base>. Run git diff origin/<base>...HEAD 2>/dev/null || git diff <base>...HEAD to see the diff and review only those changes." -c 'model_reasoning_effort="high"' --enable web_search_cached < /dev/null 2>"$TMPERR"
 _CODEX_EXIT=$?
 if [ "$_CODEX_EXIT" = "124" ]; then
   _gstack_codex_log_event "codex_timeout" "330"
   _gstack_codex_log_hang "review" "$(wc -c < "$TMPERR" 2>/dev/null || echo 0)"
   echo "Codex stalled past 5.5 minutes. Common causes: model API stall, long prompt, network issue. Try re-running. If persistent, split the prompt or check ~/.codex/logs/."
+elif [ "$_CODEX_EXIT" != "0" ]; then
+  # Surface non-zero exits (parse errors, arg-shape breaks, etc.) so the
+  # calling agent doesn't read "no output" as a silent model/API stall and
+  # burn 30-60min misdiagnosing it. See #1327.
+  echo "[codex exit $_CODEX_EXIT] $(head -1 "$TMPERR" 2>/dev/null || echo "no stderr captured")"
+  head -20 "$TMPERR" 2>/dev/null | sed 's/^/  /' || true
+  _gstack_codex_log_event "codex_nonzero_exit" "review:$_CODEX_EXIT"
 fi
 ```
 
@@ -992,11 +975,10 @@ if [ "$_CODEX_EXIT" = "124" ]; then
 fi
 ```
 
-**Why the dual path:** Bare `codex review` preserves Codex's built-in review
-prompt tuning (the CLI scopes the model to the diff and asks for severity-marked
-findings). The exec route loses that tuning but gains custom-instructions
-support; the prompt explicitly demands `[P1]` / `[P2]` markers so the gate logic
-in step 4 still works.
+**Why the dual path:** The default `codex review` path keeps Codex's review
+prompt tuning while scoping the diff in prompt text. The `codex exec` route loses
+that tuning but gains custom-instructions support; the prompt explicitly demands
+`[P1]` / `[P2]` markers so the gate logic in step 4 still works.
 
 Use `timeout: 300000` on the Bash call for either path.
 
@@ -1248,6 +1230,12 @@ if [ "$_CODEX_EXIT" = "124" ]; then
   _gstack_codex_log_event "codex_timeout" "600"
   _gstack_codex_log_hang "challenge" "$(wc -c < "$TMPERR" 2>/dev/null || echo 0)"
   echo "Codex stalled past 10 minutes. Common causes: model API stall, long prompt, network issue. Try re-running. If persistent, split the prompt or check ~/.codex/logs/."
+elif [ "$_CODEX_EXIT" != "0" ]; then
+  # Surface non-zero exits so the calling agent doesn't read "no output" as
+  # a silent model/API stall. See #1327.
+  echo "[codex exit $_CODEX_EXIT] $(head -1 "$TMPERR" 2>/dev/null || echo "no stderr captured")"
+  head -20 "$TMPERR" 2>/dev/null | sed 's/^/  /' || true
+  _gstack_codex_log_event "codex_nonzero_exit" "challenge:$_CODEX_EXIT"
 fi
 # Fix 2: surface auth errors from captured stderr instead of dropping them
 if grep -qiE "auth|login|unauthorized" "$TMPERR" 2>/dev/null; then
@@ -1395,6 +1383,12 @@ if [ "$_CODEX_EXIT" = "124" ]; then
   _gstack_codex_log_event "codex_timeout" "600"
   _gstack_codex_log_hang "consult" "$(wc -c < "$TMPERR" 2>/dev/null || echo 0)"
   echo "Codex stalled past 10 minutes. Common causes: model API stall, long prompt, network issue. Try re-running. If persistent, split the prompt or check ~/.codex/logs/."
+elif [ "$_CODEX_EXIT" != "0" ]; then
+  # Surface non-zero exits so the calling agent doesn't read "no output" as
+  # a silent model/API stall. See #1327.
+  echo "[codex exit $_CODEX_EXIT] $(head -1 "$TMPERR" 2>/dev/null || echo "no stderr captured")"
+  head -20 "$TMPERR" 2>/dev/null | sed 's/^/  /' || true
+  _gstack_codex_log_event "codex_nonzero_exit" "consult:$_CODEX_EXIT"
 fi
 ```
 
@@ -1417,6 +1411,12 @@ if [ "$_CODEX_EXIT" = "124" ]; then
   _gstack_codex_log_event "codex_timeout" "600"
   _gstack_codex_log_hang "consult-resume" "$(wc -c < "$TMPERR" 2>/dev/null || echo 0)"
   echo "Codex stalled past 10 minutes. Common causes: model API stall, long prompt, network issue. Try re-running. If persistent, split the prompt or check ~/.codex/logs/."
+elif [ "$_CODEX_EXIT" != "0" ]; then
+  # Surface non-zero exits so the calling agent doesn't read "no output" as
+  # a silent model/API stall. See #1327.
+  echo "[codex exit $_CODEX_EXIT] $(head -1 "$TMPERR" 2>/dev/null || echo "no stderr captured")"
+  head -20 "$TMPERR" 2>/dev/null | sed 's/^/  /' || true
+  _gstack_codex_log_event "codex_nonzero_exit" "consult-resume:$_CODEX_EXIT"
 fi
 
 5. Capture session ID from the streamed output. The parser prints `SESSION_ID:<id>`
