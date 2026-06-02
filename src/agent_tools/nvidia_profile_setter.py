@@ -31,7 +31,7 @@ def backup_nvidia_profile(npi_exe: str) -> str:
     """Export current profile and copy to backup directory. Returns backup path."""
     backup_dir = get_backups_dir()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_name = f"nv_profile_{timestamp}.nip"
+    backup_name = f"lil_bro_nv_profile_{timestamp}.nip"
     backup_path = backup_dir / backup_name
 
     with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as tmpdir:

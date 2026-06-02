@@ -37,10 +37,10 @@ class ApprovalDialog(QDialog):
 
         buttons = QDialogButtonBox(self)
         self.approve_btn: QPushButton = buttons.addButton(
-            "Approve", QDialogButtonBox.ButtonRole.AcceptRole
+            "Approve (W)", QDialogButtonBox.ButtonRole.AcceptRole
         )
         self.deny_btn: QPushButton = buttons.addButton(
-            "Deny", QDialogButtonBox.ButtonRole.RejectRole
+            "Deny (S)", QDialogButtonBox.ButtonRole.RejectRole
         )
         self.approve_btn.setObjectName("primary")
         self.approve_btn.setDefault(True)

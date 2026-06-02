@@ -125,3 +125,16 @@ def test_disabled_no_duplicate_handlers(tmp_path):
     # NullHandler only — never more than one
     assert len(logger.handlers) == 1
     assert isinstance(logger.handlers[0], logging.NullHandler)
+
+
+def test_logger_uses_rotating_file_handler(tmp_path):
+    from logging.handlers import RotatingFileHandler
+    from src.utils.debug_logger import enable_debug_logging, get_debug_logger
+
+    enable_debug_logging()
+    log = get_debug_logger()
+
+    rotating = [h for h in log.handlers if isinstance(h, RotatingFileHandler)]
+    assert len(rotating) == 1
+    assert rotating[0].maxBytes == 50 * 1024 * 1024
+    assert rotating[0].backupCount == 1

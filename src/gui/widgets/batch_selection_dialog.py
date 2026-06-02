@@ -6,6 +6,9 @@ single-line prompt with a checkable list + three actions:
 - Apply selected → return the list of selected 1-based indices
 - Apply all → return ``[1..n]``
 - Skip / Esc → return ``[]``
+
+Each row is numbered (1-based) to mirror the CLI list; pressing the matching
+digit key (1-9) toggles that fix's selection.
 """
 
 from __future__ import annotations
@@ -46,6 +49,15 @@ class _FixItem(QFrame):
         row = QHBoxLayout(self)
         row.setContentsMargins(12, 10, 12, 10)
         row.setSpacing(10)
+
+        # 1-based option number, mirroring the CLI's numbered batch list
+        # ("1 3"). Pressing the matching digit toggles this row -- see
+        # BatchSelectionDialog.keyPressEvent.
+        self._num_lbl = QLabel(str(idx + 1))
+        self._num_lbl.setObjectName("fixNum")
+        self._num_lbl.setFixedSize(22, 22)
+        self._num_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        row.addWidget(self._num_lbl, alignment=Qt.AlignmentFlag.AlignTop)
 
         self._check_lbl = QLabel("✓")
         self._check_lbl.setObjectName("checkBox")
@@ -146,7 +158,7 @@ class BatchSelectionDialog(QDialog):
 
         count = len(proposals)
         subtitle = QLabel(f"lil_bro identified {count} improvement{'s' if count != 1 else ''}. "
-                          f"Select which to apply:")
+                          f"Click a row or press its number (1-9) to toggle:")
         subtitle.setObjectName("dlgSubtitle")
         subtitle.setWordWrap(True)
         body_layout.addWidget(subtitle)
@@ -168,11 +180,11 @@ class BatchSelectionDialog(QDialog):
         foot_row.setSpacing(8)
         foot_row.addStretch()
 
-        self._skip_btn = QPushButton("Skip All")
+        self._skip_btn = QPushButton("Skip All (S)")
         self._skip_btn.setObjectName("secondary")
         self._skip_btn.clicked.connect(self._on_cancel)
 
-        self._apply_btn = QPushButton(f"Apply {count} Selected")
+        self._apply_btn = QPushButton(f"Apply {count} Selected (W)")
         self._apply_btn.setObjectName("primary")
         self._apply_btn.setDefault(True)
         self._apply_btn.clicked.connect(self._on_apply_selected)
@@ -187,7 +199,7 @@ class BatchSelectionDialog(QDialog):
     def _on_item_toggled(self, idx: int) -> None:
         self._selected[idx] = self._fix_items[idx].is_selected
         count = sum(self._selected)
-        self._apply_btn.setText(f"Apply {count} Selected")
+        self._apply_btn.setText(f"Apply {count} Selected (W)")
         self._apply_btn.setEnabled(count > 0)
 
     # ── Result accessors ───────────────────────────────────────────────
@@ -208,7 +220,16 @@ class BatchSelectionDialog(QDialog):
         self.reject()
 
     def keyPressEvent(self, event):  # noqa: N802
-        if event.key() == Qt.Key.Key_Escape:
+        key = event.key()
+        if key == Qt.Key.Key_Escape:
             self._on_cancel()
             return
+        # Number keys 1-9 toggle the matching fix, mirroring the CLI's "1 3"
+        # batch input. Lists longer than 9 fall through past the 9th row --
+        # those rows stay toggleable by mouse / the W (apply) shortcut.
+        if Qt.Key.Key_1 <= key <= Qt.Key.Key_9:
+            idx = key - Qt.Key.Key_1
+            if idx < len(self._fix_items):
+                self._fix_items[idx].toggle()
+                return
         super().keyPressEvent(event)

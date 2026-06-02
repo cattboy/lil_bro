@@ -96,7 +96,8 @@ def _qss_poll(c: dict[str, str]) -> str:
      * frame selector needs widening. */
     QFrame#pollWidget,
     QFrame#monitorCard,
-    QFrame#monitorEmptyCard {{
+    QFrame#monitorEmptyCard,
+    QFrame#lastRunCard {{
         background-color: {c["surface"]};
         border: 1px solid {c["border_default"]};
         border-radius: 8px;

@@ -118,6 +118,17 @@ def _qss_batch_dialog(c: dict[str, str]) -> str:
         color: {c["text_muted"]};
         border: 1px solid {c["border_default"]};
     }}
+    QLabel#fixNum {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 12px;
+        font-weight: 600;
+        color: {c["text_muted"]};
+        min-width: 20px;
+        min-height: 20px;
+        border: 1px solid {c["border_default"]};
+        border-radius: 4px;
+        padding: 1px 4px;
+    }}
 """
 
 

@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime
 
 from .sub.amd_smi_dumper import get_amd_smi
@@ -67,6 +68,15 @@ def dump_system_specs(output_path: str | None = None) -> str:
     try:
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(specs, f, indent=2, default=str)
+        try:
+            size_mb = os.path.getsize(output_path) / (1024 * 1024)
+            if size_mb > 10:
+                get_debug_logger().warning(
+                    "full_specs.json is %.1f MB — unexpectedly large; check for collector anomaly",
+                    size_mb,
+                )
+        except OSError:
+            pass
         get_debug_logger().info("System specs saved to %s", output_path)
         print_step_done(True)
         return output_path
