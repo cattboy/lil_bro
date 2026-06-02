@@ -2,11 +2,19 @@
 
 All notable changes to lil_bro are documented here.
 
-## [Unreleased]
+## [0.3.0.0] - 2026-06-02
+
+### Added
+- **WASD navigation layer** — a single application-level event filter maps `W` → proceed (clicks the active surface's default button) and `S` → back/escape (rejects a dialog, or routes the main window to the same Stop path `Esc` triggers), app-wide. It drives the existing actions rather than synthesizing key events, and stays inert while a text field (`QLineEdit` / `QTextEdit` / editable `QComboBox`) has focus, so typing "wasd" never navigates. Proceed/back controls now show `(W)` / `(S)` hints. See `src/gui/input/wasd_filter.py`.
+- **Number-key fix selection** — rows in the batch fix dialog are numbered 1-9; pressing the matching digit toggles that fix, mirroring the CLI's "1 3" batch input.
+- **Page-nav hotkeys** — `1` jumps to the Dashboard, `2` to Start Optimization (hints shown on the nav buttons). `WindowShortcut`-scoped, so modal dialogs keep digits 1-9 for fix selection.
 
 ### Changed
 - **Session manifest moved to the CWD root and renamed** — the per-session revert record now writes to `lil_bro_session_manifest.json` next to the `.exe` and the logs (`lil_bro_actions.log` / `lil_bro_debug.log`), instead of being buried in `./lil_bro_backups/session_latest.json`. Every persistent lil_bro sidecar at the root now shares the `lil_bro_` prefix. NVIDIA profile backups follow suit (`lil_bro_nv_profile_*.nip`), kept inside `./lil_bro_backups/`.
 - The Applied Fixes card's live-refresh watcher now watches the CWD root and guards on the manifest's `(mtime, size)` signature, so unrelated CWD activity (log writes, `_MEI*` / `./lil_bro/` temp dirs) no longer triggers a reload.
+
+### Fixed
+- **Main window now reliably comes to the foreground** after the splash closes — a Win32 `AttachThreadInput` + `SetForegroundWindow` sequence (with a taskbar-flash fallback) defeats the Windows foreground-lock that previously left lil_bro behind other windows, or only flashing in the taskbar, when the user clicked another app during the multi-second splash. Silent no-op off-Windows. See `src/gui/_foreground.py`.
 
 ---
 
