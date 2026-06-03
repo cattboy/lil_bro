@@ -219,3 +219,71 @@ def fix_nvidia_profile(
 
     action_logger.log_action("NPI Fix", "FAILED", msg)
     raise SetterError(f"Profile import failed -- original profile preserved at {backup_path}. Error: {msg}")
+
+
+def fix_nvidia_dlss_preset(
+    specs: dict,
+    gpu_generation: str | None = None,
+    pre_backup_path: str | None = None,
+) -> bool:
+    """Apply ONLY the per-GPU DLSS preset (Forced Model Preset = Custom + letter).
+
+    Mirrors ``fix_nvidia_profile`` but writes just the two DLSS SettingIDs,
+    leaving every other driver-profile setting untouched.
+
+    Args:
+        specs: Full system specs dict.
+        gpu_generation: Override for GPU gen like "50" (auto-detected if None).
+        pre_backup_path: Path to an already-created backup .nip. If provided,
+            the internal backup step is skipped (avoids duplicate exports).
+
+    Returns True on success.
+
+    Raises:
+        FileNotFoundError: NPI binary not found.
+        SetterError: GPU generation has no DLSS preset mapping, or import failed.
+    """
+    npi_exe = find_npi_exe()
+    if npi_exe is None:
+        raise FileNotFoundError("NVIDIA Profile Inspector binary not found")
+
+    if gpu_generation is None:
+        nvidia = specs.get("NVIDIA", [])
+        gpu_name = nvidia[0].get("GPU", "") if isinstance(nvidia, list) and nvidia else ""
+        gpu_generation = _get_gpu_generation(gpu_name)
+    if not gpu_generation or gpu_generation not in DLSS_PRESETS:
+        raise SetterError(f"No DLSS preset mapping for GPU generation: {gpu_generation!r}")
+
+    if pre_backup_path is not None:
+        backup_path = pre_backup_path
+    else:
+        backup_path = backup_nvidia_profile(npi_exe)
+        action_logger.log_action("NPI DLSS Fix", "Backup created", backup_path)
+
+    with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as tmpdir:
+        source_nip, _ = export_current_profile(npi_exe, tmpdir)
+
+        letter, dlss_hex = DLSS_PRESETS[gpu_generation]
+        target: dict[int, int] = {
+            SETTING_IDS["dlss_preset_profile"]: TARGET_VALUES["dlss_preset_profile"],
+            SETTING_IDS["dlss_preset_letter"]: dlss_hex,
+        }
+
+        modified_nip = build_optimized_nip(source_nip, target)
+
+    try:
+        ok, msg = apply_nvidia_profile(npi_exe, modified_nip)
+    finally:
+        try:
+            os.unlink(modified_nip)
+        except OSError:
+            pass
+
+    if ok:
+        action_logger.log_action("NPI DLSS Fix", "Applied", f"DLSS={letter} (gen {gpu_generation})")
+        return True
+
+    action_logger.log_action("NPI DLSS Fix", "FAILED", msg)
+    raise SetterError(
+        f"DLSS preset import failed -- original profile preserved at {backup_path}. Error: {msg}"
+    )

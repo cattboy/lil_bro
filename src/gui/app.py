@@ -98,6 +98,17 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
         except Exception:
             pass  # safe: monitor-fix-on-quit best-effort
 
+    # Same rationale for an in-flight NVIDIA card fix (_NvidiaProfileFixWorker:
+    # NPI .nip import + manifest append, possibly a restore point). 3 s lets the
+    # worker land its manifest entry before LHM teardown so the fix is reflected
+    # in the next session's Revert.
+    nvidia_fix_thread = runtime.get("nvidia_fix_thread")
+    if nvidia_fix_thread is not None:
+        try:
+            nvidia_fix_thread.wait(3000)
+        except Exception:
+            pass  # safe: nvidia-fix-on-quit best-effort
+
     # Wait for an in-flight monitor refresh (200-800 ms ctypes
     # EnumDisplayDevicesW probe) so we don't tear down Qt while the
     # worker thread is mid-syscall. Short wait -- this is read-only work,
@@ -308,6 +319,8 @@ def run(debug: bool = False) -> int:
             main._dashboard.set_monitor_data(_specs.get("DisplayCapabilities", []))
             main._dashboard.monitor_fix_requested.connect(startup.on_monitor_fix_requested)
             main._dashboard.monitor_refresh_requested.connect(startup.refresh_monitor_card)
+            main._dashboard.set_nvidia_data(_specs.get("NVIDIA", []))
+            main._dashboard.nvidia_fix_requested.connect(startup.on_nvidia_fix_requested)
             runtime["_monitor_wired"] = True
         except Exception as exc:
             log.warning("Could not wire monitor card: %s", exc, exc_info=True)

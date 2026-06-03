@@ -283,6 +283,45 @@ def _fix_nvidia_profile(specs: dict) -> bool:
     return True
 
 
+@register_fix("nvidia_dlss_preset")
+def _fix_nvidia_dlss_preset(specs: dict) -> bool:
+    """Applies only the per-GPU DLSS preset via NPI."""
+    from src.agent_tools.nvidia_profile_setter import backup_nvidia_profile, fix_nvidia_dlss_preset
+    from src.utils.nvidia_npi import find_npi_exe
+
+    npi_exe = find_npi_exe()
+    backup_path: str | None = None
+    if npi_exe is not None:
+        try:
+            backup_path = backup_nvidia_profile(npi_exe)
+        except Exception as e:
+            print_warning(f"[nvidia_dlss_preset] Backup failed ({e}) — fix will not be revertible.")
+            backup_path = None
+    else:
+        print_warning("[nvidia_dlss_preset] NPI.exe not found — fix will not be revertible.")
+
+    try:
+        fix_nvidia_dlss_preset(specs, pre_backup_path=backup_path)
+    except FileNotFoundError as e:
+        print_error(f"[nvidia_dlss_preset] {e}")
+        return False
+    except Exception as e:
+        print_error(f"[nvidia_dlss_preset] Failed: {e}")
+        return False
+
+    if backup_path is not None:
+        _record_revertible("nvidia_dlss_preset", before_backup=backup_path)
+    else:
+        _record_non_revertible(
+            "nvidia_dlss_preset",
+            "NPI.exe unavailable or backup failed",
+            warn=False,
+        )
+
+    print_success("[nvidia_dlss_preset] DLSS preset applied for your GPU.")
+    return True
+
+
 def execute_fix(check: str, specs: dict) -> bool:
     """
     Executes the auto-fix for a given check name.

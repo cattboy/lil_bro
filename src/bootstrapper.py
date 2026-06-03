@@ -40,34 +40,44 @@ def enable_system_restore() -> bool:
     except Exception:
         return False
 
-def create_restore_point(description: str | None = None):
+def create_restore_point(description: str | None = None, *, assume_approved: bool = False):
     """
     Creates a Windows System Restore point via PowerShell.
     Require human-in-the-loop approval before executing.
+
+    When ``assume_approved`` is True, the two interactive ``prompt_approval``
+    gates are skipped -- approval was already collected upstream (e.g. a GUI
+    confirmation dialog before a dashboard card fix), and System Protection is
+    enabled non-interactively if needed. Default (False) preserves the
+    interactive pipeline/CLI behavior. Skipping the prompts is what lets this
+    run inside a worker thread with no event loop, where ``prompt_approval``
+    would otherwise deadlock.
     """
     if description is None:
         description = f"lil_bro Pre-Tuning {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
     if not is_system_restore_enabled():
-        print_error("System Restore is currently disabled.")
-        print_step("To manually enable: Click Start Button -> Type 'Create a restore point' -> Click Configure -> Turn on system protection. -> Click OK & OK -> Rerun script and try again")
-        if prompt_approval("Would you like lil_bro to automatically enable System Restore on the C: drive now?"):
-            print_step("Enabling System Restore on C: drive...")
-            if enable_system_restore():
-                print_step_done(success=True)
-                print_success("System Restore enabled successfully.")
-            else:
-                print_step_done(success=False)
-                print_error("Failed to enable System Restore automatically (Administrative privileges may be required).")
-                print_error("Please enable it manually and try again.")
+        if not assume_approved:
+            print_error("System Restore is currently disabled.")
+            print_step("To manually enable: Click Start Button -> Type 'Create a restore point' -> Click Configure -> Turn on system protection. -> Click OK & OK -> Rerun script and try again")
+            if not prompt_approval("Would you like lil_bro to automatically enable System Restore on the C: drive now?"):
+                print_error("Cannot create a system restore point while System Protection is disabled.")
                 return False
+        print_step("Enabling System Restore on C: drive...")
+        if enable_system_restore():
+            print_step_done(success=True)
+            print_success("System Restore enabled successfully.")
         else:
-            print_error("Cannot create a system restore point while System Protection is disabled.")
+            print_step_done(success=False)
+            print_error("Failed to enable System Restore automatically (Administrative privileges may be required).")
+            if not assume_approved:
+                print_error("Please enable it manually and try again.")
             return False
 
-    if not prompt_approval("Create a System Restore Point? HIGHLY recommended, save your game before you feed... incase you want to revert lil_bros work"):
-        print_error("System Restore Point creation bypassed, yolo mode activated.")
-        return False
+    if not assume_approved:
+        if not prompt_approval("Create a System Restore Point? HIGHLY recommended, save your game before you feed... incase you want to revert lil_bros work"):
+            print_error("System Restore Point creation bypassed, yolo mode activated.")
+            return False
 
     print_step("Creating System Restore Point (this may take a minute)")
 

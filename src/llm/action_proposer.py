@@ -221,6 +221,18 @@ FALLBACK_PROPOSALS: dict[str, dict] = {
         "proposed_action": "Apply optimized NVIDIA driver profile (G-Sync + VSync + FPS cap + ReBar + DLSS)",
         "can_auto_fix": True,
     },
+    "nvidia_dlss_preset": {
+        "finding": "nvidia_dlss_preset",
+        "severity": "MEDIUM",
+        "explanation": (
+            "DLSS can run a newer AI upscaling preset than the driver default. "
+            "Forcing the recommended preset for your GPU improves image quality "
+            "and stability in DLSS titles. This changes only the DLSS preset — "
+            "nothing else in your driver profile."
+        ),
+        "proposed_action": "Force the recommended DLSS preset for your GPU",
+        "can_auto_fix": True,
+    },
 }
 
 

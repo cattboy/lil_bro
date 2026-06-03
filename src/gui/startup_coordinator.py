@@ -213,19 +213,22 @@ class StartupCoordinator:
         except Exception as exc:
             log.error("on_finished EXC: %s: %r", type(exc).__name__, exc, exc_info=True)
 
-        # Late-fire monitor wiring: if main.show() already ran before this slot
-        # fired (slow-path on iGPU machines), wire here. The post-splash block
-        # in run() wires on the fast-path. _monitor_wired prevents double-wire.
+        # Late-fire monitor + NVIDIA card wiring: if main.show() already ran
+        # before this slot fired (slow-path on iGPU machines), wire here. The
+        # post-splash block in run() wires on the fast-path. _monitor_wired
+        # prevents double-wire (both monitor and NVIDIA cards wire together).
         if main.isVisible() and not runtime.get("_monitor_wired", False):
             try:
                 _specs = runtime.get("preloaded_specs", {}) or {}
                 main._dashboard.set_monitor_data(_specs.get("DisplayCapabilities", []))
                 main._dashboard.monitor_fix_requested.connect(self.on_monitor_fix_requested)
                 main._dashboard.monitor_refresh_requested.connect(self.refresh_monitor_card)
+                main._dashboard.set_nvidia_data(_specs.get("NVIDIA", []))
+                main._dashboard.nvidia_fix_requested.connect(self.on_nvidia_fix_requested)
                 runtime["_monitor_wired"] = True
-                log.info("GUI Startup: monitor card wired (late-fire path)")
+                log.info("GUI Startup: monitor + NVIDIA cards wired (late-fire path)")
             except Exception as exc:
-                log.warning("Could not wire monitor card (late path): %s", exc, exc_info=True)
+                log.warning("Could not wire monitor/NVIDIA cards (late path): %s", exc, exc_info=True)
 
         # Seed the Applied Fixes card (T-016). on_finished fires exactly once per
         # session on both the fast and slow startup paths, so seeding here covers
@@ -233,8 +236,6 @@ class StartupCoordinator:
         # RevertView.__init__; the QFileSystemWatcher keeps it fresh thereafter.
         # Reuses _reload_last_run -- the same load_manifest + set_last_run path.
         self._reload_last_run()
-
-        log.info("GUI Startup: on_finished exit")
 
     def on_lhm_ready(self, lhm) -> None:
         """Start dashboard polling the moment LHM is ready (orchestrator Step 1).
@@ -341,11 +342,14 @@ class StartupCoordinator:
         dialog = BatchSelectionDialog([proposal], parent=main)
         if not dialog.exec() or not dialog.selected_indices():
             return
+        # Restore-point gate (shared across all dashboard card fixes). Approval
+        # collected here on the GUI thread; the worker creates it non-interactively.
+        create_rp = self._ensure_restore_point_choice(main)
         # Filter so _fix_display targets ONLY this device
         filtered_specs = {**specs, "DisplayCapabilities": [target]}
         from src.gui.worker import _MonitorFixWorker
         fix_thread = QThread()
-        fix_worker = _MonitorFixWorker(filtered_specs)
+        fix_worker = _MonitorFixWorker(filtered_specs, create_rp)
         fix_worker.moveToThread(fix_thread)
         fix_thread.started.connect(fix_worker.run)
         fix_worker.finished.connect(fix_thread.quit)
@@ -356,6 +360,110 @@ class StartupCoordinator:
         runtime["monitor_fix_worker"] = fix_worker
         fix_thread.finished.connect(lambda: runtime.pop("monitor_fix_thread", None))
         fix_thread.finished.connect(lambda: runtime.pop("monitor_fix_worker", None))
+        fix_thread.start()
+
+
+    def _ensure_restore_point_choice(self, parent) -> bool:
+        """GUI-thread gate: decide whether the worker should create a restore point.
+
+        Returns True only when no restore point exists yet this session (per the
+        session manifest) AND the user accepts the prompt. The actual creation
+        runs non-interactively in the fix worker via
+        ``create_restore_point(assume_approved=True)`` -- collecting approval
+        here (not in the worker) avoids the ``prompt_approval`` deadlock in the
+        event-loop-less worker thread. The pipeline's BootstrapPhase consults the
+        same manifest flag, so a card-created restore point isn't asked for twice.
+        """
+        from src.utils.revert import load_manifest
+        manifest = load_manifest()
+        if manifest is not None and manifest.get("restore_point_created"):
+            return False  # already created this session; pipeline + cards reuse it
+        from src.gui.widgets.confirm_dialog import ConfirmDialog
+        dlg = ConfirmDialog(
+            "Create a System Restore Point?",
+            "Recommended before changing system settings — it lets you roll back if "
+            "anything goes wrong. Created once per session (this may take a minute).",
+            parent=parent,
+            yes_label="Create Restore Point",
+            no_label="Skip",
+        )
+        return bool(dlg.exec())
+
+    def on_nvidia_fix_requested(self, check_name: str) -> None:
+        runtime = self._runtime
+        main = self._main
+        log = self._log
+        # Guard: a dashboard NVIDIA fix during a pipeline run races ApplyPhase's
+        # nvidia_profile fix -- concurrent NPI imports + manifest appends.
+        if runtime.get("pipeline_thread") is not None:
+            log.warning("NVIDIA fix suppressed: pipeline is running")
+            return
+        # Guard: ONE shared slot serializes BOTH nvidia cards. Load-bearing --
+        # two concurrent NPI -exportCustomized/-silentImport runs against the
+        # same install dir would race each other's .nip files.
+        if runtime.get("nvidia_fix_thread") is not None:
+            log.warning("NVIDIA fix already in progress -- ignoring")
+            return
+        specs = runtime.get("preloaded_specs", {}) or {}
+        nvidia = specs.get("NVIDIA", [])
+        if not isinstance(nvidia, list) or not nvidia:
+            log.warning("NVIDIA fix requested but no NVIDIA GPU in specs")
+            return
+
+        gpu_name = str(nvidia[0].get("GPU") or "your NVIDIA GPU")
+        if check_name == "nvidia_dlss_preset":
+            from src.agent_tools.nvidia_profile import _get_gpu_generation
+            from src.utils.nvidia_npi import DLSS_PRESETS
+            gen = _get_gpu_generation(gpu_name)
+            letter = DLSS_PRESETS[gen][0] if gen in DLSS_PRESETS else "?"
+            title = f"Set DLSS Preset {letter}"
+            desc = (
+                f"{gpu_name}: force DLSS Preset {letter} (the recommended AI upscaling "
+                f"model for your GPU). Changes ONLY the DLSS preset — nothing else in "
+                f"your driver profile. A profile backup is saved for revert."
+            )
+            tag = "NVIDIA DLSS"
+        else:  # nvidia_profile (full)
+            title = "Optimize NVIDIA Driver Profile"
+            desc = (
+                f"{gpu_name}: apply the full gaming profile — G-Sync, VSync, FPS cap, "
+                f"ReBar, DLSS preset, and Maximum Performance power mode. A profile "
+                f"backup is saved for revert."
+            )
+            tag = "NVIDIA"
+
+        proposal = {
+            "finding": check_name,
+            "title": title,
+            "sev": "medium",
+            "desc": desc,
+            "can_auto_fix": True,
+            "mode": "AUTO",
+            "tag": tag,
+        }
+        from src.gui.widgets.batch_selection_dialog import BatchSelectionDialog
+        dialog = BatchSelectionDialog([proposal], parent=main)
+        if not dialog.exec() or not dialog.selected_indices():
+            return
+
+        # Restore-point gate (shared with the monitor fix). Approval collected
+        # here on the GUI thread; the worker creates it non-interactively.
+        create_rp = self._ensure_restore_point_choice(main)
+
+        # Filter so the handler only sees the NVIDIA payload.
+        filtered_specs = {**specs, "NVIDIA": nvidia}
+        from src.gui.worker import _NvidiaProfileFixWorker
+        fix_thread = QThread()
+        fix_worker = _NvidiaProfileFixWorker(check_name, filtered_specs, create_rp)
+        fix_worker.moveToThread(fix_thread)
+        fix_thread.started.connect(fix_worker.run)
+        fix_worker.finished.connect(fix_thread.quit)
+        fix_thread.finished.connect(fix_worker.deleteLater)
+        fix_thread.finished.connect(fix_thread.deleteLater)
+        runtime["nvidia_fix_thread"] = fix_thread
+        runtime["nvidia_fix_worker"] = fix_worker
+        fix_thread.finished.connect(lambda: runtime.pop("nvidia_fix_thread", None))
+        fix_thread.finished.connect(lambda: runtime.pop("nvidia_fix_worker", None))
         fix_thread.start()
 
 

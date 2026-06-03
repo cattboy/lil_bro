@@ -93,7 +93,10 @@ the dark / JetBrains-Mono / coral (`#FF6B6B`) system defined in `DESIGN.md`. Sto
 acceptable for a rare error dialog but is off-brand.
 **Fix:** Give all `QMessageBox` dialogs one DESIGN.md-aligned pass — dark theme, JetBrains Mono,
 `#FF6B6B` error accent — via shared QSS or a thin styled-dialog helper. Audit for any other stock
-dialogs at the same time.
+dialogs at the same time. Reference implementation: `src/gui/admin_notifier.py` +
+`_qss_admin_dialog` in `src/gui/theme/stylesheet_dialogs.py` already did this for the not-elevated
+warning (object-name-driven QSS, `warning` amber accent). `cap_notifier.py` should follow the same
+template (error dialog → `#FF6B6B` accent, not amber).
 **Blocked by:** Nothing.
 **Added:** 2026-06-01 (from /plan-ceo-review D7 on T-022)
 

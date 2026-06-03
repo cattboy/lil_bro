@@ -157,7 +157,10 @@ def revert_fix(entry: dict) -> tuple[bool, str]:
             return _revert_power_plan(entry)
         if fix_key == "game_mode":
             return _revert_game_mode(entry)
-        if fix_key == "nvidia_profile":
+        # nvidia_dlss_preset shares the whole-profile .nip restore: its
+        # before_backup is a full profile snapshot, so re-importing it undoes
+        # the DLSS preset change (along with anything else in that snapshot).
+        if fix_key in ("nvidia_profile", "nvidia_dlss_preset"):
             return _revert_nvidia_profile(entry)
         if fix_key == "display":
             return _revert_display(entry)

@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from src.gui.widgets.monitor_refresh_card import MonitorEmptyCard, MonitorRefreshCard
 from src.gui.widgets.mouse_poll_card import MousePollCard
+from src.gui.widgets.nvidia_profile_card import NvidiaProfileCard
 from src.gui.widgets.stat_card import STAT_CARDS, StatCard
 from src.utils.debug_logger import get_debug_logger
 
@@ -41,6 +42,10 @@ class Dashboard(QWidget):
     stats_ready = Signal(dict)
 
     thermal_retry_requested = Signal()  # Retry button -> StartupCoordinator relaunch
+
+    # Apply-button request from either NVIDIA card; carries the fix check name
+    # ("nvidia_dlss_preset" or "nvidia_profile"). Bubbled to StartupCoordinator.
+    nvidia_fix_requested = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -115,6 +120,25 @@ class Dashboard(QWidget):
         # ── Mouse polling card ──────────────────────────────────────────
         self._mouse_poll_card = MousePollCard(parent=self)
         outer.addWidget(self._mouse_poll_card)
+
+        # ── NVIDIA driver-profile cards (DLSS preset + full profile) ─────
+        # Pre-allocated here (like the monitor slots below) because dynamic
+        # creation during the splash's nested event loop fails to parent in the
+        # bundled PyInstaller exe. Hidden until set_nvidia_data shows them when
+        # nvidia-smi detects a GPU and NPI.exe is available.
+        self._nvidia_dlss_card = NvidiaProfileCard(
+            "nvidia_dlss_preset", "DLSS Preset", "Apply Preset", parent=self
+        )
+        self._nvidia_dlss_card.apply_requested.connect(self.nvidia_fix_requested)
+        self._nvidia_dlss_card.hide()
+        outer.addWidget(self._nvidia_dlss_card)
+
+        self._nvidia_full_card = NvidiaProfileCard(
+            "nvidia_profile", "NVIDIA Driver Profile", "Optimize", parent=self
+        )
+        self._nvidia_full_card.apply_requested.connect(self.nvidia_fix_requested)
+        self._nvidia_full_card.hide()
+        outer.addWidget(self._nvidia_full_card)
 
         # ── Monitor refresh PRE-ALLOCATED slots ───────────────────────
         # Created here during Dashboard.__init__ alongside the stat tiles
@@ -221,6 +245,64 @@ class Dashboard(QWidget):
     def receive_poll_result(self, result: dict) -> None:
         """Feed a pipeline-measured poll result to the mouse poll card."""
         self._mouse_poll_card.apply_pipeline_result(result)
+
+    def set_nvidia_data(self, nvidia) -> None:
+        """Show/populate the NVIDIA fix cards based on nvidia-smi detection.
+
+        Shows the full-profile card whenever an NVIDIA GPU is detected and NPI
+        is available; shows the DLSS-preset card only for a positively-identified
+        consumer GeForce RTX (20-50 series) with a known preset mapping. Hides
+        both otherwise. The recommendation reflects GPU 0 (NPI applies the driver
+        profile globally, not per-GPU).
+        """
+        from src.agent_tools.nvidia_profile import _get_gpu_generation
+        from src.llm.action_proposer import propose_for_check
+        from src.utils.nvidia_npi import DLSS_PRESETS, find_npi_exe
+
+        # Detection: a non-empty list means nvidia-smi returned GPU(s); a dict
+        # ({"error": ...}) or empty list means not detected. NPI must also be
+        # present or the fix can neither run nor be reverted -- don't offer it.
+        if not isinstance(nvidia, list) or not nvidia or find_npi_exe() is None:
+            self._nvidia_dlss_card.hide()
+            self._nvidia_full_card.hide()
+            self._log.info("Dashboard.set_nvidia_data: hidden (no NVIDIA GPU or NPI absent)")
+            return
+
+        gpu_name = str(nvidia[0].get("GPU") or "NVIDIA GPU")
+
+        # Full-profile card: valid for any detected NVIDIA GPU.
+        full_prop = propose_for_check("nvidia_profile") or {}
+        self._nvidia_full_card.set_gpu(
+            gpu_name,
+            "Optimize: G-Sync · VSync · FPS cap · ReBar · DLSS · Power",
+            full_prop.get("explanation", ""),
+        )
+        self._nvidia_full_card.show()
+
+        # DLSS card: only for a positively-identified consumer GeForce RTX with a
+        # known preset. Requiring "GEFORCE" excludes workstation cards (Quadro /
+        # RTX A-series / "Ada Generation" / Titan) whose product_name the loose
+        # generation regex would otherwise misread into a wrong preset letter.
+        name_u = gpu_name.upper()
+        is_consumer = (
+            "GEFORCE" in name_u and "RTX" in name_u
+            and not any(t in name_u for t in ("ADA GENERATION", "QUADRO", "RTX A", "TITAN"))
+        )
+        gen = _get_gpu_generation(gpu_name)
+        if is_consumer and gen in DLSS_PRESETS:
+            letter = DLSS_PRESETS[gen][0]
+            dlss_prop = propose_for_check("nvidia_dlss_preset") or {}
+            self._nvidia_dlss_card.set_gpu(
+                gpu_name,
+                f"Recommended: DLSS Preset {letter}",
+                dlss_prop.get("explanation", ""),
+            )
+            self._nvidia_dlss_card.show()
+            self._log.info("Dashboard.set_nvidia_data: DLSS card shown (%s -> Preset %s)", gen, letter)
+        else:
+            self._nvidia_dlss_card.hide()
+            self._log.info("Dashboard.set_nvidia_data: DLSS card hidden (consumer=%s gen=%s)",
+                           is_consumer, gen)
 
     def set_monitor_data(self, displays: list[dict]) -> None:
         """Show/hide pre-allocated slots; dynamically build extras for 2+ monitors.

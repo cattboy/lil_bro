@@ -602,7 +602,8 @@ class TestFixDispatchNvidiaProfile:
 
     def test_all_expected_checks_registered(self):
         from src.pipeline.fix_dispatch import FIX_REGISTRY
-        expected = {"display", "power_plan", "temp_folders", "game_mode", "nvidia_profile"}
+        expected = {"display", "power_plan", "temp_folders", "game_mode",
+                    "nvidia_profile", "nvidia_dlss_preset"}
         assert set(FIX_REGISTRY.keys()) == expected
 
     @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="/backup.nip")

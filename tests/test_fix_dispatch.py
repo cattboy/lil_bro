@@ -6,7 +6,8 @@ from src.pipeline.fix_dispatch import FIX_REGISTRY, execute_fix
 class TestFixRegistry:
     def test_all_expected_checks_registered(self):
         """All auto-fixable checks must be in the registry."""
-        expected = {"display", "power_plan", "temp_folders", "game_mode", "nvidia_profile"}
+        expected = {"display", "power_plan", "temp_folders", "game_mode",
+                    "nvidia_profile", "nvidia_dlss_preset"}
         assert set(FIX_REGISTRY.keys()) == expected
 
     def test_all_handlers_are_callable(self):
