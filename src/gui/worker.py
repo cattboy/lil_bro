@@ -71,7 +71,12 @@ class PipelineWorker(QObject):
 
     def run(self) -> None:
         from src.pipeline import _state
+        from src.utils.action_logger import action_logger
         _state.set_cancel_check(self._cancel_event.is_set)
+        # Session boundaries live here (not at app boot) so a "session" maps to a
+        # pipeline run, and the real try/finally guarantees END pairs with START
+        # even on exception or cooperative cancel.
+        action_logger.log_session_start()
         try:
             self.pipeline_started.emit()
             from src.pipeline.phases import run_optimization_pipeline
@@ -83,6 +88,7 @@ class PipelineWorker(QObject):
             return
         finally:
             _state.set_cancel_check(None)
+            action_logger.log_session_end()
 
         self.pipeline_finished.emit()
 

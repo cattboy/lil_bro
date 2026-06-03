@@ -192,6 +192,39 @@ def _qss_mouse_ready_dialog(c: dict[str, str]) -> str:
 """
 
 
+def _qss_admin_dialog(c: dict[str, str]) -> str:
+    """Admin (not-elevated) warning dialog: warning icon, title, description, OK button."""
+    return f"""
+    /* --- Admin warning dialog ---------------------------------------- */
+    QDialog#adminDialog {{
+        background-color: {c["surface"]};
+        border: 1px solid {c["border_default"]};
+        border-radius: 12px;
+    }}
+    QLabel#adminIcon {{
+        font-size: 28px;
+        color: {c["warning"]};
+    }}
+    QLabel#adminTitle {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 14px;
+        font-weight: 600;
+        color: {c["text_primary"]};
+    }}
+    QLabel#adminDesc {{
+        font-size: 12px;
+        color: {c["text_muted"]};
+        line-height: 1.5;
+    }}
+    QDialog#adminDialog QPushButton#primary {{
+        padding: 10px 22px;
+        font-size: 14px;
+        font-weight: 700;
+        min-height: 18px;
+    }}
+"""
+
+
 def _qss_splash(c: dict[str, str]) -> str:
     """Splash dialog: brand, tagline, badge, and per-step icon/label/result."""
     return f"""
