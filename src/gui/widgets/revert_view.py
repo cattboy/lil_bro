@@ -97,7 +97,7 @@ class RevertView(QWidget):
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
-        self._revert_btn = QPushButton("↩  Revert All Changes")
+        self._revert_btn = QPushButton("↩  Revert All Changes (R)")
         self._revert_btn.setObjectName("revertActionBtn")
         self._revert_btn.setProperty("navRole", "nav")
         self._revert_btn.setProperty("navState", "warning")
