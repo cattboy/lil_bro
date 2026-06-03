@@ -252,10 +252,9 @@ src/
       stylesheet_monitoring.py  — Dashboard monitoring card QSS
     widgets/             — Reusable UI widgets
       ai_setup_dialog.py     — AI model download dialog
-      approval_dialog.py     — Fix approval dialog
       batch_selection_dialog.py — Batch fix selection
       benchmark_row.py       — Benchmark result row
-      confirm_dialog.py      — Generic confirmation dialog
+      confirm_dialog.py      — Generic confirm/approval dialog (Yes/No, Approve/Deny)
       dashboard.py           — Dashboard with live stat tiles
       monitor_refresh_card.py — Monitor refresh rate card + Fix Now button
       mouse_poll_card.py     — Mouse polling card + Fix Now button

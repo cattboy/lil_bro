@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QThread
 
-from src.gui.widgets.approval_dialog import ApprovalDialog
 from src.gui.widgets.batch_selection_dialog import BatchSelectionDialog
 from src.gui.widgets.confirm_dialog import ConfirmDialog
 from src.gui.worker import PipelineWorker, RevertWorker
@@ -44,7 +43,15 @@ class PipelineController:
     # ── Approval / confirm / batch dialogs ─────────────────────────────
 
     def show_approval_dialog(self, action_text: str) -> None:
-        dialog = ApprovalDialog(action_text, parent=self._main)
+        # Approval prompts reuse the shared ConfirmDialog (same card + glowing
+        # W button as every other dialog); the action text becomes the body.
+        dialog = ConfirmDialog(
+            "Requires Approval",
+            action_text,
+            parent=self._main,
+            yes_label="Approve",
+            no_label="Deny",
+        )
         approved = bool(dialog.exec())
         self._bridge.deliver_answer(approved)
 

@@ -6,8 +6,10 @@ Behavior contract: Yes → True, No / Esc / close → False.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QDialog,
+    QGraphicsDropShadowEffect,
     QLabel,
     QPushButton,
     QVBoxLayout,
@@ -22,6 +24,9 @@ class ConfirmDialog(QDialog):
     def __init__(self, title: str, description: str = "", parent=None,
                  yes_label: str = "Yes, Continue", no_label: str = "Skip") -> None:
         super().__init__(parent)
+        # objectName drives the elevated "card" styling (surface bg + border +
+        # 12px radius) shared with the batch dialog -- see _qss_confirm_dialog.
+        self.setObjectName("confirmDialog")
         self.setWindowTitle(title)
         self.setModal(True)
         self.setFixedWidth(420)
@@ -66,12 +71,25 @@ class ConfirmDialog(QDialog):
 
         self.no_btn = QPushButton(f"{no_label} (S)")
         self.no_btn.setObjectName("secondary")
+        # Secondary button must not auto-default: otherwise, when it takes the
+        # dialog's initial focus, the WASD filter's W (= click the default
+        # button) can fire reject() instead of accept(). See the project's
+        # autoDefault/WASD dialog rule.
+        self.no_btn.setAutoDefault(False)
         self.no_btn.clicked.connect(self.reject)
 
         self.yes_btn = QPushButton(f"{yes_label} (W)")
         self.yes_btn.setObjectName("primary")
         self.yes_btn.setDefault(True)
         self.yes_btn.clicked.connect(self.accept)
+        # Accent glow makes the W/accept button the clear focal point, per
+        # DESIGN.md's "primary accent elements get a soft glow" (QSS can't do
+        # box-shadow, so we use a drop-shadow effect with the accent colour).
+        glow = QGraphicsDropShadowEffect(self)
+        glow.setBlurRadius(24)
+        glow.setColor(QColor(0, 229, 204, 150))  # accent #00E5CC, soft alpha
+        glow.setOffset(0, 0)
+        self.yes_btn.setGraphicsEffect(glow)
 
         btn_row.addWidget(self.no_btn)
         btn_row.addWidget(self.yes_btn)
