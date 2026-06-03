@@ -370,3 +370,125 @@ def test_stderr_captured_on_crash(mock_port, mock_find, mock_popen, mock_resp, m
     printed = [call.args[0] for call in mock_dim.call_args_list]
     assert any("PawnIO driver install failed" in line for line in printed)
     assert any("Exiting with code 1" in line for line in printed)
+
+
+# ── Failure-kind attribution (feat/prereq-check) ──────────────────────────────
+# Each start() failure branch must record last_failure_kind so
+# thermal_guidance.describe_sidecar_failure can name the cause. Regression: the
+# bool return value of each branch is unchanged.
+
+@patch("src.collectors.sub.lhm_sidecar._is_lhm_responding", return_value=False)
+@patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=True)
+def test_start_records_port_in_use_kind(mock_port, mock_resp):
+    """Port held by another (non-LHM) app → kind 'port_in_use', returns False."""
+    sidecar = LHMSidecar()
+    assert sidecar.start() is False
+    assert sidecar.last_failure_kind == "port_in_use"
+
+
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(None, False))
+@patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
+def test_start_records_not_found_kind(mock_port, mock_find):
+    """No executable found (e.g. AV deleted it) → kind 'not_found'."""
+    sidecar = LHMSidecar()
+    assert sidecar.start() is False
+    assert sidecar.last_failure_kind == "not_found"
+
+
+@patch("src.collectors.sub.lhm_sidecar.ctypes")
+@patch("src.collectors.sub.lhm_sidecar.is_admin", return_value=False)
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\tools\lhm-server.exe", True))
+@patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
+def test_start_records_elevation_failed_kind(mock_port, mock_find, mock_admin, mock_ctypes):
+    """Non-admin + ShellExecuteW <= 32 (UAC declined) → kind 'elevation_failed'."""
+    mock_ctypes.windll.shell32.ShellExecuteW.return_value = 5  # <= 32 == failure
+    sidecar = LHMSidecar()
+    assert sidecar.start() is False
+    assert sidecar.last_failure_kind == "elevation_failed"
+
+
+@patch("src.collectors.sub.lhm_sidecar.is_admin", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.subprocess.Popen", side_effect=OSError("blocked"))
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\tools\lhm-server.exe", True))
+@patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
+def test_start_records_launch_error_kind(mock_port, mock_find, mock_popen, mock_admin):
+    """Popen raising (AV execution block) → kind 'launch_error'."""
+    sidecar = LHMSidecar()
+    assert sidecar.start() is False
+    assert sidecar.last_failure_kind == "launch_error"
+
+
+@patch("src.collectors.sub.lhm_sidecar.is_admin", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.time.sleep")
+@patch("src.collectors.sub.lhm_sidecar.time.monotonic")
+@patch("src.collectors.sub.lhm_sidecar._is_lhm_responding", return_value=False)
+@patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\tools\lhm-server.exe", True))
+@patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
+def test_start_records_exited_immediately_kind(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep, mock_admin):
+    """Immediate exit → kind 'exited_immediately' + returncode + stderr captured."""
+    mock_proc = MagicMock()
+    mock_proc.stderr = None
+    mock_proc.poll.return_value = 1
+    mock_proc.returncode = 1
+    mock_popen.return_value = mock_proc
+    mock_mono.side_effect = [0.0, 0.5]
+
+    sidecar = LHMSidecar()
+    sidecar._stderr_lines = ["boom"]
+    assert sidecar.start() is False
+    assert sidecar.last_failure_kind == "exited_immediately"
+    assert sidecar.last_returncode == 1
+    assert sidecar.last_stderr_lines == ["boom"]
+
+
+@patch("src.collectors.sub.lhm_sidecar.is_admin", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.time.sleep")
+@patch("src.collectors.sub.lhm_sidecar.time.monotonic")
+@patch("src.collectors.sub.lhm_sidecar._is_lhm_responding", return_value=False)
+@patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\LHM\LibreHardwareMonitor.exe", False))
+@patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
+def test_start_records_timeout_kind(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep, mock_admin):
+    """HTTP never ready before deadline → kind 'timeout'."""
+    mock_proc = MagicMock()
+    mock_proc.stderr = None
+    mock_proc.poll.return_value = None  # stays alive
+    mock_popen.return_value = mock_proc
+    mock_mono.side_effect = [0.0, 0.5, 16.0]
+
+    sidecar = LHMSidecar()
+    assert sidecar.start() is False
+    assert sidecar.last_failure_kind == "timeout"
+
+
+@patch("src.collectors.sub.lhm_sidecar._is_lhm_responding", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=True)
+def test_start_attach_leaves_failure_kind_none(mock_port, mock_resp):
+    """Attaching to a running instance is success → no failure kind recorded."""
+    sidecar = LHMSidecar()
+    assert sidecar.start() is True
+    assert sidecar.last_failure_kind is None
+
+
+@patch("src.collectors.sub.lhm_sidecar.is_admin", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.time.sleep")
+@patch("src.collectors.sub.lhm_sidecar.time.monotonic")
+@patch("src.collectors.sub.lhm_sidecar._is_lhm_responding")
+@patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\tools\lhm-server.exe", True))
+@patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
+def test_start_success_clears_stale_failure_kind(mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_sleep, mock_admin):
+    """last-attempt-wins: a successful start() clears a stale failure kind."""
+    mock_proc = MagicMock()
+    mock_proc.pid = 7
+    mock_proc.stderr = None
+    mock_proc.poll.return_value = None
+    mock_popen.return_value = mock_proc
+    mock_mono.side_effect = [0.0, 0.5, 1.0]
+    mock_resp.side_effect = [False, True]
+
+    sidecar = LHMSidecar()
+    sidecar.last_failure_kind = "port_in_use"  # stale from a prior attempt
+    assert sidecar.start() is True
+    assert sidecar.last_failure_kind is None

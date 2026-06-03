@@ -23,6 +23,7 @@ from src.gui.theme.stylesheet_monitoring import (
     _qss_stat_cards,
 )
 from src.gui.theme.stylesheet_dialogs import (
+    _qss_admin_dialog,
     _qss_batch_dialog,
     _qss_confirm_dialog,
     _qss_mouse_ready_dialog,
@@ -51,5 +52,6 @@ def build_stylesheet() -> str:
         _qss_batch_dialog(c),
         _qss_confirm_dialog(c),
         _qss_mouse_ready_dialog(c),
+        _qss_admin_dialog(c),
         _qss_splash(c),
     ])

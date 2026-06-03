@@ -15,6 +15,8 @@ class ApplyPhase:
         log.info("Phase 6: Apply Fixes")
         print_header("Phase 6: Apply Fixes")
 
+        log.info("ApplyPhase: skip_apply=%s approved=%d", ctx.skip_apply, len(ctx.approved_proposals))
+
         if ctx.skip_apply:
             print_info("Skipping fixes — user declined to apply after benchmark abort.")
             return PhaseResult("skipped", "User declined to apply after benchmark abort")

@@ -134,7 +134,7 @@ def test_shortcut_context_is_window_not_application(qtbot):
     """D2 regression guard: cancel shortcuts must use Qt.WindowShortcut.
 
     Qt.ApplicationShortcut would hijack Esc/Enter from any open modal dialog
-    (e.g. ApprovalDialog whose own Esc dismiss is at approval_dialog.py:50-54),
+    (e.g. a ConfirmDialog whose own Esc dismiss handler stays intact),
     accidentally cancelling the pipeline when the user only meant to dismiss
     or confirm a prompt.
 
@@ -324,3 +324,81 @@ def test_nav_buttons_show_number_hints(qtbot):
     qtbot.addWidget(window)
     assert "(1)" in window._nav_dashboard.text()
     assert "(2)" in window._run_button.text()
+
+
+def test_action_shortcuts_use_window_scope(qtbot):
+    """R/E/A are bound with WindowShortcut scope so modals keep those letters."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeySequence
+
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    assert len(window._action_shortcuts) == 3
+    bound = set()
+    for shortcut in window._action_shortcuts:
+        assert shortcut.context() == Qt.ShortcutContext.WindowShortcut
+        for key in (Qt.Key.Key_R, Qt.Key.Key_E, Qt.Key.Key_A):
+            if shortcut.key().matches(QKeySequence(key)) == QKeySequence.SequenceMatch.ExactMatch:
+                bound.add(key)
+    assert bound == {Qt.Key.Key_R, Qt.Key.Key_E, Qt.Key.Key_A}
+
+
+def test_action_buttons_show_letter_hints(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    assert "(R)" in window._revert_button.text()
+    assert "(A)" in window._ai_setup_button.text()
+    assert "(E)" in window._nav_exit.text()
+
+
+def test_revert_hotkey_navigates_when_not_on_revert_page(qtbot):
+    """First R press (from another page) routes to the Revert page."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeySequence
+
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show_dashboard()
+    assert window._content.currentIndex() != window.REVERT_INDEX
+
+    shortcut = next(
+        s for s in window._action_shortcuts
+        if s.key().matches(QKeySequence(Qt.Key.Key_R)) == QKeySequence.SequenceMatch.ExactMatch
+    )
+    shortcut.activated.emit()
+    assert window._content.currentIndex() == window.REVERT_INDEX
+
+
+def test_revert_hotkey_triggers_revert_when_on_revert_page(qtbot):
+    """Second R press (already on Revert page) drives the in-page revert button.
+
+    No extra confirm is stacked here -- the revert flow's own prompt_approval
+    ("Revert N change(s)?") is the single confirmation.
+    """
+    window = MainWindow()
+    qtbot.addWidget(window)
+    window.show_revert()
+
+    fired = []
+    window._revert_view.revert_requested.connect(lambda: fired.append(True))
+
+    window._on_revert_hotkey()
+    assert fired == [True]
+
+
+def test_exit_hotkey_confirm_gates_close(qtbot):
+    """E shows a confirm; close() only fires when the dialog is accepted."""
+    from unittest.mock import patch
+
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    with patch.object(window, "close") as mock_close:
+        with patch("src.gui.widgets.confirm_dialog.ConfirmDialog.exec", return_value=False):
+            window._on_exit_requested()
+        mock_close.assert_not_called()
+
+        with patch("src.gui.widgets.confirm_dialog.ConfirmDialog.exec", return_value=True):
+            window._on_exit_requested()
+        mock_close.assert_called_once()

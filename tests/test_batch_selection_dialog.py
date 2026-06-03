@@ -97,3 +97,29 @@ def test_fix_item_shows_number_badge(qtbot):
     qtbot.addWidget(dialog)
     assert dialog._fix_items[0]._num_lbl.text() == "1"
     assert dialog._fix_items[2]._num_lbl.text() == "3"
+
+
+def test_w_key_applies_not_cancels_through_wasd_filter(qtbot):
+    """Regression: W (via the global WASD filter) must apply, not cancel.
+
+    All three buttons are autoDefault by default. Once the dialog is shown,
+    focus lands on the close button, which would steal default-ness and make
+    the WASD filter's W/Enter click *it* (reject) instead of Apply. The two
+    secondary buttons must disable autoDefault so the primary Apply button
+    stays the sole default.
+    """
+    from src.gui.input.wasd_filter import WASDInputFilter
+
+    dialog = BatchSelectionDialog(_proposals(3))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QTest.qWait(10)
+
+    # The secondary buttons must not be able to become the default button.
+    assert dialog._skip_btn.autoDefault() is False
+    # The WASD filter resolves W to this surface's default button; it must be
+    # Apply, even though the close button holds focus after show().
+    assert WASDInputFilter._default_button(dialog) is dialog._apply_btn
+    # Pressing W therefore applies every selected fix instead of cancelling.
+    assert WASDInputFilter()._proceed(dialog) is True
+    assert dialog.selected_indices() == [1, 2, 3]

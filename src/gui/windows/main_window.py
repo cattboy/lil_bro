@@ -84,7 +84,7 @@ class MainWindow(QMainWindow):
         # _keyboard_abort_watcher; Esc is added because dialogs already
         # bind it to dismiss; Key_Enter is the numpad Enter, distinct from
         # Key_Return on Qt. Qt.WindowShortcut (the default) fires only when
-        # MainWindow is the active window -- NOT when a modal ApprovalDialog
+        # MainWindow is the active window -- NOT when a modal ConfirmDialog
         # has focus -- so dialog Esc/Enter handlers stay intact.
         # _on_stop_clicked gates on _stop_button.isVisible(), so all four
         # keys are no-ops while the pipeline is idle.
@@ -126,6 +126,22 @@ class MainWindow(QMainWindow):
             shortcut = QShortcut(QKeySequence(key), self)
             shortcut.activated.connect(button.click)
             self._nav_shortcuts.append(shortcut)
+
+        # Sidebar action hotkeys: R -> Revert, E -> Exit, A -> AI Setup. Same
+        # WindowShortcut scope as the nav hotkeys above, so they stay inert
+        # while a modal dialog (e.g. the confirm dialogs these open) holds
+        # focus. R and E route through handlers; A drives the AI Setup button
+        # directly, mirroring the nav hotkeys' "click the existing button"
+        # approach.
+        self._action_shortcuts = []
+        for key, slot in (
+            (Qt.Key.Key_R, self._on_revert_hotkey),
+            (Qt.Key.Key_E, self._on_exit_requested),
+            (Qt.Key.Key_A, self._ai_setup_button.click),
+        ):
+            shortcut = QShortcut(QKeySequence(key), self)
+            shortcut.activated.connect(slot)
+            self._action_shortcuts.append(shortcut)
 
     def _inject_status_bar(self, widget) -> None:
         """Pin the custom status bar widget to the bottom of the main window."""
@@ -180,9 +196,9 @@ class MainWindow(QMainWindow):
 
         # Utility nav
         self._nav_log = self._nav_btn("📄  View Debug Log", state="muted")
-        self._revert_button = self._nav_btn("↩  Revert Changes", state="warning")
-        self._ai_setup_button = self._nav_btn("⚙  AI Setup", state="muted")
-        self._nav_exit = self._nav_btn("✕  Exit", state="danger")
+        self._revert_button = self._nav_btn("↩  Revert Changes (R)", state="warning")
+        self._ai_setup_button = self._nav_btn("⚙  AI Setup (A)", state="muted")
+        self._nav_exit = self._nav_btn("✕  Exit (E)", state="danger")
 
         col.addWidget(self._nav_log)
         col.addWidget(self._revert_button)
@@ -195,7 +211,8 @@ class MainWindow(QMainWindow):
         self._stop_button.clicked.connect(self._on_stop_clicked)
         self._nav_log.clicked.connect(self._open_debug_log)
         self._revert_button.clicked.connect(self.show_revert)
-        self._nav_exit.clicked.connect(self.close)
+        # Exit routes through a W/S confirm dialog rather than closing directly.
+        self._nav_exit.clicked.connect(self._on_exit_requested)
 
         # Page-nav buttons that share the single "active page" highlight, each
         # paired with the navState it rests at when not the active page. The
@@ -316,6 +333,34 @@ class MainWindow(QMainWindow):
         """
         if self._stop_button.isVisible():
             self.stop_requested.emit()
+
+    def _on_revert_hotkey(self) -> None:
+        """R: navigate to the Revert page, or trigger the revert when already there.
+
+        First press routes to the Revert page. Pressing R again while the page is
+        already showing drives the in-page revert button (-> revert_requested ->
+        start_revert), whose ``run_revert_phase()`` already prompts for approval
+        via the shared ConfirmDialog ("Revert N change(s)?"). That single approval
+        is the source of truth -- we deliberately do not stack a second confirm
+        here. ``.click()`` respects the button's enabled state (disabled mid-revert).
+        """
+        if self._content.currentIndex() == self.REVERT_INDEX:
+            self._revert_view._revert_btn.click()
+        else:
+            self.show_revert()
+
+    def _on_exit_requested(self) -> None:
+        """E / sidebar Exit: confirm via a W/S dialog before quitting."""
+        from src.gui.widgets.confirm_dialog import ConfirmDialog
+        dlg = ConfirmDialog(
+            "Exit lil_bro?",
+            "Are you sure you want to quit lil_bro?",
+            parent=self,
+            yes_label="Exit",
+            no_label="Cancel",
+        )
+        if dlg.exec():
+            self.close()
 
     # ── Debug log ──────────────────────────────────────────────────────
 

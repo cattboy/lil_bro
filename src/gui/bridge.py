@@ -17,7 +17,7 @@ Approval / confirm flow (cross-thread)::
     bridge._handle_approval ──signal──► signals.approval_requested
        │                                 │
        │                                 ▼
-       │                              ApprovalDialog opens
+       │                              ConfirmDialog opens (Approve / Deny)
        │                                 │
        │                                 ▼
        │                            user clicks Approve / Deny / Esc

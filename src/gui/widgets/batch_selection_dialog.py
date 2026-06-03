@@ -145,7 +145,8 @@ class BatchSelectionDialog(QDialog):
         close_btn = QPushButton("✕")
         close_btn.setObjectName("secondary")
         close_btn.setFixedSize(28, 28)
-        close_btn.clicked.connect(self._on_cancel)
+        close_btn.setAutoDefault(False)
+        close_btn.clicked.connect(self.reject)
         hdr_row.addWidget(close_btn)
 
         layout.addWidget(hdr)
@@ -182,12 +183,13 @@ class BatchSelectionDialog(QDialog):
 
         self._skip_btn = QPushButton("Skip All (S)")
         self._skip_btn.setObjectName("secondary")
-        self._skip_btn.clicked.connect(self._on_cancel)
+        self._skip_btn.setAutoDefault(False)
+        self._skip_btn.clicked.connect(self.reject)
 
         self._apply_btn = QPushButton(f"Apply {count} Selected (W)")
         self._apply_btn.setObjectName("primary")
         self._apply_btn.setDefault(True)
-        self._apply_btn.clicked.connect(self._on_apply_selected)
+        self._apply_btn.clicked.connect(self.accept)
 
         foot_row.addWidget(self._skip_btn)
         foot_row.addWidget(self._apply_btn)
@@ -207,26 +209,27 @@ class BatchSelectionDialog(QDialog):
     def selected_indices(self) -> list[int]:
         return list(self._selected_indices)
 
-    # ── Slots ──────────────────────────────────────────────────────────
+    # ── Accept / reject / key handling ─────────────────────────────────
 
-    def _on_apply_selected(self) -> None:
-        self._selected_indices = [
-            i + 1 for i, sel in enumerate(self._selected) if sel
-        ]
-        self.accept()
+    def accept(self) -> None:
+        self._selected_indices = [i + 1 for i, sel in enumerate(self._selected) if sel]
+        super().accept()
 
-    def _on_cancel(self) -> None:
+    def reject(self) -> None:
         self._selected_indices = []
-        self.reject()
+        super().reject()
 
     def keyPressEvent(self, event):  # noqa: N802
         key = event.key()
-        if key == Qt.Key.Key_Escape:
-            self._on_cancel()
+        if key in (Qt.Key.Key_Escape, Qt.Key.Key_S):
+            self.reject()
+            return
+        if key == Qt.Key.Key_W:
+            self.accept()
             return
         # Number keys 1-9 toggle the matching fix, mirroring the CLI's "1 3"
         # batch input. Lists longer than 9 fall through past the 9th row --
-        # those rows stay toggleable by mouse / the W (apply) shortcut.
+        # those rows stay toggleable by mouse.
         if Qt.Key.Key_1 <= key <= Qt.Key.Key_9:
             idx = key - Qt.Key.Key_1
             if idx < len(self._fix_items):

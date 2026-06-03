@@ -95,7 +95,12 @@ class ThermalChart(QWidget):
         painter.setPen(QColor("#9B9AA0"))
         font = QFont("DM Sans", 10)
         painter.setFont(font)
-        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._status_text)
+        # Word-wrap so a multi-sentence classified cause + action stays legible
+        # instead of clipping at the chart edges. The inset gives side/vertical
+        # margin so wrapped lines don't hug the frame. int(...) avoids any
+        # cross-enum OR ambiguity between AlignmentFlag and TextFlag in PySide6.
+        flags = int(Qt.AlignmentFlag.AlignCenter) | int(Qt.TextFlag.TextWordWrap)
+        painter.drawText(self.rect().adjusted(12, 8, -12, -8), flags, self._status_text)
 
     def _paint_thresholds(self, painter: QPainter, ymin: float, ymax: float) -> None:
         for c, color in ((_WARN_C, QColor("#FFB547")), (_CRIT_C, QColor("#FF6B6B"))):

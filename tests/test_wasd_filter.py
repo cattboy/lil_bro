@@ -9,6 +9,9 @@ Contract under test (see src/gui/input/wasd_filter.py):
 The ``eventFilter`` dispatch tests swap the module's ``QApplication`` symbol
 for a fake so the active surface / focus widget are deterministic without a
 real window manager (Shiboken extension types reject attribute monkeypatching).
+
+``ConfirmDialog`` stands in as a representative modal: it exposes a default
+``yes_btn`` (the W target) and rejects on ``S``.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ from PySide6.QtWidgets import QDialog, QLineEdit, QWidget
 
 from src.gui.input import wasd_filter
 from src.gui.input.wasd_filter import WASDInputFilter
-from src.gui.widgets.approval_dialog import ApprovalDialog
+from src.gui.widgets.confirm_dialog import ConfirmDialog
 
 
 def _key(key, modifier=Qt.KeyboardModifier.NoModifier):
@@ -47,14 +50,14 @@ class _FakeApp:
 # ── direct helper behavior ───────────────────────────────────────────────
 
 def test_proceed_clicks_default_button(qtbot):
-    dialog = ApprovalDialog("apply setting")
+    dialog = ConfirmDialog("apply setting")
     qtbot.addWidget(dialog)
     assert WASDInputFilter()._proceed(dialog) is True
     assert dialog.result() == QDialog.DialogCode.Accepted
 
 
 def test_back_rejects_dialog(qtbot):
-    dialog = ApprovalDialog("apply setting")
+    dialog = ConfirmDialog("apply setting")
     qtbot.addWidget(dialog)
     assert WASDInputFilter()._back(dialog) is True
     assert dialog.result() == QDialog.DialogCode.Rejected
@@ -66,10 +69,10 @@ def test_proceed_without_default_button_returns_false(qtbot):
     assert WASDInputFilter()._proceed(dialog) is False
 
 
-def test_default_button_finds_approve(qtbot):
-    dialog = ApprovalDialog("x")
+def test_default_button_finds_yes(qtbot):
+    dialog = ConfirmDialog("x")
     qtbot.addWidget(dialog)
-    assert WASDInputFilter._default_button(dialog) is dialog.approve_btn
+    assert WASDInputFilter._default_button(dialog) is dialog.yes_btn
 
 
 def test_back_window_calls_stop_handler(qtbot):
@@ -105,7 +108,7 @@ def test_eventfilter_ignores_non_keypress():
 
 
 def test_eventfilter_w_proceeds(qtbot, monkeypatch):
-    dialog = ApprovalDialog("x")
+    dialog = ConfirmDialog("x")
     qtbot.addWidget(dialog)
     monkeypatch.setattr(wasd_filter, "QApplication", _FakeApp(modal=dialog))
     assert WASDInputFilter().eventFilter(None, _key(Qt.Key.Key_W)) is True
@@ -113,7 +116,7 @@ def test_eventfilter_w_proceeds(qtbot, monkeypatch):
 
 
 def test_eventfilter_s_backs(qtbot, monkeypatch):
-    dialog = ApprovalDialog("x")
+    dialog = ConfirmDialog("x")
     qtbot.addWidget(dialog)
     monkeypatch.setattr(wasd_filter, "QApplication", _FakeApp(modal=dialog))
     assert WASDInputFilter().eventFilter(None, _key(Qt.Key.Key_S)) is True
@@ -121,7 +124,7 @@ def test_eventfilter_s_backs(qtbot, monkeypatch):
 
 
 def test_eventfilter_ignores_modifier_chord(qtbot, monkeypatch):
-    dialog = ApprovalDialog("x")
+    dialog = ConfirmDialog("x")
     qtbot.addWidget(dialog)
     monkeypatch.setattr(wasd_filter, "QApplication", _FakeApp(modal=dialog))
     handled = WASDInputFilter().eventFilter(
@@ -133,7 +136,7 @@ def test_eventfilter_ignores_modifier_chord(qtbot, monkeypatch):
 
 def test_eventfilter_inert_while_text_field_focused(qtbot, monkeypatch):
     line = QLineEdit()
-    dialog = ApprovalDialog("x")
+    dialog = ConfirmDialog("x")
     qtbot.addWidget(line)
     qtbot.addWidget(dialog)
     # Focus is in a text input -> W must pass through untouched.
@@ -149,7 +152,7 @@ def test_eventfilter_editable_combo_is_text_input(qtbot, monkeypatch):
 
     combo = QComboBox()
     combo.setEditable(True)
-    dialog = ApprovalDialog("x")
+    dialog = ConfirmDialog("x")
     qtbot.addWidget(combo)
     qtbot.addWidget(dialog)
     monkeypatch.setattr(

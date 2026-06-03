@@ -31,10 +31,9 @@ src/
       stylesheet_monitoring.py  — Dashboard monitoring card QSS
     widgets/             — Reusable UI widgets
       ai_setup_dialog.py     — AI model download dialog
-      approval_dialog.py     — Fix approval dialog
       batch_selection_dialog.py — Batch fix selection
       benchmark_row.py       — Benchmark result row
-      confirm_dialog.py      — Generic confirmation dialog
+      confirm_dialog.py      — Generic confirm/approval dialog (Yes/No, Approve/Deny)
       dashboard.py           — Dashboard with live stat tiles
       monitor_refresh_card.py — Monitor refresh rate card + Fix Now button
       mouse_poll_card.py     — Mouse polling card + Fix Now button
@@ -119,6 +118,7 @@ tools/
   lhm-server/          — Custom C# thermal sensor server (LibreHardwareMonitorLib + PawnIO)
   nvidiaProfileInspector/ — Bundled NVIDIA Profile Inspector tool (C# WPF app for GPU setting management)
 tests/                 — Unit tests, all mocked (no real system modifications)
+  test_module_test_coverage.py — Meta-test ratchet: fails if a substantive src/ module has no dedicated test reference (allowlist tracks known gaps); also runnable as a CLI report
 docs/                  — All progress docs, plans, reports, and notes go here
 memory-bank/           — Project design docs (brief, progress, patterns, active context)
 ```

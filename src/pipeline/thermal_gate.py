@@ -24,33 +24,60 @@ def require_thermal_protection(
     caller already has one in hand to avoid a redundant HTTP round-trip (the
     ``fetch_snapshot()`` call below). ``run_thermal_guard`` reuses the same
     snapshot for both the presence check and ``check_idle_thermals``.
+
+    When skipping, the specific cause (antivirus, port collision, PawnIO blocked,
+    etc.) is attributed via ``describe_sidecar_failure`` so the user learns WHY
+    temps are missing instead of a generic "not running". The no-sensor branch
+    treats LHM-up-but-empty as the PawnIO/Secure-Boot case (``no_sensors=True``).
     """
+    def _reason(no_sensors: bool = False) -> str:
+        # Best-effort cause attribution; never blocks the gate.
+        try:
+            from src.agent_tools.thermal_guidance import describe_sidecar_failure
+            lhm = getattr(ctx, "lhm", None)
+            if lhm is None:
+                return ""
+            return describe_sidecar_failure(lhm, no_sensors=no_sensors)
+        except Exception:
+            return ""  # safe: attribution is best-effort
+
     if not ctx.lhm_available:
+        reason = _reason()
         action_logger.log_action(
             phase_name,
             "Benchmark skipped — LHM unavailable",
-            details="No thermal protection available. LHM did not load.",
+            details=f"No thermal protection available. LHM did not load. {reason}".strip(),
             outcome="SKIPPED",
         )
-        print_warning(
+        msg = (
             f"LibreHardwareMonitor is not running — skipping {phase_name.lower()} benchmark. "
             "Thermal monitoring is required to run safely."
         )
+        if reason:
+            msg = f"{msg}\n  {reason}"
+        print_warning(msg)
         return True
 
     if snapshot is None:
         snapshot = fetch_snapshot()
     if not snapshot:
+        reason = _reason(no_sensors=True)
         action_logger.log_action(
             phase_name,
             "Benchmark skipped — no sensor data",
-            details="LHM is running but returned no temperature readings. Cannot guarantee thermal safety.",
+            details=(
+                "LHM is running but returned no temperature readings. "
+                f"Cannot guarantee thermal safety. {reason}"
+            ).strip(),
             outcome="SKIPPED",
         )
-        print_warning(
+        msg = (
             f"LHM is running but no temperature sensor data is available — skipping {phase_name.lower()} benchmark just incase. "
             "lil_bro always lookin' out for the fam."
         )
+        if reason:
+            msg = f"{msg}\n  {reason}"
+        print_warning(msg)
         return True
 
     return False

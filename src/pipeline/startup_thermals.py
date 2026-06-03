@@ -25,8 +25,6 @@ from src.utils.formatting import (
     print_step,
     print_step_done,
 )
-from src.utils.pawnio_check import is_pawnio_installed
-
 # LHM HTTP becomes ready before hardware sensors fully populate.
 # Retry a few times so we don't show "No sensor readings" on a healthy system.
 _SENSOR_RETRIES = 10
@@ -41,9 +39,14 @@ def run_startup_thermal_scan() -> tuple[LHMSidecar, bool]:
     Prints "Scanning idle temperatures..." BEFORE starting LHM so the user
     sees activity immediately rather than a blank screen during sidecar startup.
 
+    On failure (start() False) or the no-sensors case (LHM up but no CPU/GPU
+    sensor -- the PawnIO/Secure-Boot case), the specific cause is attributed via
+    thermal_guidance.describe_sidecar_failure so the user learns WHY temps are
+    missing instead of a bare "unavailable".
+
     Returns:
         (lhm, lhm_available)
-        lhm: the LHMSidecar instance — caller must call lhm.stop() on exit.
+        lhm: the LHMSidecar instance -- caller must call lhm.stop() on exit.
         lhm_available: True if LHM started and responded (False if unavailable).
     """
     print_info("Scanning idle temperatures...")
@@ -52,6 +55,13 @@ def run_startup_thermal_scan() -> tuple[LHMSidecar, bool]:
     lhm_available = lhm.start()  # sidecar prints its own "Launching..." progress
 
     if not lhm_available:
+        # Attribute the specific cause (antivirus, port collision, elevation,
+        # etc.), then keep the legacy skip line.
+        try:
+            from src.agent_tools.thermal_guidance import describe_sidecar_failure
+            print_warning(describe_sidecar_failure(lhm))
+        except Exception:
+            pass  # safe: attribution is best-effort
         print_dim("Thermal sensors unavailable — temperature display skipped.")
         return lhm, False
 
@@ -78,14 +88,18 @@ def run_startup_thermal_scan() -> tuple[LHMSidecar, bool]:
     gpu_temp = result.get("gpu_temp")
 
     if cpu_temp is None and gpu_temp is None:
-        print_accent("  No sensor readings returned — temperature display skipped.  "
-                  "lil_bro inhales motherboard electrons using LibreHardwareMonitor."
-                  "\n  Visit open source https://github.com/LibreHardwareMonitor/LibreHardwareMonitor ")
-        if not is_pawnio_installed():
-            print_accent(
-                "  Hint: lil_bro auto-installs the PawnIO.sys driver to see inside your PC. If it failed for some reason, retry running lil_bro.\n"
-                "  See https://github.com/namazso/PawnIO.Setup/releases to install it yourself."
-            )
+        # LHM is up but no CPU/GPU sensor enumerated -- the PawnIO / Secure-Boot
+        # case (start() returned True). Name it, then keep the legacy skip line.
+        try:
+            from src.agent_tools.thermal_guidance import describe_sidecar_failure
+            print_warning(describe_sidecar_failure(lhm, no_sensors=True))
+        except Exception:
+            pass  # safe: attribution is best-effort
+        print_accent(
+            "  No sensor readings returned — temperature display skipped.  "
+            "lil_bro reads sensors via LibreHardwareMonitor "
+            "(https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)."
+        )
         print()
         return lhm, True
 

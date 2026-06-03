@@ -147,6 +147,14 @@ def run(debug: bool = False) -> int:
     except Exception:
         pawnio_was_preinstalled = False
 
+    # Boot checks ported from the terminal entry point (src/main.py); GUI mode
+    # skipped these before. Run at boot so they fire regardless of exit path
+    # (the aboutToQuit teardown does not run on hard-kill/crash).
+    from src.config import save_default_config
+    save_default_config()  # idempotent; writes the first-run config template
+    from src.utils.integrity import verify_integrity
+    verify_integrity()  # Stub today (returns True); a real frozen-build check needs a GUI failure path.
+
     ansi_re = re.compile(r"\x1b\[[0-9;]*m")
 
     QApplication.setApplicationName("lil_bro")
@@ -275,6 +283,18 @@ def run(debug: bool = False) -> int:
     # foreground-lock when the user clicked another app during the splash,
     # leaving lil_bro behind other windows or only flashing in the taskbar.
     bring_to_foreground(main)
+
+    # Non-elevated warning — parity with check_admin() in the terminal entry point
+    # (src/main.py). Shown here, after the window is up and the foreground-lock dance
+    # is done, so it never collides with splash.exec() or the show()/foreground
+    # sequence. The LHM sidecar's UAC prompt elevates lhm-server.exe only, not this
+    # process, so the fix pipeline still needs this heads-up. Non-modal — never blocks.
+    from src.utils.platform import is_admin
+    if not is_admin():
+        from src.gui.admin_notifier import AdminNotifier
+        notifier = AdminNotifier(parent=main)
+        runtime["_admin_notifier"] = notifier
+        notifier.show_warning()
 
     if not runtime.get("startup_done"):
         # Slow-path: on_finished has not fired yet. It will wire the monitor

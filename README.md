@@ -16,6 +16,15 @@ A **local, privacy-first AI agent** that optimizes your gaming PC for peak perfo
 
 All processing happens locally. The only external calls are optional driver version checks against vendor websites (NVIDIA/AMD/Intel) and the one-time AI model download on first run (skippable).
 
+## Requirements
+
+lil_bro ships as a **single, self-contained `.exe`** — there is nothing extra to install:
+
+- **Windows 10 (build 1903 / version 18362) or newer**, or Windows 11. 64-bit.
+- **Run as Administrator.** The `.exe` self-elevates via a UAC prompt on launch — expected and required to read sensors and apply system tweaks.
+- **No separate runtimes needed.** Python, the Qt UI, the .NET 8 thermal sidecar, and the Visual C++ runtime are all bundled inside the download. You do **not** need to install .NET, Python, or the VC++ Redistributable separately.
+- The **PawnIO** sensor driver installs automatically (with admin) on first run — no manual step.
+
 ## Status
 
 🟢 **v0.2.0.0 — PySide6 Desktop GUI + Pipeline Rescan Idempotency** — Full windowed app with dashboard (live thermals, mouse polling, monitor refresh tiles), optimization pipeline with phase-card progress, batch fix selection dialog, and animated splash screen. Running the pipeline twice in one session now finds nothing the second time. Dashboard "Fix Now" buttons are race-guarded and revertible. CLI mode preserved via `--terminal`. 671 tests passing.
@@ -52,6 +61,16 @@ lil_bro.exe --debug
 Both log files are preserved after each run:
 - `lil_bro_actions.log` — audit trail of every system modification lil_bro made
 - `lil_bro_debug.log` — process lifecycle, GUI startup, pipeline flow, and exception traces
+
+## Troubleshooting
+
+**Temperatures don't show up / the thermal card is "offline".** lil_bro runs a small bundled helper (`lhm-server.exe`) to read your sensors. If the temperature card shows a cause instead of a graph, it's almost always one of:
+
+- **Antivirus blocked or quarantined the helper.** It's an unsigned, self-extracting executable that installs a driver, which some antivirus tools flag. Add an exclusion for `lhm-server.exe` (and the lil_bro folder), then click **Retry** on the temperature card.
+- **Port 8085 is in use.** The helper serves sensor data on `localhost:8085`. Close whatever is using that port (lil_bro names it when it can), then **Retry**.
+- **The PawnIO sensor driver was blocked.** On systems with Secure Boot / strict driver signing, the kernel sensor driver can be refused. Temperatures may be limited; **Retry** re-attempts the install.
+
+lil_bro does **not** download anything to fix these — it tells you the cause and lets you **Retry** once you've cleared it. Everything stays offline.
 
 ## Further Reading
 

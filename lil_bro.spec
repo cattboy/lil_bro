@@ -79,7 +79,6 @@ a = Analysis(
         'src.gui.theme',
         'src.gui.worker',
         'src.gui.input.wasd_filter',
-        'src.gui.widgets.approval_dialog',
         'src.gui.widgets.ai_setup_dialog',
         'src.gui.widgets.batch_selection_dialog',
         'src.gui.widgets.confirm_dialog',
