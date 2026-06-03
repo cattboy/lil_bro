@@ -63,7 +63,8 @@
       "mcp__claude_ai_Context7__resolve-library-id",
       "Bash(gh pr *)",
       "Bash(.venv/Scripts/python.exe -m pytest tests/ -q)",
-      "mcp__serena__restart_language_server"
+      "mcp__serena__restart_language_server",
+      "mcp__serena__replace_content"
     ]
   },
   "enabledMcpjsonServers": [

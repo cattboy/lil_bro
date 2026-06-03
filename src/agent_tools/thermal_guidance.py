@@ -25,6 +25,7 @@ def analyze_thermals(
     peak_temps: dict[str, float],
     cpu_peak: Optional[float] = None,
     gpu_peak: Optional[float] = None,
+    failure_reason: str = "",
 ) -> dict:
     """
     Analyze peak temperatures from a benchmark run.
@@ -33,15 +34,19 @@ def analyze_thermals(
         peak_temps: Full dict of sensor_name → peak_temp from ThermalMonitor.
         cpu_peak: Pre-computed CPU peak (optional, computed from peak_temps if None).
         gpu_peak: Pre-computed GPU peak (optional, computed from peak_temps if None).
+        failure_reason: Optional cause string (from ``describe_sidecar_failure``) to
+            append when no thermal data was captured, so the "unavailable" message
+            says WHY instead of just that LHM wasn't running.
 
     Returns:
         Standard finding dict: {check, status, message, can_auto_fix, ...}
     """
     if not peak_temps:
+        base = "Thermal data unavailable — LibreHardwareMonitor was not running during benchmark."
         return {
             "check": "thermals",
             "status": "UNKNOWN",
-            "message": "Thermal data unavailable — LibreHardwareMonitor was not running during benchmark.",
+            "message": f"{base} {failure_reason}".strip() if failure_reason else base,
             "can_auto_fix": False,
         }
 
@@ -267,3 +272,167 @@ def check_idle_thermals(
         "gpu_temp": gpu_temp,
         "message": f"{summary} — safe to benchmark.",
     }
+
+
+# ── Sidecar launch-failure attribution ───────────────────────────────────────
+# When the LHM sidecar fails to provide thermal data, three consumers need a
+# plain-English cause: the Dashboard thermal card, the benchmark thermal gate
+# (which skips Cinebench when temps are unavailable), and the CLI startup scan.
+# LHMSidecar records WHICH way it failed (``last_failure_kind``); this module
+# turns that kind + cheap environmental probes into a user-facing cause + action.
+#
+# Failure kinds set by LHMSidecar.start() per branch -- except ``no_sensors``,
+# which the launch site determines when start() SUCCEEDS but no CPU sensor ever
+# appears (the PawnIO / Secure-Boot case: start() returns True with empty data):
+#   port_in_use, not_found, elevation_failed, launch_error,
+#   exited_immediately, timeout, no_sensors, unknown
+#
+# classify_sidecar_failure is PURE (kind + probes in, message out) so it is
+# trivially unit-testable. describe_sidecar_failure does the I/O (gathers probes)
+# and NEVER raises -- it runs inside an already-failing path.
+
+_LHM_PORT_DEFAULT = 8085
+
+
+def classify_sidecar_failure(
+    kind: str,
+    probes: Optional[dict] = None,
+    returncode: Optional[int] = None,
+    stderr_lines: Optional[list[str]] = None,
+) -> dict:
+    """Map a sidecar failure ``kind`` + environmental ``probes`` to a cause+action.
+
+    Pure: no I/O, no side effects. ``probes`` keys (all optional):
+        ``pawnio_installed`` (bool), ``port_owner`` (str|None),
+        ``exe_present`` (bool|None), ``is_admin`` (bool).
+    ``returncode``/``stderr_lines`` are only consulted for the ``exited_immediately``
+    branch (the one kind that actually carries them). Returns
+    ``{"status": "WARNING", "message": str}``.
+    """
+    probes = probes or {}
+    port_owner = probes.get("port_owner")
+    pawnio = probes.get("pawnio_installed", False)
+
+    if kind == "port_in_use":
+        who = f" by {port_owner}" if port_owner else " by another application"
+        msg = (
+            f"Port {_LHM_PORT_DEFAULT} is in use{who}. "
+            "Close it and retry to restore thermal monitoring."
+        )
+    elif kind == "not_found":
+        msg = (
+            "The thermal helper (lhm-server.exe) is missing from the install -- "
+            "antivirus may have quarantined it. Reinstall lil_bro, then retry."
+        )
+    elif kind == "elevation_failed":
+        msg = (
+            "Elevation for the thermal helper was declined. Thermal monitoring "
+            "needs admin rights -- retry and accept the prompt."
+        )
+    elif kind == "launch_error":
+        msg = (
+            "The thermal helper could not launch -- often antivirus blocking it. "
+            "Add an exclusion for lhm-server.exe, then retry."
+        )
+    elif kind == "exited_immediately":
+        if _is_dotnet_host_error(returncode, stderr_lines):
+            msg = (
+                "The thermal helper failed to start its bundled runtime. "
+                "Please report this; reinstalling lil_bro may help."
+            )
+        else:
+            msg = (
+                "The thermal helper exited immediately -- often antivirus quarantine. "
+                "Add an exclusion for lhm-server.exe, then retry."
+            )
+    elif kind == "timeout":
+        if not pawnio:
+            msg = (
+                "The thermal helper started but no sensors responded, and the PawnIO "
+                "driver isn't installed. Retry to reinstall it."
+            )
+        else:
+            msg = "The thermal helper started but didn't respond in time. Retry."
+    elif kind == "no_sensors":
+        if not pawnio:
+            msg = (
+                "Thermal helper is running but the PawnIO sensor driver was blocked "
+                "(often Secure Boot / driver signing). Retry to reinstall it."
+            )
+        else:
+            msg = (
+                "Thermal helper is running but reported no CPU sensors. "
+                "Retry, or verify PawnIO loaded."
+            )
+    else:  # unknown / catch-all -- never leave the user without an action
+        msg = (
+            "Thermal monitoring is unavailable. Retry, or check antivirus "
+            f"and that port {_LHM_PORT_DEFAULT} is free."
+        )
+
+    return {"status": "WARNING", "message": msg}
+
+
+def _is_dotnet_host_error(
+    returncode: Optional[int], stderr_lines: Optional[list[str]]
+) -> bool:
+    """True if the failure looks like a missing/broken .NET host.
+
+    Defensive only: the sidecar ships self-contained (bundles .NET 8), so this
+    should never fire in the field -- if it does, it points at a build regression,
+    not a user-fixable prerequisite. 0x80008096 is hostfxr's "must install .NET".
+    """
+    if returncode is not None and returncode in (0x80008096, -2147450730):
+        return True
+    text = " ".join(stderr_lines or []).lower()
+    return "hostfxr" in text or "you must install" in text
+
+
+def _gather_sidecar_probes() -> dict:
+    """Collect cheap, read-only environmental facts for failure attribution.
+
+    Each probe is independently guarded -- this runs inside an already-failing
+    path and must never raise. ``psutil.net_connections`` (inside ``_port_owner``)
+    can raise AccessDenied on a non-elevated run, hence the per-probe try/except.
+    """
+    probes: dict = {"pawnio_installed": False, "port_owner": None, "is_admin": False}
+    try:
+        from src.utils.pawnio_check import is_pawnio_installed
+        probes["pawnio_installed"] = is_pawnio_installed()
+    except Exception:
+        pass  # safe: probe is best-effort
+    try:
+        from src.collectors.sub.lhm_process_utils import _port_owner
+        from src.collectors.sub.lhm_http import LHM_PORT
+        probes["port_owner"] = _port_owner(LHM_PORT)
+    except Exception:
+        pass  # safe: probe is best-effort
+    try:
+        from src.utils.platform import is_admin
+        probes["is_admin"] = is_admin()
+    except Exception:
+        pass  # safe: probe is best-effort
+    return probes
+
+
+def describe_sidecar_failure(lhm, no_sensors: bool = False) -> str:
+    """Return a user-facing cause+action for a failed/sensorless thermal sidecar.
+
+    ``lhm`` is an LHMSidecar instance (reads ``last_failure_kind`` /
+    ``last_returncode`` / ``last_stderr_lines``). Pass ``no_sensors=True`` when
+    start() SUCCEEDED but no CPU sensor appeared after the retry window. Never
+    raises -- it is called on an already-failing path.
+    """
+    try:
+        kind = "no_sensors" if no_sensors else (getattr(lhm, "last_failure_kind", None) or "unknown")
+        return classify_sidecar_failure(
+            kind,
+            _gather_sidecar_probes(),
+            returncode=getattr(lhm, "last_returncode", None),
+            stderr_lines=getattr(lhm, "last_stderr_lines", None),
+        )["message"]
+    except Exception:
+        return (
+            "Thermal monitoring is unavailable. Retry, or check antivirus "
+            f"and that port {_LHM_PORT_DEFAULT} is free."
+        )

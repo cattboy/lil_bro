@@ -109,6 +109,16 @@ dialogs at the same time.
 
 ---
 
+### T-026 — Standalone System Diagnostics panel (sharable)
+**Priority:** P3 — gated on real support volume
+**Effort:** M human / S-M with CC
+**Why:** Once there are enough users to generate support requests, a one-screen, copyable readout of all environment probes (Windows build, admin, PawnIO service, port 8085, sidecar status) plus the last classified failure speeds up triage. There is no support load today, so the inline thermal-card message covers the current need — do not build prematurely.
+**Fix:** New `src/gui/widgets/diagnostics_view.py` rendering the probe results + last classified cause with OK/WARN, plus copy-to-clipboard / write-to-file. Help-menu action in `src/gui/windows/main_window.py`. Add the new widget to `lil_bro.spec` `hiddenimports` (per the CLAUDE.md bundling rule, or it silently fails to render in the bundled exe).
+**Blocked by:** The failure-attribution PR (provides the probe + classification data the panel renders). Build only when support volume justifies it.
+**Added:** 2026-06-03 (deferred from /plan-eng-review D1 scope reduction + D7)
+
+---
+
 ## Completed
 
 ### T-013 — Convert `PipelineWorker._cancel_requested` bool to `threading.Event`

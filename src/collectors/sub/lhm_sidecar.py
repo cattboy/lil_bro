@@ -54,6 +54,13 @@ class LHMSidecar:
         self._elevated = False  # True when launched via ShellExecuteW runas
         self._stdout_lines: list[str] = []
         self._stderr_lines: list[str] = []
+        # Failure attribution -- read by thermal_guidance.describe_sidecar_failure.
+        # last_failure_kind labels WHICH start() branch failed; returncode/stderr
+        # are captured only for the exited-immediately branch (the one that has
+        # them). Reset at the top of every start() attempt (last-attempt-wins).
+        self.last_failure_kind: Optional[str] = None
+        self.last_returncode: Optional[int] = None
+        self.last_stderr_lines: list[str] = []
 
     @property
     def is_running(self) -> bool:
@@ -68,7 +75,22 @@ class LHMSidecar:
         1. LHM already running -> attach (don't launch a second instance)
         2. Port occupied by something else -> warn and skip
         3. LHM not running -> launch subprocess and wait for readiness
+
+        On failure, records ``last_failure_kind`` (+ returncode/stderr for the
+        exited-immediately branch) so thermal_guidance.describe_sidecar_failure
+        can attribute the cause. State resets at the top of every attempt --
+        last-attempt-wins, NOT record-once: a retry that hits a different cause
+        (user freed the port but antivirus now blocks the exe) must show the NEW
+        cause, and a retry that succeeds must clear the stale one. NOTE: a
+        successful start() that yields no CPU sensors (PawnIO/Secure-Boot blocked)
+        returns True with no failure kind -- that "no_sensors" case is detected by
+        the launch site, not here, because start() genuinely succeeded.
         """
+        # Fresh slate for this attempt's failure attribution.
+        self.last_failure_kind = None
+        self.last_returncode = None
+        self.last_stderr_lines = []
+
         # Scenario 1 & 2: check if port is already in use
         if _is_port_in_use(LHM_PORT):
             if _is_lhm_responding():
@@ -78,6 +100,7 @@ class LHMSidecar:
                 self._already_running = True
                 return True
             else:
+                self.last_failure_kind = "port_in_use"
                 print_warning(
                     f"Port {LHM_PORT} is in use by another application -- "
                     "thermal monitoring unavailable."
@@ -92,6 +115,7 @@ class LHMSidecar:
             exe, is_custom = find_lhm_executable()
 
         if not exe:
+            self.last_failure_kind = "not_found"
             print_warning(
                 "Thermal sensor server not found. Thermal monitoring unavailable.\n"
                 "  (lhm-server.exe was not bundled, and LibreHardwareMonitor is not installed)"
@@ -134,6 +158,7 @@ class LHMSidecar:
                     0,           # SW_HIDE
                 )
                 if ret <= 32:
+                    self.last_failure_kind = "elevation_failed"
                     print_step_done(False)
                     print_warning(
                         "Could not elevate lhm-server.exe (ShellExecuteW returned "
@@ -142,6 +167,7 @@ class LHMSidecar:
                     return False
                 self._elevated = True
         except Exception as e:
+            self.last_failure_kind = "launch_error"
             print_step_done(False)
             print_warning(f"Failed to launch {server_label}: {e}")
             return False
@@ -188,6 +214,9 @@ class LHMSidecar:
             # Early exit if subprocess already died
             if self._process is not None and self._process.poll() is not None:
                 rc = self._process.returncode
+                self.last_failure_kind = "exited_immediately"
+                self.last_returncode = rc
+                self.last_stderr_lines = list(self._stderr_lines)
                 print_step_done(False)
                 print_warning(
                     f"lhm-server.exe exited immediately (exit code {rc}). "
@@ -201,6 +230,8 @@ class LHMSidecar:
             time.sleep(_POLL_INTERVAL)
 
         # Timeout -- process alive but HTTP never became ready
+        self.last_failure_kind = "timeout"
+        self.last_stderr_lines = list(self._stderr_lines)
         print_step_done(False)
         print_warning(
             f"LibreHardwareMonitor launched but /data.json not reachable after "

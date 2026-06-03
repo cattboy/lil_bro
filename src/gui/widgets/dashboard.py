@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -38,6 +39,8 @@ class Dashboard(QWidget):
     # Re-broadcast of each poll snapshot — lets other views (the optimization
     # view's LiveStatRow) render the identical system stats as the dashboard.
     stats_ready = Signal(dict)
+
+    thermal_retry_requested = Signal()  # Retry button -> StartupCoordinator relaunch
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -88,6 +91,16 @@ class Dashboard(QWidget):
         chart_hdr_layout.addWidget(legend_cpu)
         chart_hdr_layout.addSpacing(12)
         chart_hdr_layout.addWidget(legend_gpu)
+
+        # Retry thermal monitoring without an app restart. Emits
+        # thermal_retry_requested -> StartupCoordinator.on_thermal_retry_requested,
+        # which relaunches the sidecar off the GUI thread. Styling (objectName)
+        # is a DESIGN.md follow-up; default chrome is acceptable for v1.
+        self._thermal_retry_btn = QPushButton("↻ Retry")
+        self._thermal_retry_btn.setObjectName("thermalRetryBtn")
+        self._thermal_retry_btn.clicked.connect(self.thermal_retry_requested)
+        chart_hdr_layout.addSpacing(12)
+        chart_hdr_layout.addWidget(self._thermal_retry_btn)
 
         chart_v.addWidget(chart_header)
 
@@ -150,6 +163,10 @@ class Dashboard(QWidget):
         self._worker_thread.start()
         self._log.info("Dashboard.start_polling: worker thread started (isRunning=%s)",
                  self._worker_thread.isRunning())
+
+    def set_thermal_retry_enabled(self, enabled: bool) -> None:
+        """Enable/disable the thermal Retry button (disabled while a retry runs)."""
+        self._thermal_retry_btn.setEnabled(enabled)
 
     def stop_polling(self) -> None:
         if self._worker is None or self._worker_thread is None:

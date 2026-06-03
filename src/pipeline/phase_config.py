@@ -94,6 +94,7 @@ class ConfigPhase:
             proposals = propose_actions(hardware, findings, ctx.llm)
 
             run_approval_flow(proposals, ctx)
+            log.info("ConfigPhase: approved_proposals count=%d", len(ctx.approved_proposals))
         except PipelineAborted:
             raise  # user declined — let orchestrator handle
         except Exception as exc:

@@ -30,8 +30,20 @@ class StartupOrchestrator(QObject):
         from src.pipeline.startup_thermals import _SENSOR_RETRIES, _SENSOR_RETRY_DELAY
         from time import sleep
 
+        def _describe(_lhm, no_sensors: bool = False) -> str:
+            # Best-effort cause attribution; never raises on the failure path.
+            try:
+                from src.agent_tools.thermal_guidance import describe_sidecar_failure
+                return describe_sidecar_failure(_lhm, no_sensors=no_sensors)
+            except Exception:
+                return ""
+
         self.specs_path: str | None = None
         self.preloaded_specs: dict = {}
+        # Cause shown on the Dashboard thermal card by StartupCoordinator.on_finished.
+        # finished.emit(startup_lhm) passes None on a failed start, so the reason can't
+        # ride the payload -- the coordinator reads it off the orchestrator instead.
+        self.lhm_failure_reason: str = ""
         startup_lhm = None
         try:
             # ── Step 1: LHM Monitor — PawnIO install + sidecar launch ───────
@@ -47,20 +59,31 @@ class StartupOrchestrator(QObject):
                     # are already populated. See plan
                     # `when-starting-lil-bro-exe-sometimes-smooth-puzzle.md`.
                     self.lhm_ready.emit(lhm)
+                else:
+                    self.lhm_failure_reason = _describe(lhm)
             except Exception:
                 self.init_step.emit("LHM Monitor", "fail")
+                self.lhm_failure_reason = _describe(lhm)
 
             # ── Step 2: Sensors — wait for CPU/GPU readings to appear ───────
             self.init_step.emit("Sensors", "running")
+            sensors_ok = False
             if lhm_available:
                 try:
                     for _ in range(_SENSOR_RETRIES):
                         temps = fetch_snapshot()
                         if temps and derive_cpu_temp(temps) is not None:
+                            sensors_ok = True
                             break
                         sleep(_SENSOR_RETRY_DELAY)
                 except Exception:
                     pass  # safe: thermal probe retry loop tolerates transient sidecar errors
+                if not sensors_ok:
+                    # LHM is UP but no CPU sensor enumerated -- the PawnIO /
+                    # Secure-Boot case (start() returned True). Attribute it so
+                    # the card explains the blank temps instead of staying on the
+                    # stale "not started" default.
+                    self.lhm_failure_reason = _describe(lhm, no_sensors=True)
             self.init_step.emit("Sensors", "done")
 
             # ── Step 3: System Specs — collect full hardware profile ─────────

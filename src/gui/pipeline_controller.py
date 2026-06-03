@@ -56,7 +56,9 @@ class PipelineController:
     def show_batch_dialog(self, proposals: list) -> None:
         dialog = BatchSelectionDialog(proposals, parent=self._main)
         dialog.exec()
-        self._bridge.deliver_answer(dialog.selected_indices())
+        indices = dialog.selected_indices()
+        self._log.info("show_batch_dialog: delivered indices=%s", indices)
+        self._bridge.deliver_answer(indices)
 
     def show_mouse_ready_dialog(self) -> None:
         from src.gui.widgets.mouse_ready_dialog import MouseReadyDialog

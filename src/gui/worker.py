@@ -127,6 +127,49 @@ class _MonitorFixWorker(QObject):
         self.finished.emit()
 
 
+class _ThermalRetryWorker(QObject):
+    """Re-launch the LHM thermal sidecar off the GUI thread (Dashboard Retry).
+
+    NOT a revertible fix -- deliberately does NOT route through
+    ``execute_fix``/``fix_dispatch`` (a sidecar relaunch produces nothing to
+    revert and has no ``@register_fix`` key). Stops the prior sidecar, constructs
+    a FRESH ``LHMSidecar`` (the old instance leaves ``_elevated`` / ``_process``
+    in a state that mis-routes teardown), and ``start()``s it. ``sidecar.start()``
+    does not call ``prompt_approval``, so the synchronous-worker deadlock warning
+    on ``_MonitorFixWorker`` does not apply here.
+
+    Results are stored as attributes (read by the finished handler) rather than
+    passed as signal args, mirroring the _MonitorFixWorker / refresh pattern.
+    """
+
+    finished = Signal()
+
+    def __init__(self, old_lhm) -> None:
+        super().__init__()
+        self._old_lhm = old_lhm
+        self.available: bool = False
+        self.new_lhm = None
+        self.reason: str = ""
+
+    def run(self) -> None:
+        try:
+            from src.collectors.sub.lhm_sidecar import LHMSidecar
+            if self._old_lhm is not None:
+                try:
+                    self._old_lhm.stop()
+                except Exception:
+                    pass  # safe: best-effort teardown before relaunch
+            self.new_lhm = LHMSidecar()
+            self.available = self.new_lhm.start()
+            if not self.available:
+                from src.agent_tools.thermal_guidance import describe_sidecar_failure
+                self.reason = describe_sidecar_failure(self.new_lhm)
+        except Exception:
+            from src.utils.debug_logger import get_debug_logger
+            get_debug_logger().error("ThermalRetryWorker uncaught exception", exc_info=True)
+        self.finished.emit()
+
+
 class _MonitorRefreshWorker(QObject):
     """Runs ``get_monitor_refresh_capabilities()`` off the GUI thread.
 

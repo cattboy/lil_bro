@@ -165,6 +165,16 @@ class StartupCoordinator:
         # dict reference -- no main-thread file I/O.
         runtime["preloaded_specs"] = getattr(self._orchestrator, "preloaded_specs", {}) or {}
 
+        # Wire the Dashboard Retry button once. on_finished fires exactly once
+        # per session, and the button isn't clickable until the dashboard shows
+        # (after this), so connecting here is race-free.
+        if not runtime.get("_thermal_retry_wired", False):
+            try:
+                main._dashboard.thermal_retry_requested.connect(self.on_thermal_retry_requested)
+                runtime["_thermal_retry_wired"] = True
+            except Exception as exc:
+                log.warning("Could not wire thermal retry button: %s", exc, exc_info=True)
+
         try:
             if runtime.get("pipeline_thread") is None and runtime.get("revert_thread") is None:
                 self._pipeline.set_flow_controls(True)
@@ -185,7 +195,14 @@ class StartupCoordinator:
                 )
                 main._dashboard.start_polling()
 
-            if startup_lhm is None:
+            # Surface the thermal failure cause on the card. The orchestrator
+            # records lhm_failure_reason for BOTH a failed start() (startup_lhm
+            # is None) AND the running-but-no-sensors PawnIO case (startup_lhm is
+            # the live instance) -- so key off the reason, not just None.
+            reason = getattr(self._orchestrator, "lhm_failure_reason", "") or ""
+            if reason:
+                main._dashboard.thermal_chart.set_offline(reason)
+            elif startup_lhm is None:
                 main._dashboard.thermal_chart.set_offline("Thermal monitor unavailable")
         except Exception as exc:
             log.error("on_finished EXC: %s: %r", type(exc).__name__, exc, exc_info=True)
@@ -334,3 +351,66 @@ class StartupCoordinator:
         fix_thread.finished.connect(lambda: runtime.pop("monitor_fix_thread", None))
         fix_thread.finished.connect(lambda: runtime.pop("monitor_fix_worker", None))
         fix_thread.start()
+
+
+    def on_thermal_retry_requested(self) -> None:
+        """Relaunch the thermal sidecar off the GUI thread (Dashboard Retry button).
+
+        Mirrors on_monitor_fix_requested's QThread + worker wiring, but the worker
+        calls ``sidecar.start()`` directly -- NOT ``execute_fix`` (a relaunch is not
+        a revertible fix). Guards against concurrent retries and disables the button
+        while one is in flight.
+        """
+        runtime = self._runtime
+        main = self._main
+        log = self._log
+        if runtime.get("thermal_retry_thread") is not None:
+            log.warning("Thermal retry already in progress -- ignoring")
+            return
+        main._dashboard.set_thermal_retry_enabled(False)
+        main._dashboard.thermal_chart.set_offline("Retrying thermal monitor…")
+        from src.gui.worker import _ThermalRetryWorker
+        thread = QThread()
+        worker = _ThermalRetryWorker(runtime.get("lhm"))
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(thread.quit)
+        # _on_thermal_retry_finished is connected FIRST so it reads the worker's
+        # result before deleteLater schedules its teardown.
+        thread.finished.connect(self._on_thermal_retry_finished)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        runtime["thermal_retry_thread"] = thread
+        runtime["thermal_retry_worker"] = worker
+        thread.finished.connect(lambda: runtime.pop("thermal_retry_thread", None))
+        thread.start()
+
+    def _on_thermal_retry_finished(self) -> None:
+        """Main-thread handler: apply the retry result, re-enable the button.
+
+        Reads the worker's result attributes before its runtime ref is popped. On
+        success, ``start_polling()`` is idempotent and the chart self-heals when the
+        next snapshot arrives (``append_sample`` clears the offline overlay); on
+        failure the classified cause is shown on the card.
+        """
+        runtime = self._runtime
+        main = self._main
+        worker = runtime.get("thermal_retry_worker")
+        try:
+            if worker is not None:
+                if worker.new_lhm is not None:
+                    runtime["lhm"] = worker.new_lhm
+                if worker.available:
+                    main._dashboard.start_polling()
+                else:
+                    main._dashboard.thermal_chart.set_offline(
+                        worker.reason or "Thermal monitor unavailable"
+                    )
+        except Exception as exc:
+            self._log.error("thermal retry finish EXC: %r", exc, exc_info=True)
+        finally:
+            runtime.pop("thermal_retry_worker", None)
+            try:
+                main._dashboard.set_thermal_retry_enabled(True)
+            except Exception:
+                pass  # safe: button re-enable is best-effort
