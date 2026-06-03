@@ -94,11 +94,13 @@ class Dashboard(QWidget):
 
         # Retry thermal monitoring without an app restart. Emits
         # thermal_retry_requested -> StartupCoordinator.on_thermal_retry_requested,
-        # which relaunches the sidecar off the GUI thread. Styling (objectName)
-        # is a DESIGN.md follow-up; default chrome is acceptable for v1.
+        # which relaunches the sidecar off the GUI thread. Hidden by default --
+        # only shown (via set_thermal_retry_visible) when the LHM sidecar fails
+        # to load temps; invisible whenever thermal monitoring is healthy.
         self._thermal_retry_btn = QPushButton("↻ Retry")
         self._thermal_retry_btn.setObjectName("thermalRetryBtn")
         self._thermal_retry_btn.clicked.connect(self.thermal_retry_requested)
+        self._thermal_retry_btn.hide()
         chart_hdr_layout.addSpacing(12)
         chart_hdr_layout.addWidget(self._thermal_retry_btn)
 
@@ -167,6 +169,16 @@ class Dashboard(QWidget):
     def set_thermal_retry_enabled(self, enabled: bool) -> None:
         """Enable/disable the thermal Retry button (disabled while a retry runs)."""
         self._thermal_retry_btn.setEnabled(enabled)
+
+    def set_thermal_retry_visible(self, visible: bool) -> None:
+        """Show/hide the thermal Retry button.
+
+        The button only makes sense when the LHM sidecar failed to load temps,
+        so it stays invisible whenever thermal monitoring is healthy. Called by
+        StartupCoordinator after the initial sidecar attempt and after each
+        retry resolves.
+        """
+        self._thermal_retry_btn.setVisible(visible)
 
     def stop_polling(self) -> None:
         if self._worker is None or self._worker_thread is None:

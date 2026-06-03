@@ -198,12 +198,18 @@ class StartupCoordinator:
             # Surface the thermal failure cause on the card. The orchestrator
             # records lhm_failure_reason for BOTH a failed start() (startup_lhm
             # is None) AND the running-but-no-sensors PawnIO case (startup_lhm is
-            # the live instance) -- so key off the reason, not just None.
+            # the live instance) -- so key off the reason, not just None. The
+            # Retry button is shown only on failure and stays hidden when thermal
+            # monitoring is healthy.
             reason = getattr(self._orchestrator, "lhm_failure_reason", "") or ""
             if reason:
                 main._dashboard.thermal_chart.set_offline(reason)
+                main._dashboard.set_thermal_retry_visible(True)
             elif startup_lhm is None:
                 main._dashboard.thermal_chart.set_offline("Thermal monitor unavailable")
+                main._dashboard.set_thermal_retry_visible(True)
+            else:
+                main._dashboard.set_thermal_retry_visible(False)
         except Exception as exc:
             log.error("on_finished EXC: %s: %r", type(exc).__name__, exc, exc_info=True)
 
@@ -390,8 +396,9 @@ class StartupCoordinator:
 
         Reads the worker's result attributes before its runtime ref is popped. On
         success, ``start_polling()`` is idempotent and the chart self-heals when the
-        next snapshot arrives (``append_sample`` clears the offline overlay); on
-        failure the classified cause is shown on the card.
+        next snapshot arrives (``append_sample`` clears the offline overlay) and the
+        Retry button hides; on failure the classified cause is shown on the card and
+        the button stays visible so the user can try again.
         """
         runtime = self._runtime
         main = self._main
@@ -402,10 +409,12 @@ class StartupCoordinator:
                     runtime["lhm"] = worker.new_lhm
                 if worker.available:
                     main._dashboard.start_polling()
+                    main._dashboard.set_thermal_retry_visible(False)
                 else:
                     main._dashboard.thermal_chart.set_offline(
                         worker.reason or "Thermal monitor unavailable"
                     )
+                    main._dashboard.set_thermal_retry_visible(True)
         except Exception as exc:
             self._log.error("thermal retry finish EXC: %r", exc, exc_info=True)
         finally:
