@@ -74,10 +74,11 @@ def create_restore_point(description: str | None = None, *, assume_approved: boo
                 print_error("Please enable it manually and try again.")
             return False
 
-    if not assume_approved:
-        if not prompt_approval("Create a System Restore Point? HIGHLY recommended, save your game before you feed... incase you want to revert lil_bros work"):
-            print_error("System Restore Point creation bypassed, yolo mode activated.")
-            return False
+    if not assume_approved and not prompt_approval(
+        "Create a System Restore Point? HIGHLY recommended, save your game before you feed... incase you want to revert lil_bros work"
+    ):
+        print_error("System Restore Point creation bypassed, yolo mode activated.")
+        return False
 
     print_step("Creating System Restore Point (this may take a minute)")
 

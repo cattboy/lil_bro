@@ -85,7 +85,8 @@ Read-only `LastRunCard` (`src/gui/widgets/last_run_card.py`) mirrors the session
 ---
 
 ### T-023 — DESIGN.md-aligned styling pass for all QMessageBox dialogs
-**Priority:** P3
+**Priority:** P3 — **COMPLETED 2026-06-04**
+Introduced the shared `CardDialog` template (`src/gui/widgets/dialogs.py`) — one DESIGN.md card (surface, tone-coloured icon, JetBrains-Mono title, glow primary, WASD `(W)`/`(S)` buttons, Esc handling) driven by a `cardTone` property. The two stock `QMessageBox` dialogs (`cap_notifier`, `main_window._open_debug_log`) now render as on-brand cards; `ConfirmDialog` / `AdminWarningDialog` / `MouseReadyDialog` were refactored onto the base and the three duplicate `_qss_*` blocks collapsed into one `_qss_card_dialog`. Multi-agent plan review (sonnet review + opus devil's-advocate + opus orchestrator + sonnet final) caught a `sev` property-name collision (→ renamed `cardTone`) and a missed `test_admin_notifier.py` objectName assertion. Deferred: T-025 (dialog style variants, seeded with MouseReady's pre-unify look), T-027 (emoji→QIcon). Original scope/Why/Fix kept below as historical context.
 **Effort:** S human / S with CC
 **Why:** The app's `QMessageBox` dialogs (the cap warning in `src/gui/cap_notifier.py` and the
 debug-log notice at `src/gui/windows/main_window.py:279`) use stock OS chrome, which clashes with
@@ -109,6 +110,26 @@ template (error dialog → `#FF6B6B` accent, not amber).
 **Fix:** Add a per-run marker to the manifest data layer (`src/utils/revert.py` / `src/pipeline/fix_dispatch.py` — e.g. a run index stamped on each entry at `_record_*` time), then group rows by run in `LastRunCard.set_manifest` with subtle run-separator headers.
 **Blocked by:** The data-layer change — out of scope for the read-only card (T-016).
 **Added:** 2026-06-01 (deferred from /plan-ceo-review on T-016; numbered T-024 — T-022/T-023 already taken on feat/log-size-caps)
+
+---
+
+### T-025 — Dialog style variants (unique per-dialog looks)
+**Priority:** P3/P4
+**Effort:** M human / S-M with CC
+**Why:** Full-unify (T-023) collapsed every card dialog onto one `CardDialog` / `_qss_card_dialog` standard, so a dialog can no longer have a distinct look. MouseReadyDialog lost its pre-unify styling in the process. A variant mechanism would let intentional dialogs diverge from the standard card.
+**Fix:** Add a `variant` dynamic property on `CardDialog` (+ gated QSS, e.g. `QDialog#cardDialog[variant="bar"] ...` or `:not([variant="bar"])` on the prominent `#primary` rule). **Seed spec = MouseReadyDialog's pre-unify look, banked so it isn't lost:** accent bar (no icon); title JetBrains Mono 14px **weight 700**; description colour **`text_secondary` (#9B9AA0)**; **no** card background/border (flat dialog bg); primary button at the **global** `#primary` size (padding 8px 16px, weight 600). Template for future "unique" dialogs.
+**Blocked by:** Nothing. Build when a dialog genuinely needs a distinct look.
+**Added:** 2026-06-04 (user decision during T-023 full-unify — preserve MouseReady's distinct look for later)
+
+---
+
+### T-027 — CardDialog icons: emoji glyphs → QIcon/text tokens
+**Priority:** P4
+**Effort:** S human / S with CC
+**Why:** `CardDialog._TONE_GLYPH` uses emoji glyphs (⚡/⚠/ⓘ/✓) as the default icons, but `src/gui/theme/tokens.py` (AI-slop guardrail #7) blacklists emoji as design elements. The glyphs are an interim stand-in introduced with T-023.
+**Fix:** Replace the `tone→glyph` emoji map with QIcon assets or text tokens; keep the `icon` parameter caller-overridable so the swap is transparent to call sites.
+**Blocked by:** Nothing. Cosmetic; pairs with any future icon-set work.
+**Added:** 2026-06-04 (deferred from T-023 full-unify)
 
 ---
 

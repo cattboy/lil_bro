@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
-    QMessageBox,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -366,15 +365,17 @@ class MainWindow(QMainWindow):
 
     def _open_debug_log(self) -> None:
         from src.utils.paths import get_debug_log_path
+        from src.gui.widgets.dialogs import CardDialog
         path = get_debug_log_path()
         if path.exists():
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
         else:
-            QMessageBox.information(
-                self,
-                "Debug Log",
-                "No debug log found.\n\nRun lil_bro at least once to generate a log.",
-            )
+            CardDialog(
+                "No debug log found",
+                "Run lil_bro at least once to generate a log.",
+                tone="info",
+                parent=self,
+            ).exec()
 
     # ── Lifecycle ──────────────────────────────────────────────────────
 

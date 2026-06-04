@@ -38,6 +38,12 @@
 - Always implement multi-method fallbacks — never hard-fail when a tool (nvidia-smi, dxdiag, etc.) is missing. Fall back to WMI or registry alternatives.
 - GUI via PySide6 (default). CLI mode preserved via `--terminal`. New visual work uses PySide6; do not introduce PyQt.
 
+### Dialogs
+- All dialogs MUST be built from `CardDialog` in `src/gui/widgets/dialogs.py` — never a raw `QMessageBox` or a hand-rolled `QDialog`. The template owns the DESIGN.md card styling (surface card, tone-coloured icon, JetBrains-Mono title, accent-glow primary button, WASD `(W)`/`(S)` buttons, Esc handling) via the object-name-driven `_qss_card_dialog`.
+- `tone="accent|warning|error|info|success"` drives the icon tint via the `cardTone` property — distinct from the `sev=low|medium|high` severity property and from `statTone`; do not conflate them. Pass `secondary_label` only for a two-button confirm (Esc rejects); omit it for a single-button acknowledgement (Esc accepts). Secondary buttons auto-get `setAutoDefault(False)` (the WASD popout rule).
+- `icon` is caller-supplied and defaults to deriving a glyph from `tone`; pass `icon=None` for no icon (e.g. the `accent_bar=True` variant). The default glyphs are an interim stand-in — `tokens.py` blacklists emoji as design elements, so a QIcon migration is tracked in TODOS (T-027); do not enshrine specific glyphs as a design rule.
+- Specialized dialogs (`BatchSelectionDialog`, `AISetupDialog`, `SplashDialog`) are the only exemptions. Every new `src/gui/widgets/` module still needs a `lil_bro.spec` hiddenimports entry.
+
 ### Dashboard Fix Pattern
 When a fix can be triggered from a Dashboard card button (outside the pipeline `ApplyPhase`), follow this pattern — see `_MonitorFixWorker` in `src/gui/worker.py` as the reference implementation:
 
