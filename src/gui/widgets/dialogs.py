@@ -101,6 +101,8 @@ class CardDialog(QDialog):
             bar.setObjectName("cardAccentBar")
             bar.setFixedHeight(2)
             layout.addWidget(bar)
+            if icon is _DERIVE:
+                icon = None  # bar variant: no icon unless explicitly provided
 
         # -- Icon + text row ------------------------------------------------
         glyph = _TONE_GLYPH.get(tone, "") if icon is _DERIVE else icon

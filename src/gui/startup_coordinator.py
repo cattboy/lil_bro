@@ -309,15 +309,14 @@ class StartupCoordinator:
         log = self._log
         # Guard: dashboard fix during a pipeline run races ApplyPhase's
         # _fix_display -- concurrent ChangeDisplaySettingsExW + concurrent
-        # manifest appends would record the wrong "before" state and break
-        # revert.
+        # manifest appends would record the wrong "before" state and break revert.
         if runtime.get("pipeline_thread") is not None:
             log.warning("Monitor fix suppressed: pipeline is running")
             return
-        # Guard: rapid double-click would spawn two _MonitorFixWorker threads;
-        # the second's manifest "before" entry would be the first's after.
-        if runtime.get("monitor_fix_thread") is not None:
-            log.warning("Monitor fix already in progress -- ignoring")
+        # Guard: only one card fix at a time. Prevents concurrent NPI imports,
+        # double restore-point creation, and manifest-write races.
+        if runtime.get("card_fix_in_progress"):
+            log.warning("Monitor fix suppressed: a card fix is already in progress")
             return
         specs = runtime.get("preloaded_specs", {}) or {}
         displays = specs.get("DisplayCapabilities", []) or []
@@ -356,10 +355,17 @@ class StartupCoordinator:
         fix_thread.finished.connect(self.refresh_monitor_card)
         fix_thread.finished.connect(fix_worker.deleteLater)
         fix_thread.finished.connect(fix_thread.deleteLater)
+        fix_worker.result.connect(lambda ok: self._on_card_fix_result("display", ok))
         runtime["monitor_fix_thread"] = fix_thread
         runtime["monitor_fix_worker"] = fix_worker
+        runtime["card_fix_in_progress"] = True
+        if create_rp:
+            runtime["restore_point_in_progress"] = True
         fix_thread.finished.connect(lambda: runtime.pop("monitor_fix_thread", None))
         fix_thread.finished.connect(lambda: runtime.pop("monitor_fix_worker", None))
+        fix_thread.finished.connect(lambda: runtime.pop("card_fix_in_progress", None))
+        if create_rp:
+            fix_thread.finished.connect(lambda: runtime.pop("restore_point_in_progress", None))
         fix_thread.start()
 
 
@@ -389,6 +395,17 @@ class StartupCoordinator:
         )
         return bool(dlg.exec())
 
+    def _on_card_fix_result(self, check_name: str, ok: bool) -> None:
+        """Show an error dialog if a dashboard card fix failed."""
+        if not ok:
+            from src.gui.widgets.dialogs import CardDialog
+            CardDialog(
+                "Fix failed",
+                f"The {check_name} fix did not complete. Check the debug log for details.",
+                tone="error",
+                parent=self._main,
+            ).exec()
+
     def on_nvidia_fix_requested(self, check_name: str) -> None:
         runtime = self._runtime
         main = self._main
@@ -398,11 +415,10 @@ class StartupCoordinator:
         if runtime.get("pipeline_thread") is not None:
             log.warning("NVIDIA fix suppressed: pipeline is running")
             return
-        # Guard: ONE shared slot serializes BOTH nvidia cards. Load-bearing --
-        # two concurrent NPI -exportCustomized/-silentImport runs against the
-        # same install dir would race each other's .nip files.
-        if runtime.get("nvidia_fix_thread") is not None:
-            log.warning("NVIDIA fix already in progress -- ignoring")
+        # Guard: only one card fix at a time. Prevents concurrent NPI imports,
+        # double restore-point creation, and manifest-write races.
+        if runtime.get("card_fix_in_progress"):
+            log.warning("NVIDIA fix suppressed: a card fix is already in progress")
             return
         specs = runtime.get("preloaded_specs", {}) or {}
         nvidia = specs.get("NVIDIA", [])
@@ -460,10 +476,17 @@ class StartupCoordinator:
         fix_worker.finished.connect(fix_thread.quit)
         fix_thread.finished.connect(fix_worker.deleteLater)
         fix_thread.finished.connect(fix_thread.deleteLater)
+        fix_worker.result.connect(lambda ok: self._on_card_fix_result(check_name, ok))
         runtime["nvidia_fix_thread"] = fix_thread
         runtime["nvidia_fix_worker"] = fix_worker
+        runtime["card_fix_in_progress"] = True
+        if create_rp:
+            runtime["restore_point_in_progress"] = True
         fix_thread.finished.connect(lambda: runtime.pop("nvidia_fix_thread", None))
         fix_thread.finished.connect(lambda: runtime.pop("nvidia_fix_worker", None))
+        fix_thread.finished.connect(lambda: runtime.pop("card_fix_in_progress", None))
+        if create_rp:
+            fix_thread.finished.connect(lambda: runtime.pop("restore_point_in_progress", None))
         fix_thread.start()
 
 

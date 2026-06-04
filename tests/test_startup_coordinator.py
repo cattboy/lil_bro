@@ -57,10 +57,9 @@ class TestMonitorFixGuards:
         assert "pipeline" in msg.lower()
 
     def test_suppressed_when_monitor_fix_thread_set(self):
-        """CR-2: a second click while monitor_fix_thread is set must be dropped."""
-        sentinel_thread = MagicMock()
+        """CR-2: a second fix request while card_fix_in_progress is set must be dropped."""
         runtime = {
-            "monitor_fix_thread": sentinel_thread,
+            "card_fix_in_progress": True,
             "preloaded_specs": {
                 "DisplayCapabilities": [{"device": r"\\.\DISPLAY1"}]
             },
@@ -73,8 +72,8 @@ class TestMonitorFixGuards:
         mock_worker.assert_not_called()
         mock_thread.assert_not_called()
         mock_dialog.assert_not_called()
-        # Pre-existing sentinel must not be touched.
-        assert runtime["monitor_fix_thread"] is sentinel_thread
+        # Gate must not be cleared by a suppressed request.
+        assert runtime["card_fix_in_progress"] is True
         coord._log.warning.assert_called_once()
         msg = coord._log.warning.call_args[0][0]
         assert "already in progress" in msg.lower()

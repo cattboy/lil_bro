@@ -290,15 +290,15 @@ def _fix_nvidia_dlss_preset(specs: dict) -> bool:
     from src.utils.nvidia_npi import find_npi_exe
 
     npi_exe = find_npi_exe()
+    if npi_exe is None:
+        print_error("[nvidia_dlss_preset] NPI.exe not found — cannot apply fix.")
+        return False
+
     backup_path: str | None = None
-    if npi_exe is not None:
-        try:
-            backup_path = backup_nvidia_profile(npi_exe)
-        except Exception as e:
-            print_warning(f"[nvidia_dlss_preset] Backup failed ({e}) — fix will not be revertible.")
-            backup_path = None
-    else:
-        print_warning("[nvidia_dlss_preset] NPI.exe not found — fix will not be revertible.")
+    try:
+        backup_path = backup_nvidia_profile(npi_exe)
+    except Exception as e:
+        print_warning(f"[nvidia_dlss_preset] Backup failed ({e}) — fix will not be revertible.")
 
     try:
         fix_nvidia_dlss_preset(specs, pre_backup_path=backup_path)
@@ -314,7 +314,7 @@ def _fix_nvidia_dlss_preset(specs: dict) -> bool:
     else:
         _record_non_revertible(
             "nvidia_dlss_preset",
-            "NPI.exe unavailable or backup failed",
+            "backup failed before fix",
             warn=False,
         )
 

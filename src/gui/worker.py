@@ -94,13 +94,13 @@ class PipelineWorker(QObject):
 
 
 
-def _apply_card_fix(check_name: str, specs: dict, create_rp: bool) -> None:
+def _apply_card_fix(check_name: str, specs: dict, create_rp: bool) -> bool:
     """Shared apply-path for dashboard card fixes (runs on a worker thread).
 
     Stages the session manifest, optionally creates a System Restore Point
     (approval already obtained on the GUI thread; ``assume_approved=True`` avoids
     the ``prompt_approval`` deadlock in this event-loop-less worker), then runs
-    the fix via ``execute_fix``. Never raises -- logs and returns.
+    the fix via ``execute_fix``. Returns the fix result bool.
     """
     from src.pipeline.fix_dispatch import execute_fix
     from src.utils.revert import mark_restore_point_created, start_session_manifest
@@ -114,7 +114,7 @@ def _apply_card_fix(check_name: str, specs: dict, create_rp: bool) -> None:
         except Exception:
             from src.utils.debug_logger import get_debug_logger
             get_debug_logger().error("Card-fix restore point creation failed", exc_info=True)
-    execute_fix(check_name, specs)
+    return execute_fix(check_name, specs)
 
 
 class _MonitorFixWorker(QObject):
@@ -145,6 +145,7 @@ class _MonitorFixWorker(QObject):
     """
 
     finished = Signal()
+    result = Signal(bool)
 
     def __init__(self, specs: dict, create_rp: bool = False) -> None:
         super().__init__()
@@ -152,11 +153,13 @@ class _MonitorFixWorker(QObject):
         self._create_rp = create_rp
 
     def run(self) -> None:
+        success = False
         try:
-            _apply_card_fix("display", self._specs, self._create_rp)
+            success = _apply_card_fix("display", self._specs, self._create_rp)
         except Exception:
             from src.utils.debug_logger import get_debug_logger
             get_debug_logger().error("MonitorFixWorker uncaught exception", exc_info=True)
+        self.result.emit(success)
         self.finished.emit()
 
 
@@ -170,6 +173,7 @@ class _NvidiaProfileFixWorker(QObject):
     """
 
     finished = Signal()
+    result = Signal(bool)
 
     def __init__(self, check_name: str, specs: dict, create_rp: bool = False) -> None:
         super().__init__()
@@ -178,11 +182,13 @@ class _NvidiaProfileFixWorker(QObject):
         self._create_rp = create_rp
 
     def run(self) -> None:
+        success = False
         try:
-            _apply_card_fix(self._check_name, self._specs, self._create_rp)
+            success = _apply_card_fix(self._check_name, self._specs, self._create_rp)
         except Exception:
             from src.utils.debug_logger import get_debug_logger
             get_debug_logger().error("NvidiaProfileFixWorker uncaught exception", exc_info=True)
+        self.result.emit(success)
         self.finished.emit()
 
 

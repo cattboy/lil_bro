@@ -91,21 +91,21 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
     # atomic-write in revert._write_manifest survives a hard kill; this wait
     # still lets the worker land its append cleanly so the user's "Fix Now"
     # click is reflected in the next session's Revert.
+    # Restore-point creation (Checkpoint-Computer) can take up to 60s; use a
+    # longer wait when one is in progress so the manifest entry lands cleanly.
+    # Falls back to 5s when only a fast NPI import is in flight.
+    _rp_wait = 65_000 if runtime.get("restore_point_in_progress") else 5_000
     monitor_fix_thread = runtime.get("monitor_fix_thread")
     if monitor_fix_thread is not None:
         try:
-            monitor_fix_thread.wait(3000)
+            monitor_fix_thread.wait(_rp_wait)
         except Exception:
             pass  # safe: monitor-fix-on-quit best-effort
 
-    # Same rationale for an in-flight NVIDIA card fix (_NvidiaProfileFixWorker:
-    # NPI .nip import + manifest append, possibly a restore point). 3 s lets the
-    # worker land its manifest entry before LHM teardown so the fix is reflected
-    # in the next session's Revert.
     nvidia_fix_thread = runtime.get("nvidia_fix_thread")
     if nvidia_fix_thread is not None:
         try:
-            nvidia_fix_thread.wait(3000)
+            nvidia_fix_thread.wait(_rp_wait)
         except Exception:
             pass  # safe: nvidia-fix-on-quit best-effort
 
