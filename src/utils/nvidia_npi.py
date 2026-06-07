@@ -51,7 +51,7 @@ SETTING_IDS: dict[str, int] = {
 
 # Target values for optimal gaming configuration.
 # fps_limiter_v3 is calculated per monitor Hz (see calculate_fps_cap).
-# dlss_preset_letter depends on GPU generation (see DLSS_PRESETS).
+# dlss_preset_letter depends on GPU + priority (see src/utils/dlss_presets.py).
 TARGET_VALUES: dict[str, int] = {
     "gsync_global_feature":     1,           # On
     "gsync_global_mode":        1,           # Fullscreen only
@@ -75,13 +75,9 @@ DLSS_LETTER_MAP: dict[int, str] = {
     14: "N", 15: "O", 0x00FFFFFF: "recommended",
 }
 
-# GPU generation → recommended DLSS preset (letter, hex value).
-DLSS_PRESETS: dict[str, tuple[str, int]] = {
-    "50": ("L", 0x0C),   # RTX 50-series — Transformer Gen 2
-    "40": ("L", 0x0C),   # RTX 40-series — Transformer Gen 2
-    "30": ("K", 0x0B),   # RTX 30-series — Transformer Gen 1
-    "20": ("K", 0x0B),   # RTX 20-series — Transformer Gen 1
-}
+# letter -> NPI forced-preset value (reverse of DLSS_LETTER_MAP; injective for K/L/M).
+# The GPU + priority -> letter policy lives in src/utils/dlss_presets.py.
+DLSS_VALUE_BY_LETTER: dict[str, int] = {letter: val for val, letter in DLSS_LETTER_MAP.items()}
 
 
 def calculate_fps_cap(refresh_hz: int) -> int:

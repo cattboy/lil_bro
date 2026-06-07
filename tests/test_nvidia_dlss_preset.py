@@ -16,7 +16,7 @@ from unittest.mock import patch
 import pytest
 
 from src.utils.errors import SetterError
-from src.utils.nvidia_npi import DLSS_PRESETS, SETTING_IDS, TARGET_VALUES
+from src.utils.nvidia_npi import SETTING_IDS, TARGET_VALUES
 
 _SPECS_5090 = {"NVIDIA": [{"GPU": "NVIDIA GeForce RTX 5090"}]}
 
@@ -40,8 +40,38 @@ class TestFixNvidiaDlssPreset:
             SETTING_IDS["dlss_preset_letter"],
         }
         assert target[SETTING_IDS["dlss_preset_profile"]] == TARGET_VALUES["dlss_preset_profile"]
-        # RTX 50-series -> Preset "L" (0x0C) per DLSS_PRESETS.
-        assert target[SETTING_IDS["dlss_preset_letter"]] == DLSS_PRESETS["50"][1]
+        # RTX 5090 is FP8 + default priority "quality" -> Preset M (0x0D / 13).
+        assert target[SETTING_IDS["dlss_preset_letter"]] == 13
+
+    @patch("src.agent_tools.nvidia_profile_setter.apply_nvidia_profile", return_value=(True, "ok"))
+    @patch("src.agent_tools.nvidia_profile_setter.build_optimized_nip", return_value="mod.nip")
+    @patch("src.agent_tools.nvidia_profile_setter.export_current_profile", return_value=("src.nip", {}))
+    @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="b.nip")
+    @patch("src.agent_tools.nvidia_profile_setter.find_npi_exe", return_value="npi.exe")
+    def test_writes_k_for_no_fp8(self, _npi, _backup, _export, mock_build, _apply, tmp_path):
+        from src.agent_tools.nvidia_profile_setter import fix_nvidia_dlss_preset
+        specs = {"NVIDIA": [{"GPU": "NVIDIA GeForce RTX 3080"}]}
+        with patch("src.agent_tools.nvidia_profile_setter.get_temp_dir", return_value=tmp_path), \
+             patch("src.agent_tools.nvidia_profile_setter.os.unlink"):
+            assert fix_nvidia_dlss_preset(specs) is True
+        target = mock_build.call_args[0][1]
+        # RTX 30-series (no FP8) -> Preset K (11) regardless of priority.
+        assert target[SETTING_IDS["dlss_preset_letter"]] == 11
+
+    @patch("src.agent_tools.nvidia_profile_setter.apply_nvidia_profile", return_value=(True, "ok"))
+    @patch("src.agent_tools.nvidia_profile_setter.build_optimized_nip", return_value="mod.nip")
+    @patch("src.agent_tools.nvidia_profile_setter.export_current_profile", return_value=("src.nip", {}))
+    @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="b.nip")
+    @patch("src.agent_tools.nvidia_profile_setter.find_npi_exe", return_value="npi.exe")
+    def test_full_profile_writes_m_for_fp8(self, _npi, _backup, _export, mock_build, _apply, tmp_path):
+        """Regression: the FULL profile fix re-letters FP8 from L to M (default priority)."""
+        from src.agent_tools.nvidia_profile_setter import fix_nvidia_profile
+        with patch("src.agent_tools.nvidia_profile_setter.get_temp_dir", return_value=tmp_path), \
+             patch("src.agent_tools.nvidia_profile_setter.os.unlink"):
+            assert fix_nvidia_profile(_SPECS_5090) is True
+        target = mock_build.call_args[0][1]
+        assert target[SETTING_IDS["dlss_preset_profile"]] == TARGET_VALUES["dlss_preset_profile"]
+        assert target[SETTING_IDS["dlss_preset_letter"]] == 13  # M
 
     @patch("src.agent_tools.nvidia_profile_setter.find_npi_exe", return_value="npi.exe")
     def test_raises_on_unmapped_generation(self, _npi):
@@ -130,3 +160,27 @@ class TestDashboardSetNvidiaData:
         dash.set_nvidia_data({"error": "nvidia-smi not found"})
         assert dash._nvidia_full_card.isHidden()
         assert dash._nvidia_dlss_card.isHidden()
+
+    @patch("src.utils.nvidia_npi.find_npi_exe", return_value="npi.exe")
+    def test_seed_dlss_priority_monitor_aware(self, _npi, qtbot, monkeypatch):
+        import PySide6.QtCore as qtc
+
+        class _FakeQS:
+            def __init__(self, *a):
+                pass
+
+            def value(self, *a, **k):
+                return None  # no stored manual choice
+
+            def setValue(self, *a, **k):
+                pass
+
+        monkeypatch.setattr(qtc, "QSettings", _FakeQS)
+        from src.config import config
+        monkeypatch.setattr(config.nvidia.dlss, "priority", "fps")
+        dash = self._make_dashboard(qtbot)
+        dash.seed_dlss_priority(
+            {"DisplayCapabilities": [{"max_refresh_hz": 60, "at_resolution": "1920x1080"}]}
+        )
+        # No manual QSettings; 60Hz monitor-aware -> quality (overrides config "fps").
+        assert config.nvidia.dlss.priority == "quality"

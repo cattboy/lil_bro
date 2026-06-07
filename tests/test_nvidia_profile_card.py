@@ -24,3 +24,28 @@ def test_set_gpu_combines_name_and_status(qtbot):
     text = card._status_lbl.text()
     assert "RTX 5090" in text
     assert "Optimize" in text
+
+
+def test_priority_toggle_emits(qtbot):
+    card = NvidiaProfileCard("nvidia_dlss_preset", "DLSS Preset", "Apply Preset",
+                             with_priority_toggle=True)
+    qtbot.addWidget(card)
+    with qtbot.waitSignal(card.priority_changed, timeout=1000) as blocker:
+        card._fps_btn.click()
+    assert blocker.args == ["fps"]
+
+
+def test_no_priority_toggle_by_default(qtbot):
+    card = NvidiaProfileCard("nvidia_profile", "NVIDIA Driver Profile", "Optimize")
+    qtbot.addWidget(card)
+    assert card._quality_btn is None
+    assert card._fps_btn is None
+
+
+def test_set_priority_reflects_state(qtbot):
+    card = NvidiaProfileCard("nvidia_dlss_preset", "DLSS Preset", "Apply Preset",
+                             with_priority_toggle=True)
+    qtbot.addWidget(card)
+    card.set_priority("fps")
+    assert card._fps_btn.isChecked() is True
+    assert card._quality_btn.isChecked() is False

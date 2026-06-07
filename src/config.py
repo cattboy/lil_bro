@@ -15,7 +15,7 @@ files are silently ignored — lil_bro always starts with working defaults.
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -51,15 +51,29 @@ class ThermalConfig:
 
 
 @dataclass
+class NvidiaDlssConfig:
+    # "quality" -> M on RTX 40/50 (FP8), K on 20/30; "fps" -> L on FP8, K on 20/30.
+    # A GUI toggle (QSettings) may override this in-memory at runtime.
+    priority: str = "quality"
+
+
+@dataclass
+class NvidiaConfig:
+    dlss: NvidiaDlssConfig = field(default_factory=NvidiaDlssConfig)
+
+
+@dataclass
 class AppConfig:
     benchmark: BenchmarkConfig
     thermal: ThermalConfig
+    nvidia: NvidiaConfig
 
 
 def _load_config() -> AppConfig:
     """Load config from lil_bro_config.json if present, else return defaults."""
     benchmark = BenchmarkConfig()
     thermal = ThermalConfig()
+    nvidia = NvidiaConfig()
 
     config_path = get_config_path()
     if config_path.exists():
@@ -81,10 +95,15 @@ def _load_config() -> AppConfig:
                         thermal.watchdog_sustained_secs = int(t["watchdog_sustained_secs"])
                     if "poll_interval" in t:
                         thermal.poll_interval = float(t["poll_interval"])
+                n = data.get("nvidia", {})
+                if isinstance(n, dict):
+                    d = n.get("dlss", {})
+                    if isinstance(d, dict) and d.get("priority") in ("quality", "fps"):
+                        nvidia.dlss.priority = str(d["priority"])
         except Exception:
             pass  # Malformed config — silently use defaults
 
-    return AppConfig(benchmark=benchmark, thermal=thermal)
+    return AppConfig(benchmark=benchmark, thermal=thermal, nvidia=nvidia)
 
 
 # Module-level singleton — loaded once at first import.
@@ -120,6 +139,18 @@ _DEFAULT_CONFIG_TEMPLATE = """\
 
         // Seconds between LibreHardwareMonitor temperature polls.
         "poll_interval": 1.0
+    },
+
+    // ── NVIDIA Settings ─────────────────────────────────────────────
+
+    "nvidia": {
+        "dlss": {
+            // DLSS forced-model-preset lean:
+            //   "quality" -> M on RTX 40/50 (FP8), K on RTX 20/30
+            //   "fps"     -> L on RTX 40/50 (FP8), K on RTX 20/30
+            // A GUI toggle (QSettings) overrides this at runtime.
+            "priority": "quality"
+        }
     }
 }
 """

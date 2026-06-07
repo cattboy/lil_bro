@@ -319,6 +319,7 @@ def run(debug: bool = False) -> int:
             main._dashboard.set_monitor_data(_specs.get("DisplayCapabilities", []))
             main._dashboard.monitor_fix_requested.connect(startup.on_monitor_fix_requested)
             main._dashboard.monitor_refresh_requested.connect(startup.refresh_monitor_card)
+            main._dashboard.seed_dlss_priority(_specs)
             main._dashboard.set_nvidia_data(_specs.get("NVIDIA", []))
             main._dashboard.nvidia_fix_requested.connect(startup.on_nvidia_fix_requested)
             runtime["_monitor_wired"] = True

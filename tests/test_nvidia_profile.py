@@ -327,16 +327,16 @@ class TestGpuGeneration:
         from src.agent_tools.nvidia_profile import _get_gpu_generation
         assert _get_gpu_generation(gpu_name) == expected_gen
 
-    @pytest.mark.parametrize("gen,expected_letter", [
-        ("50", "L"),
-        ("40", "L"),
-        ("30", "K"),
-        ("20", "K"),
+    @pytest.mark.parametrize("gpu,priority,expected", [
+        ("NVIDIA GeForce RTX 5090", "quality", "M"),
+        ("NVIDIA GeForce RTX 4090", "fps", "L"),
+        ("NVIDIA GeForce RTX 3080", "quality", "K"),
+        ("NVIDIA GeForce RTX 2070", "fps", "K"),
     ])
-    def test_dlss_preset_mapping(self, gen, expected_letter):
-        from src.agent_tools.nvidia_profile import DLSS_PRESETS
-        letter, _ = DLSS_PRESETS[gen]
-        assert letter == expected_letter
+    def test_dlss_preset_mapping(self, gpu, priority, expected):
+        from src.utils.dlss_presets import get_preset
+        preset = get_preset(gpu, priority)
+        assert preset is not None and preset.letter == expected
 
 
 # ── 6. Analyzer ──────────────────────────────────────────────────────────────
@@ -385,8 +385,8 @@ class TestAnalyzeNvidiaProfile:
                if key in TARGET_VALUES}
         # Add correct FPS cap for 240Hz
         raw[SETTING_IDS["fps_limiter_v3"]] = 226  # calculate_fps_cap(240)
-        # Add correct DLSS for RTX 40-series: Preset L = 0x0C = 12
-        raw[SETTING_IDS["dlss_preset_letter"]] = 0x0C
+        # Add correct DLSS for RTX 40-series (FP8, default priority quality): Preset M = 0x0D = 13
+        raw[SETTING_IDS["dlss_preset_letter"]] = 0x0D
 
         npi_data = {
             "available": True,
@@ -412,7 +412,7 @@ class TestAnalyzeNvidiaProfile:
         raw = {sid: TARGET_VALUES[key] for key, sid in SETTING_IDS.items()
                if key in TARGET_VALUES}
         raw[SETTING_IDS["fps_limiter_v3"]] = 226
-        raw[SETTING_IDS["dlss_preset_letter"]] = 0x0C
+        raw[SETTING_IDS["dlss_preset_letter"]] = 0x0D
 
         npi_data = {
             "available": True,
@@ -831,10 +831,11 @@ class TestNvidiaNpiConstants:
         assert calculate_fps_cap(480) == 424
 
     def test_dlss_presets_structure(self):
-        from src.utils.nvidia_npi import DLSS_PRESETS
+        from src.utils.dlss_presets import _GEN_TIER, _TIERS
         for gen in ("20", "30", "40", "50"):
-            assert gen in DLSS_PRESETS
-            letter, value = DLSS_PRESETS[gen]
-            assert isinstance(letter, str)
-            assert isinstance(value, int)
+            assert gen in _GEN_TIER
+            assert _GEN_TIER[gen] in _TIERS
+        assert _TIERS["fp8"]["quality"] == "M"
+        assert _TIERS["fp8"]["fps"] == "L"
+        assert _TIERS["no_fp8"]["quality"] == "K"
 

@@ -26,11 +26,25 @@ from src.gui.theme import repolish
 
 
 class NvidiaProfileCard(QFrame):
-    """Always-visible NVIDIA fix card. Emits ``apply_requested(check_name)``."""
+    """NVIDIA fix card. Emits ``apply_requested(check_name)``.
+
+    The DLSS variant (``with_priority_toggle=True``) also shows a Quality/FPS
+    segmented toggle and emits ``priority_changed("quality"|"fps")`` when the
+    user flips it. The toggle makes no system change on its own -- only Apply does.
+    """
 
     apply_requested = Signal(str)
+    priority_changed = Signal(str)
 
-    def __init__(self, check_name: str, title: str, button_label: str, parent=None) -> None:
+    def __init__(
+        self,
+        check_name: str,
+        title: str,
+        button_label: str,
+        parent=None,
+        *,
+        with_priority_toggle: bool = False,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("monitorCard")
         self.setAccessibleName(f"{title} card")
@@ -41,7 +55,7 @@ class NvidiaProfileCard(QFrame):
         root.setContentsMargins(20, 16, 20, 16)
         root.setSpacing(12)
 
-        # Left column: title + GPU/recommendation status
+        # Left column: title + GPU/recommendation status (+ optional toggle).
         left = QVBoxLayout()
         left.setSpacing(4)
 
@@ -56,6 +70,30 @@ class NvidiaProfileCard(QFrame):
         self._status_lbl.setWordWrap(True)
         self._status_lbl.setProperty("sev", "medium")
         left.addWidget(self._status_lbl)
+
+        # Optional quality/FPS toggle (DLSS card only). Two checkable, mutually
+        # exclusive QPushButtons (gui-widget-over-dropdown). autoDefault False so
+        # the WASD/Enter input layer never lands on them.
+        self._quality_btn: QPushButton | None = None
+        self._fps_btn: QPushButton | None = None
+        if with_priority_toggle:
+            toggle_row = QHBoxLayout()
+            toggle_row.setSpacing(6)
+            self._quality_btn = QPushButton("Quality")
+            self._fps_btn = QPushButton("FPS")
+            for btn, value in ((self._quality_btn, "quality"), (self._fps_btn, "fps")):
+                btn.setObjectName("secondary")
+                btn.setCheckable(True)
+                btn.setAutoExclusive(True)
+                btn.setAutoDefault(False)
+                btn.setDefault(False)
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.setFixedHeight(26)
+                btn.clicked.connect(lambda _checked=False, v=value: self._on_priority_clicked(v))
+                toggle_row.addWidget(btn)
+            toggle_row.addStretch()
+            self._quality_btn.setChecked(True)
+            left.addLayout(toggle_row)
 
         root.addLayout(left)
         root.addStretch()
@@ -74,6 +112,16 @@ class NvidiaProfileCard(QFrame):
         self._status_lbl.setText(f"{gpu_name} — {status_text}" if gpu_name else status_text)
         self._status_lbl.setToolTip(tooltip)
         repolish(self._status_lbl)
+
+    def set_priority(self, priority: str) -> None:
+        """Reflect the current priority on the toggle (no signal emitted)."""
+        if self._quality_btn is None or self._fps_btn is None:
+            return
+        self._quality_btn.setChecked(priority == "quality")
+        self._fps_btn.setChecked(priority == "fps")
+
+    def _on_priority_clicked(self, priority: str) -> None:
+        self.priority_changed.emit(priority)
 
     def _on_apply_clicked(self) -> None:
         self.apply_requested.emit(self._check_name)

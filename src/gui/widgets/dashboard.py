@@ -127,9 +127,11 @@ class Dashboard(QWidget):
         # bundled PyInstaller exe. Hidden until set_nvidia_data shows them when
         # nvidia-smi detects a GPU and NPI.exe is available.
         self._nvidia_dlss_card = NvidiaProfileCard(
-            "nvidia_dlss_preset", "DLSS Preset", "Apply Preset", parent=self
+            "nvidia_dlss_preset", "DLSS Preset", "Apply Preset", parent=self,
+            with_priority_toggle=True,
         )
         self._nvidia_dlss_card.apply_requested.connect(self.nvidia_fix_requested)
+        self._nvidia_dlss_card.priority_changed.connect(self._on_dlss_priority_changed)
         self._nvidia_dlss_card.hide()
         outer.addWidget(self._nvidia_dlss_card)
 
@@ -249,15 +251,16 @@ class Dashboard(QWidget):
     def set_nvidia_data(self, nvidia) -> None:
         """Show/populate the NVIDIA fix cards based on nvidia-smi detection.
 
-        Shows the full-profile card whenever an NVIDIA GPU is detected and NPI
-        is available; shows the DLSS-preset card only for a positively-identified
-        consumer GeForce RTX (20-50 series) with a known preset mapping. Hides
-        both otherwise. The recommendation reflects GPU 0 (NPI applies the driver
-        profile globally, not per-GPU).
+        Shows the full-profile card whenever an NVIDIA GPU is detected and NPI is
+        available; shows the DLSS-preset card only when the GPU resolves to a
+        supported preset (``dlss_presets.get_preset``). The recommendation reflects
+        GPU 0 + ``config.nvidia.dlss.priority`` (NPI applies the profile globally,
+        not per-GPU).
         """
-        from src.agent_tools.nvidia_profile import _get_gpu_generation
+        from src.config import config
         from src.llm.action_proposer import propose_for_check
-        from src.utils.nvidia_npi import DLSS_PRESETS, find_npi_exe
+        from src.utils.dlss_presets import get_preset
+        from src.utils.nvidia_npi import find_npi_exe
 
         # Detection: a non-empty list means nvidia-smi returned GPU(s); a dict
         # ({"error": ...}) or empty list means not detected. NPI must also be
@@ -265,10 +268,12 @@ class Dashboard(QWidget):
         if not isinstance(nvidia, list) or not nvidia or find_npi_exe() is None:
             self._nvidia_dlss_card.hide()
             self._nvidia_full_card.hide()
+            self._nvidia_gpu_name = None
             self._log.info("Dashboard.set_nvidia_data: hidden (no NVIDIA GPU or NPI absent)")
             return
 
         gpu_name = str(nvidia[0].get("GPU") or "NVIDIA GPU")
+        self._nvidia_gpu_name = gpu_name
 
         # Full-profile card: valid for any detected NVIDIA GPU.
         full_prop = propose_for_check("nvidia_profile") or {}
@@ -279,30 +284,81 @@ class Dashboard(QWidget):
         )
         self._nvidia_full_card.show()
 
-        # DLSS card: only for a positively-identified consumer GeForce RTX with a
-        # known preset. Requiring "GEFORCE" excludes workstation cards (Quadro /
-        # RTX A-series / "Ada Generation" / Titan) whose product_name the loose
-        # generation regex would otherwise misread into a wrong preset letter.
-        name_u = gpu_name.upper()
-        is_consumer = (
-            "GEFORCE" in name_u and "RTX" in name_u
-            and not any(t in name_u for t in ("ADA GENERATION", "QUADRO", "RTX A", "TITAN"))
-        )
-        gen = _get_gpu_generation(gpu_name)
-        if is_consumer and gen in DLSS_PRESETS:
-            letter = DLSS_PRESETS[gen][0]
-            dlss_prop = propose_for_check("nvidia_dlss_preset") or {}
+        # DLSS card: only when the GPU resolves to a supported preset. classify()
+        # rejects GTX / workstation (RTX A / Ada Generation / Quadro / Titan) and
+        # unmapped generations, so get_preset() returns None -> card hidden.
+        preset = get_preset(gpu_name)
+        if preset is not None:
+            self._nvidia_dlss_card.set_priority(config.nvidia.dlss.priority)
             self._nvidia_dlss_card.set_gpu(
                 gpu_name,
-                f"Recommended: DLSS Preset {letter}",
-                dlss_prop.get("explanation", ""),
+                f"Recommended: DLSS Preset {preset.letter}",
+                self._dlss_tooltip(preset),
             )
             self._nvidia_dlss_card.show()
-            self._log.info("Dashboard.set_nvidia_data: DLSS card shown (%s -> Preset %s)", gen, letter)
+            self._log.info("Dashboard.set_nvidia_data: DLSS card shown (%s -> Preset %s, %s)",
+                           preset.tier, preset.letter, preset.priority)
         else:
             self._nvidia_dlss_card.hide()
-            self._log.info("Dashboard.set_nvidia_data: DLSS card hidden (consumer=%s gen=%s)",
-                           is_consumer, gen)
+            self._log.info("Dashboard.set_nvidia_data: DLSS card hidden (%s unsupported)", gpu_name)
+
+    def _dlss_tooltip(self, preset) -> str:
+        """E1: explain the recommended preset (model + quality/FPS lean + RT caveat)."""
+        return (
+            f"{preset.model_name}\n"
+            f"Lean: {preset.priority} "
+            "(Quality=M / FPS=L on RTX 40/50; K on RTX 20/30).\n"
+            "Note: in some ray-traced games Preset K (DLSS 4) can look better than "
+            "M/L if the game's denoiser interacts poorly -- override per-game if needed."
+        )
+
+    def _on_dlss_priority_changed(self, priority: str) -> None:
+        """DLSS card quality/FPS toggle: update live config, persist, re-render."""
+        if priority not in ("quality", "fps"):
+            return
+        from src.config import config
+        from src.utils.dlss_presets import get_preset
+
+        config.nvidia.dlss.priority = priority
+        try:
+            from PySide6.QtCore import QSettings
+            QSettings("lil_bro", "GUI").setValue("dlss/priority", priority)
+        except Exception:
+            self._log.warning("DLSS priority QSettings write failed", exc_info=True)
+
+        gpu_name = getattr(self, "_nvidia_gpu_name", None)
+        if not gpu_name:
+            return
+        preset = get_preset(gpu_name, priority)
+        if preset is not None:
+            self._nvidia_dlss_card.set_gpu(
+                gpu_name,
+                f"Recommended: DLSS Preset {preset.letter}",
+                self._dlss_tooltip(preset),
+            )
+        self._log.info("DLSS priority -> %s (preset %s)", priority,
+                       preset.letter if preset else "none")
+
+    def seed_dlss_priority(self, specs: dict) -> None:
+        """E2: seed config.nvidia.dlss.priority at startup, before set_nvidia_data.
+
+        Precedence: manual QSettings toggle > monitor-aware (primary display) >
+        lil_bro_config.json > "quality". A stored manual choice always wins.
+        """
+        from src.config import config
+        from src.utils.dlss_presets import resolve_startup_priority
+
+        manual = None
+        try:
+            from PySide6.QtCore import QSettings
+            stored = QSettings("lil_bro", "GUI").value("dlss/priority", None)
+            if stored in ("quality", "fps"):
+                manual = stored
+        except Exception:
+            self._log.warning("DLSS priority QSettings read failed", exc_info=True)
+
+        config.nvidia.dlss.priority = resolve_startup_priority(specs, manual)
+        self._log.info("DLSS priority seeded -> %s", config.nvidia.dlss.priority)
 
     def set_monitor_data(self, displays: list[dict]) -> None:
         """Show/hide pre-allocated slots; dynamically build extras for 2+ monitors.

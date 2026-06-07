@@ -6,12 +6,11 @@ DLSS preset, power management) against gaming best practices. Returns a single
 finding dict -- all settings are fixed atomically via one .nip import.
 """
 
-import re
 from typing import Any
 
+from ..utils.dlss_presets import classify, get_preset
 from ..utils.nvidia_npi import (
     DLSS_LETTER_MAP,
-    DLSS_PRESETS,
     SETTING_IDS,
     TARGET_VALUES,
     calculate_fps_cap,
@@ -19,11 +18,9 @@ from ..utils.nvidia_npi import (
 
 
 def _get_gpu_generation(gpu_name: str) -> str | None:
-    """Extract RTX generation from GPU name (e.g. 'NVIDIA GeForce RTX 4090' -> '40')."""
-    m = re.search(r"RTX\s*(\d)0", gpu_name, re.IGNORECASE)
-    if m:
-        return m.group(1) + "0"
-    return None
+    """Extract RTX generation from a GPU name. Canonical impl: src/utils/dlss_presets.py."""
+    from ..utils.dlss_presets import _get_gpu_generation as _impl
+    return _impl(gpu_name)
 
 
 def _get_primary_refresh_hz(specs: dict) -> int | None:
@@ -137,43 +134,41 @@ def _check_rebar_driver(npi: dict, raw: dict[int, int], bios_rebar: bool | None)
 
 
 def _check_dlss(npi: dict, raw: dict[int, int], gpu_name: str) -> dict[str, Any]:
-    """Check DLSS preset against GPU generation recommendation."""
-    gen = _get_gpu_generation(gpu_name)
-    if gen is None:
+    """Check DLSS preset against the GPU's capability tier + configured priority."""
+    tier = classify(gpu_name)
+    if tier == "unsupported":
         return {
             "name": "DLSS Preset",
             "ok": True,
-            "message": "Could not detect RTX generation -- DLSS preset not checked",
+            "message": f"DLSS not supported on {gpu_name} (no Tensor cores)",
             "skipped": True,
         }
 
-    preset_info = DLSS_PRESETS.get(gen)
-    if preset_info is None:
+    preset = get_preset(gpu_name)
+    if preset is None:
         return {
             "name": "DLSS Preset",
             "ok": True,
-            "message": f"No DLSS preset recommendation for generation {gen}",
+            "message": "Could not detect a supported RTX generation -- DLSS preset not checked",
             "skipped": True,
         }
-
-    expected_letter, expected_hex = preset_info
 
     profile_val = raw.get(SETTING_IDS["dlss_preset_profile"])
     letter_val = raw.get(SETTING_IDS["dlss_preset_letter"])
     current_letter = DLSS_LETTER_MAP.get(letter_val, "unknown") if letter_val is not None else "not set"
 
-    if profile_val == 2 and letter_val == expected_hex:
+    if profile_val == 2 and letter_val == preset.value:
         return {
             "name": "DLSS Preset",
             "ok": True,
-            "message": f"DLSS Preset {expected_letter} correctly set for RTX {gen}-series",
+            "message": f"DLSS Preset {preset.letter} correctly set ({preset.priority})",
         }
     return {
         "name": "DLSS Preset",
         "ok": False,
-        "message": f"DLSS preset is '{current_letter}', recommended Preset {expected_letter} for RTX {gen}-series",
+        "message": f"DLSS preset is '{current_letter}', recommended Preset {preset.letter} ({preset.priority})",
         "current_letter": current_letter,
-        "expected_letter": expected_letter,
+        "expected_letter": preset.letter,
     }
 
 
@@ -272,8 +267,7 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
     summary = ", ".join(names)
 
     expected_fps = calculate_fps_cap(refresh_hz) if refresh_hz else None
-    gpu_gen = _get_gpu_generation(gpu_name)
-    dlss_info = DLSS_PRESETS.get(gpu_gen) if gpu_gen else None
+    dlss_preset = get_preset(gpu_name)
 
     return {
         "check": "nvidia_profile",
@@ -292,7 +286,7 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
             "vsync": "force_on",
             "fps_cap": expected_fps,
             "rebar_driver": True if bios_rebar else None,
-            "dlss_preset": dlss_info[0] if dlss_info else None,
+            "dlss_preset": dlss_preset.letter if dlss_preset else None,
             "power_mgmt": "max_performance",
         },
         "message": f"NVIDIA driver profile not optimized: {summary}",

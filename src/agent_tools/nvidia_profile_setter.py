@@ -13,10 +13,11 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 
+from ..config import config
 from ..utils.action_logger import action_logger
+from ..utils.dlss_presets import get_preset
 from ..utils.errors import SetterError
 from ..utils.nvidia_npi import (
-    DLSS_PRESETS,
     SETTING_IDS,
     TARGET_VALUES,
     calculate_fps_cap,
@@ -24,7 +25,7 @@ from ..utils.nvidia_npi import (
     find_npi_exe,
 )
 from ..utils.paths import get_backups_dir, get_temp_dir
-from .nvidia_profile import _get_gpu_generation, _get_primary_refresh_hz
+from .nvidia_profile import _get_primary_refresh_hz
 
 
 def backup_nvidia_profile(npi_exe: str) -> str:
@@ -141,7 +142,8 @@ def fix_nvidia_profile(
     Args:
         specs: Full system specs dict.
         refresh_hz: Override for monitor refresh rate (auto-detected if None).
-        gpu_generation: Override for GPU gen like "40" (auto-detected if None).
+        gpu_generation: Deprecated/ignored; the DLSS preset is now resolved from
+            GPU capability + config.nvidia.dlss.priority via get_preset.
         pre_backup_path: Path to an already-created backup .nip. If provided,
             the internal backup step is skipped (avoids duplicate exports).
 
@@ -185,13 +187,11 @@ def fix_nvidia_profile(
         if bios_rebar is True:
             target[SETTING_IDS["rebar_enable"]] = TARGET_VALUES["rebar_enable"]
 
-        if gpu_generation is None:
-            gpu_name = nvidia[0].get("GPU", "") if isinstance(nvidia, list) and nvidia else ""
-            gpu_generation = _get_gpu_generation(gpu_name)
-        if gpu_generation and gpu_generation in DLSS_PRESETS:
-            _, dlss_hex = DLSS_PRESETS[gpu_generation]
+        gpu_name = nvidia[0].get("GPU", "") if isinstance(nvidia, list) and nvidia else ""
+        preset = get_preset(gpu_name, config.nvidia.dlss.priority)
+        if preset is not None:
             target[SETTING_IDS["dlss_preset_profile"]] = TARGET_VALUES["dlss_preset_profile"]
-            target[SETTING_IDS["dlss_preset_letter"]] = dlss_hex
+            target[SETTING_IDS["dlss_preset_letter"]] = preset.value
 
         target[SETTING_IDS["power_mgmt"]] = TARGET_VALUES["power_mgmt"]
 
@@ -209,8 +209,8 @@ def fix_nvidia_profile(
         changes = []
         if cap is not None:
             changes.append(f"FPS cap={cap}")
-        if gpu_generation and gpu_generation in DLSS_PRESETS:
-            changes.append(f"DLSS={DLSS_PRESETS[gpu_generation][0]}")
+        if preset is not None:
+            changes.append(f"DLSS={preset.letter}")
         if bios_rebar is True:
             changes.append("ReBar=ON")
         changes.extend(["G-Sync=ON", "VSync=ForceOn", "PowerMgmt=MaxPerf"])
@@ -229,11 +229,13 @@ def fix_nvidia_dlss_preset(
     """Apply ONLY the per-GPU DLSS preset (Forced Model Preset = Custom + letter).
 
     Mirrors ``fix_nvidia_profile`` but writes just the two DLSS SettingIDs,
-    leaving every other driver-profile setting untouched.
+    leaving every other driver-profile setting untouched. The preset letter is
+    resolved from GPU capability + ``config.nvidia.dlss.priority`` via
+    ``get_preset``.
 
     Args:
         specs: Full system specs dict.
-        gpu_generation: Override for GPU gen like "50" (auto-detected if None).
+        gpu_generation: Deprecated/ignored; retained for signature compatibility.
         pre_backup_path: Path to an already-created backup .nip. If provided,
             the internal backup step is skipped (avoids duplicate exports).
 
@@ -241,18 +243,17 @@ def fix_nvidia_dlss_preset(
 
     Raises:
         FileNotFoundError: NPI binary not found.
-        SetterError: GPU generation has no DLSS preset mapping, or import failed.
+        SetterError: GPU is not DLSS-capable, or import failed.
     """
     npi_exe = find_npi_exe()
     if npi_exe is None:
         raise FileNotFoundError("NVIDIA Profile Inspector binary not found")
 
-    if gpu_generation is None:
-        nvidia = specs.get("NVIDIA", [])
-        gpu_name = nvidia[0].get("GPU", "") if isinstance(nvidia, list) and nvidia else ""
-        gpu_generation = _get_gpu_generation(gpu_name)
-    if not gpu_generation or gpu_generation not in DLSS_PRESETS:
-        raise SetterError(f"No DLSS preset mapping for GPU generation: {gpu_generation!r}")
+    nvidia = specs.get("NVIDIA", [])
+    gpu_name = nvidia[0].get("GPU", "") if isinstance(nvidia, list) and nvidia else ""
+    preset = get_preset(gpu_name, config.nvidia.dlss.priority)
+    if preset is None:
+        raise SetterError(f"No DLSS preset for GPU: {gpu_name!r}")
 
     if pre_backup_path is not None:
         backup_path = pre_backup_path
@@ -263,10 +264,9 @@ def fix_nvidia_dlss_preset(
     with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as tmpdir:
         source_nip, _ = export_current_profile(npi_exe, tmpdir)
 
-        letter, dlss_hex = DLSS_PRESETS[gpu_generation]
         target: dict[int, int] = {
             SETTING_IDS["dlss_preset_profile"]: TARGET_VALUES["dlss_preset_profile"],
-            SETTING_IDS["dlss_preset_letter"]: dlss_hex,
+            SETTING_IDS["dlss_preset_letter"]: preset.value,
         }
 
         modified_nip = build_optimized_nip(source_nip, target)
@@ -280,7 +280,7 @@ def fix_nvidia_dlss_preset(
             pass
 
     if ok:
-        action_logger.log_action("NPI DLSS Fix", "Applied", f"DLSS={letter} (gen {gpu_generation})")
+        action_logger.log_action("NPI DLSS Fix", "Applied", f"DLSS={preset.letter} ({preset.priority})")
         return True
 
     action_logger.log_action("NPI DLSS Fix", "FAILED", msg)

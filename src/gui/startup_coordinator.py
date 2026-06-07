@@ -223,6 +223,7 @@ class StartupCoordinator:
                 main._dashboard.set_monitor_data(_specs.get("DisplayCapabilities", []))
                 main._dashboard.monitor_fix_requested.connect(self.on_monitor_fix_requested)
                 main._dashboard.monitor_refresh_requested.connect(self.refresh_monitor_card)
+                main._dashboard.seed_dlss_priority(_specs)
                 main._dashboard.set_nvidia_data(_specs.get("NVIDIA", []))
                 main._dashboard.nvidia_fix_requested.connect(self.on_nvidia_fix_requested)
                 runtime["_monitor_wired"] = True
@@ -428,10 +429,9 @@ class StartupCoordinator:
 
         gpu_name = str(nvidia[0].get("GPU") or "your NVIDIA GPU")
         if check_name == "nvidia_dlss_preset":
-            from src.agent_tools.nvidia_profile import _get_gpu_generation
-            from src.utils.nvidia_npi import DLSS_PRESETS
-            gen = _get_gpu_generation(gpu_name)
-            letter = DLSS_PRESETS[gen][0] if gen in DLSS_PRESETS else "?"
+            from src.utils.dlss_presets import get_preset
+            preset = get_preset(gpu_name)
+            letter = preset.letter if preset is not None else "?"
             title = f"Set DLSS Preset {letter}"
             desc = (
                 f"{gpu_name}: force DLSS Preset {letter} (the recommended AI upscaling "
