@@ -143,6 +143,56 @@ template (error dialog → `#FF6B6B` accent, not amber).
 
 ---
 
+### T-028 — DLSS V2 config overrides (target_mode / forced_letter)
+**Priority:** P3
+**Effort:** M human / S-M with CC
+**Why:** V1 ships one `nvidia.dlss.priority` knob (quality|fps). Power users may want per-resolution control (`target_mode`: dlaa/quality/balanced/performance/ultra_perf) and a hard `forced_letter` override that bypasses the capability resolver entirely.
+**Fix:** extend `NvidiaDlssConfig` (`src/config.py`) + `get_preset` (`src/utils/dlss_presets.py`) to honor `target_mode` and `forced_letter`; document in the config template. Pairs with the shipped GUI toggle.
+**Blocked by:** Nothing. Builds on the shipped V1 DLSS framework.
+**Added:** 2026-06-07 (deferred from /plan-eng-review on the DLSS framework)
+
+---
+
+### T-030 — DLSS Frame Generation guidance
+**Priority:** P2
+**Effort:** M human / S-M with CC
+**Why:** Frame Generation is the real VRAM consumer (per `docs/dlss_4_5_presets_by_gpu.json`) and a distinct lever from the SR preset; 50-series adds 6X Multi-Frame-Gen. Surfacing FrameGen guidance/toggle would round out the DLSS setup story.
+**Fix:** new NPI setting surface + card guidance; 50-series MFG specifics; VRAM messaging. Separate from the SR-preset framework.
+**Blocked by:** Nothing. Own design pass (kept out of the V1 PR to stay coherent).
+**Added:** 2026-06-07 (deferred E3 from /plan-ceo-review on the DLSS framework)
+
+---
+
+### T-031 — Per-game DLSS profiles (NPI per-application)
+**Priority:** P3
+**Effort:** L human / M with CC
+**Why:** NPI supports per-application profiles, not just the global forced letter. The per-mode matrix in `docs/dlss_4_5_presets_by_gpu.json` only fully makes sense per-game (quality→K, performance→M, ultra-perf→L). This is the "correct" model the global-letter wedge approximates.
+**Fix:** extend the setter to write per-application NPI profiles; game detection; per-game UI. Reuses the capability engine (`classify`/`get_preset`).
+**Blocked by:** Nothing. Significant scope.
+**Added:** 2026-06-07 (deferred E4 from /plan-ceo-review on the DLSS framework)
+
+---
+
+### T-032 — DLSS DLL version swapping (DLSS-Swapper-style)
+**Priority:** P3
+**Effort:** XL human / L with CC
+**Why:** Updating `nvngx_dlss.dll` in game install dirs to the latest version can improve image quality independent of the preset. High value but high risk — touches game files, needs a game-library scan + version DB, off the driver-profile wedge.
+**Fix:** detect installed games, locate/back-up/replace the DLL, track versions. Strong revert + safety story required.
+**Blocked by:** Nothing, but warrants careful safety review before scoping.
+**Added:** 2026-06-07 (deferred E5 from /plan-ceo-review on the DLSS framework)
+
+---
+
+### T-033 — Extend capability engine to FSR / XeSS (AMD / Intel)
+**Priority:** P3
+**Effort:** L human / M with CC
+**Why:** The capability-tier + priority engine (`classify`/`get_preset`) generalizes beyond NVIDIA. AMD (FSR) and Intel (XeSS) users get nothing today. Broadening would make lil_bro a vendor-agnostic upscaler optimizer.
+**Fix:** new tier/policy tables + appliers for FSR/XeSS (no NPI; different mechanisms). Mirror the `dlss_presets` service shape.
+**Blocked by:** Nothing. Large scope; different driver tooling per vendor.
+**Added:** 2026-06-07 (deferred E6 from /plan-ceo-review on the DLSS framework)
+
+---
+
 ## Completed
 
 ### T-013 — Convert `PipelineWorker._cancel_requested` bool to `threading.Event`
