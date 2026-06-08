@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from PySide6.QtCore import QObject, QThread
+
 from src.gui.startup_coordinator import StartupCoordinator
 
 
@@ -166,6 +168,75 @@ class TestRefreshMonitorCard:
         coord = _make_coordinator({})
         coord._on_refresh_failed("EnumDisplayDevicesW returned 0")
         coord._log.warning.assert_called_once()
+
+
+class TestQObjectThreadAnchoring:
+    """Regression for the dashboard-lock + dirty-exit bug.
+
+    The card-fix worker QThreads emit ``finished``/``result`` from the worker
+    thread, so their cleanup slots must be delivered on the GUI thread. That
+    needs (1) the coordinator to be a ``QObject`` (anchors its bound-method
+    slots to the main thread) and (2) the cleanup to be a bound method, not a
+    bare lambda (which PySide6 cannot anchor cross-thread). Before the fix the
+    ``card_fix_in_progress`` guard was stranded ``True`` and the dashboard
+    locked; the mocked-``QThread`` tests above never exercised real delivery.
+    """
+
+    def test_coordinator_is_a_qobject(self):
+        # Without a QObject receiver PySide6 falls back to DirectConnection on
+        # the emitting (worker) thread -- the root cause of the stranded guard.
+        assert issubclass(StartupCoordinator, QObject)
+
+    def test_thread_finished_cleanups_are_bound_methods(self):
+        coord = _make_coordinator({})
+        for name in (
+            "_on_monitor_fix_thread_finished",
+            "_on_nvidia_fix_thread_finished",
+            "_on_refresh_thread_finished",
+            "_on_thermal_retry_thread_finished",
+        ):
+            slot = getattr(coord, name)
+            # A bound method has __self__ == the coordinator; a lambda does not.
+            # Locks in the "no bare lambda" contract the anchoring relies on.
+            assert getattr(slot, "__self__", None) is coord
+
+    def test_monitor_fix_cleanup_clears_all_runtime_keys(self):
+        runtime = {
+            "card_fix_in_progress": True,
+            "restore_point_in_progress": True,
+            "monitor_fix_thread": MagicMock(),
+            "monitor_fix_worker": MagicMock(),
+        }
+        coord = _make_coordinator(runtime)
+        coord._on_monitor_fix_thread_finished()
+        for key in (
+            "card_fix_in_progress",
+            "restore_point_in_progress",
+            "monitor_fix_thread",
+            "monitor_fix_worker",
+        ):
+            assert key not in runtime
+
+    def test_cleanup_delivered_across_real_worker_thread(self, qtbot):
+        """End-to-end: wire the real cleanup slot to a real ``QThread.finished``
+        (emitted from the worker thread) exactly as ``on_monitor_fix_requested``
+        does, and confirm the guard clears once the queued slot is delivered on
+        the GUI thread. Red on the pre-fix code (non-QObject + bare lambda);
+        green after."""
+        runtime = {"card_fix_in_progress": True}
+        coord = _make_coordinator(runtime)
+
+        thread = QThread()
+        thread.finished.connect(coord._on_monitor_fix_thread_finished)
+        thread.started.connect(thread.quit)  # default run()==exec(); quit emits finished
+
+        with qtbot.waitSignal(thread.finished, timeout=3000):
+            thread.start()
+        # The cleanup is a queued event delivered AFTER finished; pump until it runs.
+        qtbot.waitUntil(lambda: "card_fix_in_progress" not in runtime, timeout=3000)
+        thread.wait()
+
+        assert "card_fix_in_progress" not in runtime
 
 
 class TestManifestSignatureGuard:

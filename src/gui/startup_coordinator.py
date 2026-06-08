@@ -29,7 +29,7 @@ class StartupCompleter(QObject):
         self._on_done(startup_lhm)
 
 
-class StartupCoordinator:
+class StartupCoordinator(QObject):
     """Owns the StartupOrchestrator + monitor-refresh-card signal handlers.
 
     Constructed once by ``app.run()``; the shared ``runtime`` dict is stored
@@ -37,12 +37,23 @@ class StartupCoordinator:
     re-enables the flow controls through it once startup completes.
     """
 
-    def __init__(self, main, runtime: dict, log, orchestrator, pipeline) -> None:
+    def __init__(self, main, runtime: dict, log, orchestrator, pipeline, parent=None) -> None:
+        # QObject base anchors this coordinator's slots to the thread it is built
+        # on (the main/GUI thread). Without it, the card-fix worker QThreads'
+        # cross-thread signals (fix_thread.finished, worker.result) fall back to
+        # DirectConnection and run on the dying worker thread -- stranding the
+        # card_fix_in_progress cleanup (dashboard locks) and mutating widgets
+        # off-thread (parent=None). See StartupCompleter for the same rationale.
+        super().__init__(parent)
         self._main = main
         self._runtime = runtime
         self._log = log
         self._orchestrator = orchestrator
         self._pipeline = pipeline
+        # NVIDIA card-fix check_name, captured at request time so the queued
+        # result slot reads it without a fragile self.sender() lookup on a
+        # possibly-deleted worker.
+        self._nvidia_fix_check_name: str | None = None
         # Applied Fixes card (T-016): a QFileSystemWatcher refreshes it live; a
         # single-shot QTimer debounces the double directoryChanged per write.
         self._last_run_watcher = None
@@ -287,8 +298,7 @@ class StartupCoordinator:
         refresh_worker.failed.connect(refresh_thread.quit)
         refresh_thread.finished.connect(refresh_worker.deleteLater)
         refresh_thread.finished.connect(refresh_thread.deleteLater)
-        refresh_thread.finished.connect(lambda: runtime.pop("monitor_refresh_thread", None))
-        refresh_thread.finished.connect(lambda: runtime.pop("monitor_refresh_worker", None))
+        refresh_thread.finished.connect(self._on_refresh_thread_finished)
         runtime["monitor_refresh_thread"] = refresh_thread
         runtime["monitor_refresh_worker"] = refresh_worker
         refresh_thread.start()
@@ -356,17 +366,13 @@ class StartupCoordinator:
         fix_thread.finished.connect(self.refresh_monitor_card)
         fix_thread.finished.connect(fix_worker.deleteLater)
         fix_thread.finished.connect(fix_thread.deleteLater)
-        fix_worker.result.connect(lambda ok: self._on_card_fix_result("display", ok))
+        fix_worker.result.connect(self._on_monitor_fix_result)
         runtime["monitor_fix_thread"] = fix_thread
         runtime["monitor_fix_worker"] = fix_worker
         runtime["card_fix_in_progress"] = True
         if create_rp:
             runtime["restore_point_in_progress"] = True
-        fix_thread.finished.connect(lambda: runtime.pop("monitor_fix_thread", None))
-        fix_thread.finished.connect(lambda: runtime.pop("monitor_fix_worker", None))
-        fix_thread.finished.connect(lambda: runtime.pop("card_fix_in_progress", None))
-        if create_rp:
-            fix_thread.finished.connect(lambda: runtime.pop("restore_point_in_progress", None))
+        fix_thread.finished.connect(self._on_monitor_fix_thread_finished)
         fix_thread.start()
 
 
@@ -406,6 +412,57 @@ class StartupCoordinator:
                 tone="error",
                 parent=self._main,
             ).exec()
+
+    # ── Card-fix worker-thread cleanup (queued to the GUI thread) ───────
+    # These run as their OWN queued events on the main thread (this coordinator
+    # is a QObject). Each clears card_fix_in_progress FIRST/unconditionally so a
+    # later exception in any sibling slot on the same QThread.finished signal
+    # (e.g. refresh_monitor_card) can never strand the guard and lock the
+    # dashboard. Replacing bare-lambda connections also fixes the off-main-thread
+    # set_monitor_data / leaked refresh QThread that prevented a clean exit.
+
+    @Slot()
+    def _on_monitor_fix_thread_finished(self) -> None:
+        runtime = self._runtime
+        runtime.pop("card_fix_in_progress", None)
+        runtime.pop("restore_point_in_progress", None)
+        runtime.pop("monitor_fix_thread", None)
+        runtime.pop("monitor_fix_worker", None)
+
+    @Slot()
+    def _on_nvidia_fix_thread_finished(self) -> None:
+        runtime = self._runtime
+        runtime.pop("card_fix_in_progress", None)
+        runtime.pop("restore_point_in_progress", None)
+        runtime.pop("nvidia_fix_thread", None)
+        runtime.pop("nvidia_fix_worker", None)
+
+    @Slot()
+    def _on_refresh_thread_finished(self) -> None:
+        runtime = self._runtime
+        runtime.pop("monitor_refresh_thread", None)
+        runtime.pop("monitor_refresh_worker", None)
+
+    @Slot()
+    def _on_thermal_retry_thread_finished(self) -> None:
+        # Pops only thermal_retry_thread; _on_thermal_retry_finished owns the
+        # thermal_retry_worker pop (it reads the worker's result first).
+        self._runtime.pop("thermal_retry_thread", None)
+
+    @Slot(bool)
+    def _on_monitor_fix_result(self, ok: bool) -> None:
+        """Queued (main-thread) wrapper for the monitor card-fix result."""
+        self._on_card_fix_result("display", ok)
+
+    @Slot(bool)
+    def _on_nvidia_fix_result(self, ok: bool) -> None:
+        """Queued (main-thread) wrapper for the NVIDIA card-fix result.
+
+        Reads the check_name captured in on_nvidia_fix_requested rather than
+        self.sender() -- the latter is unreliable for queued connections and
+        risks dereferencing a deleteLater-d worker.
+        """
+        self._on_card_fix_result(self._nvidia_fix_check_name or "nvidia_profile", ok)
 
     def on_nvidia_fix_requested(self, check_name: str) -> None:
         runtime = self._runtime
@@ -468,6 +525,7 @@ class StartupCoordinator:
 
         # Filter so the handler only sees the NVIDIA payload.
         filtered_specs = {**specs, "NVIDIA": nvidia}
+        self._nvidia_fix_check_name = check_name
         from src.gui.worker import _NvidiaProfileFixWorker
         fix_thread = QThread()
         fix_worker = _NvidiaProfileFixWorker(check_name, filtered_specs, create_rp)
@@ -476,17 +534,13 @@ class StartupCoordinator:
         fix_worker.finished.connect(fix_thread.quit)
         fix_thread.finished.connect(fix_worker.deleteLater)
         fix_thread.finished.connect(fix_thread.deleteLater)
-        fix_worker.result.connect(lambda ok: self._on_card_fix_result(check_name, ok))
+        fix_worker.result.connect(self._on_nvidia_fix_result)
         runtime["nvidia_fix_thread"] = fix_thread
         runtime["nvidia_fix_worker"] = fix_worker
         runtime["card_fix_in_progress"] = True
         if create_rp:
             runtime["restore_point_in_progress"] = True
-        fix_thread.finished.connect(lambda: runtime.pop("nvidia_fix_thread", None))
-        fix_thread.finished.connect(lambda: runtime.pop("nvidia_fix_worker", None))
-        fix_thread.finished.connect(lambda: runtime.pop("card_fix_in_progress", None))
-        if create_rp:
-            fix_thread.finished.connect(lambda: runtime.pop("restore_point_in_progress", None))
+        fix_thread.finished.connect(self._on_nvidia_fix_thread_finished)
         fix_thread.start()
 
 
@@ -519,7 +573,7 @@ class StartupCoordinator:
         thread.finished.connect(thread.deleteLater)
         runtime["thermal_retry_thread"] = thread
         runtime["thermal_retry_worker"] = worker
-        thread.finished.connect(lambda: runtime.pop("thermal_retry_thread", None))
+        thread.finished.connect(self._on_thermal_retry_thread_finished)
         thread.start()
 
     def _on_thermal_retry_finished(self) -> None:
