@@ -455,3 +455,53 @@ class Dashboard(QWidget):
                 )
         except Exception as exc:
             self._log.warning("Dashboard: geometry-log[%s] failed: %s", tag, exc)
+
+    def set_nvidia_profile_findings(self, result: dict) -> None:
+        """Update the NVCP profile card with per-setting before/after values."""
+        status = result.get("status")
+        if status == "OK":
+            self._nvidia_full_card.set_gpu(
+                self._nvidia_gpu_name or "",
+                "✓ All settings optimal",
+                "",
+                sev="low",
+            )
+        elif status == "WARNING":
+            text, sev = self._nvidia_delta_text(result["current"], result["expected"])
+            self._nvidia_full_card.set_gpu(
+                self._nvidia_gpu_name or "",
+                text,
+                result.get("message", ""),
+                sev=sev,
+            )
+
+    def _nvidia_delta_text(self, current: dict, expected: dict) -> tuple[str, str]:
+        """Build compact 'G-Sync: OFF→ON · VSync: Adaptive→Force On' text from analysis dicts.
+
+        Returns (status_text, sev). Only includes settings that differ from
+        expected; skips dlss_preset (handled by the DLSS card).
+        """
+        _BOOL = {True: "ON", False: "OFF"}
+        _VSYNC = {"force_on": "Force On", "adaptive": "Adaptive", "off": "OFF"}
+        _POWER = {"max_performance": "Max Perf", "max_perf": "Max Perf", "adaptive": "Adaptive"}
+
+        def _fmt_fps(v):
+            return "None" if v is None else f"{v} fps"
+
+        _fields = [
+            ("gsync",        "G-Sync",   lambda v: _BOOL.get(v, str(v))),
+            ("vsync",        "VSync",    lambda v: _VSYNC.get(v, str(v))),
+            ("fps_cap",      "FPS Cap",  _fmt_fps),
+            ("rebar_driver", "ReBar",    lambda v: _BOOL.get(v, str(v))),
+            ("power_mgmt",   "Power",    lambda v: _POWER.get(v, str(v))),
+        ]
+        deltas = []
+        for key, label, fmt in _fields:
+            cur = current.get(key)
+            exp = expected.get(key)
+            if exp is None or cur == exp:
+                continue
+            deltas.append(f"{label}: {fmt(cur)}→{fmt(exp)}")
+        if not deltas:
+            return ("✓ All settings optimal", "low")
+        return (" · ".join(deltas), "medium")

@@ -28,6 +28,7 @@ from src.gui.signals import PipelineSignals
 from src.gui.startup import StartupOrchestrator
 from src.gui.startup_coordinator import StartupCompleter, StartupCoordinator
 from src.gui.windows.main_window import MainWindow
+from src.agent_tools.nvidia_profile import analyze_nvidia_profile
 from src.utils.action_logger import action_logger
 
 
@@ -321,6 +322,7 @@ def run(debug: bool = False) -> int:
             main._dashboard.monitor_refresh_requested.connect(startup.refresh_monitor_card)
             main._dashboard.seed_dlss_priority(_specs)
             main._dashboard.set_nvidia_data(_specs.get("NVIDIA", []))
+            main._dashboard.set_nvidia_profile_findings(analyze_nvidia_profile(_specs))
             main._dashboard.nvidia_fix_requested.connect(startup.on_nvidia_fix_requested)
             runtime["_monitor_wired"] = True
         except Exception as exc:

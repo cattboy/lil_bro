@@ -69,10 +69,11 @@ class NvidiaProfileCard(QFrame):
         self._apply_btn.clicked.connect(self._on_apply_clicked)
         root.addWidget(self._apply_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
-    def set_gpu(self, gpu_name: str, status_text: str, tooltip: str = "") -> None:
+    def set_gpu(self, gpu_name: str, status_text: str, tooltip: str = "", sev: str = "medium") -> None:
         """Populate the card with the detected GPU and the recommended action."""
         self._status_lbl.setText(f"{gpu_name} — {status_text}" if gpu_name else status_text)
         self._status_lbl.setToolTip(tooltip)
+        self._status_lbl.setProperty("sev", sev)
         repolish(self._status_lbl)
 
     def _on_apply_clicked(self) -> None:

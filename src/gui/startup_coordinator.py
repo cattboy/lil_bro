@@ -462,7 +462,10 @@ class StartupCoordinator(QObject):
         self.sender() -- the latter is unreliable for queued connections and
         risks dereferencing a deleteLater-d worker.
         """
-        self._on_card_fix_result(self._nvidia_fix_check_name or "nvidia_profile", ok)
+        check_name = self._nvidia_fix_check_name or "nvidia_profile"
+        self._on_card_fix_result(check_name, ok)
+        if ok and check_name == "nvidia_profile":
+            self._main._dashboard.set_nvidia_profile_findings({"status": "OK"})
 
     def on_nvidia_fix_requested(self, check_name: str) -> None:
         runtime = self._runtime
