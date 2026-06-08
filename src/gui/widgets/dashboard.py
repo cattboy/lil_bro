@@ -13,6 +13,8 @@ optimization pipeline.
 
 from __future__ import annotations
 
+import html as _html
+
 from PySide6.QtCore import QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame,
@@ -31,6 +33,9 @@ from src.gui.widgets.nvidia_profile_card import NvidiaProfileCard
 from src.gui.widgets.stat_card import STAT_CARDS, StatCard
 from src.utils.debug_logger import get_debug_logger
 
+
+_NPI_RED = "#FF6B6B"
+_NPI_GREEN = "#4ADE80"
 
 class Dashboard(QWidget):
     """V2 dashboard: 4-col stat grid + temperature chart + USB polling widget."""
@@ -459,26 +464,28 @@ class Dashboard(QWidget):
     def set_nvidia_profile_findings(self, result: dict) -> None:
         """Update the NVCP profile card with per-setting before/after values."""
         status = result.get("status")
+        gpu = _html.escape(self._nvidia_gpu_name or "")
         if status == "OK":
-            self._nvidia_full_card.set_gpu(
-                self._nvidia_gpu_name or "",
-                "✓ All settings optimal",
-                "",
-                sev="low",
-            )
+            current = result.get("current", {})
+            expected = result.get("expected", {})
+            if current and expected:
+                text = self._nvidia_ok_text(current, expected)
+            else:
+                text = f"<span style='color:{_NPI_GREEN}'>✓ All settings optimal</span>"
+            self._nvidia_full_card.set_gpu(gpu, text, "", sev="low")
         elif status == "WARNING":
             text, sev = self._nvidia_delta_text(result["current"], result["expected"])
             self._nvidia_full_card.set_gpu(
-                self._nvidia_gpu_name or "",
+                gpu,
                 text,
                 result.get("message", ""),
                 sev=sev,
             )
 
     def _nvidia_delta_text(self, current: dict, expected: dict) -> tuple[str, str]:
-        """Build compact 'G-Sync: OFF→ON · VSync: Adaptive→Force On' text from analysis dicts.
+        """Build compact per-setting change text from analysis dicts.
 
-        Returns (status_text, sev). Only includes settings that differ from
+        Returns (html_status_text, sev). Only includes settings that differ from
         expected; skips dlss_preset (handled by the DLSS card).
         """
         _BOOL = {True: "ON", False: "OFF"}
@@ -501,7 +508,42 @@ class Dashboard(QWidget):
             exp = expected.get(key)
             if exp is None or cur == exp:
                 continue
-            deltas.append(f"{label}: {fmt(cur)}→{fmt(exp)}")
+            deltas.append(
+                f"{label}: <span style='color:{_NPI_RED}'>{fmt(cur)}</span>"
+                f"→<span style='color:{_NPI_GREEN}'>{fmt(exp)}</span>"
+            )
         if not deltas:
-            return ("✓ All settings optimal", "low")
+            return (f"<span style='color:{_NPI_GREEN}'>✓ All settings optimal</span>", "low")
         return (" · ".join(deltas), "medium")
+
+    def _nvidia_ok_text(self, current: dict, expected: dict) -> str:
+        """Build per-setting checkmark list for the all-optimal case.
+
+        Shows each expected value with a green checkmark.
+        Skips dlss_preset (DLSS card owns it) and settings with no expected value.
+        """
+        _BOOL = {True: "ON", False: "OFF"}
+        _VSYNC = {"force_on": "Force On", "adaptive": "Adaptive", "off": "OFF"}
+        _POWER = {"max_performance": "Max Perf", "max_perf": "Max Perf", "adaptive": "Adaptive"}
+
+        def _fmt_fps(v):
+            return "None" if v is None else f"{v} fps"
+
+        _fields = [
+            ("gsync",        "G-Sync",   lambda v: _BOOL.get(v, str(v))),
+            ("vsync",        "VSync",    lambda v: _VSYNC.get(v, str(v))),
+            ("fps_cap",      "FPS Cap",  _fmt_fps),
+            ("rebar_driver", "ReBar",    lambda v: _BOOL.get(v, str(v))),
+            ("power_mgmt",   "Power",    lambda v: _POWER.get(v, str(v))),
+        ]
+        items = []
+        for key, label, fmt in _fields:
+            exp = expected.get(key)
+            if exp is None:
+                continue
+            items.append(
+                f"{label}: <span style='color:{_NPI_GREEN}'>{fmt(exp)} ✓</span>"
+            )
+        if not items:
+            return f"<span style='color:{_NPI_GREEN}'>✓ All settings optimal</span>"
+        return " · ".join(items)

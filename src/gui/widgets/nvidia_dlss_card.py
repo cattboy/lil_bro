@@ -75,8 +75,7 @@ class NvidiaDlssCard(QFrame):
         self._quality_btn.setChecked(True)
         left.addLayout(toggle_row)
 
-        root.addLayout(left)
-        root.addStretch()
+        root.addLayout(left, 1)
 
         self._apply_btn = QPushButton(button_label)
         self._apply_btn.setObjectName("primary")

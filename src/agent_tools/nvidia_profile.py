@@ -254,6 +254,27 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
     failed = [s for s in sub_findings if not s["ok"]]
     all_ok = len(failed) == 0
 
+    expected_fps = calculate_fps_cap(refresh_hz) if refresh_hz else None
+    dlss_preset = get_preset(gpu_name)
+
+    current = {
+        "gpu_model": gpu_name,
+        "gsync": npi.get("gsync_enabled"),
+        "vsync": npi.get("vsync_mode"),
+        "fps_cap": npi.get("fps_cap"),
+        "rebar_driver": npi.get("rebar_driver"),
+        "dlss_preset": npi.get("dlss_preset"),
+        "power_mgmt": npi.get("power_mgmt"),
+    }
+    expected = {
+        "gsync": True,
+        "vsync": "force_on",
+        "fps_cap": expected_fps,
+        "rebar_driver": True if bios_rebar else None,
+        "dlss_preset": dlss_preset.letter if dlss_preset else None,
+        "power_mgmt": "max_performance",
+    }
+
     if all_ok:
         return {
             "check": "nvidia_profile",
@@ -261,34 +282,18 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
             "message": "NVIDIA driver profile is fully optimized.",
             "can_auto_fix": False,
             "sub_findings": sub_findings,
+            "current": current,
+            "expected": expected,
         }
 
     names = [f["name"] for f in failed]
     summary = ", ".join(names)
 
-    expected_fps = calculate_fps_cap(refresh_hz) if refresh_hz else None
-    dlss_preset = get_preset(gpu_name)
-
     return {
         "check": "nvidia_profile",
         "status": "WARNING",
-        "current": {
-            "gpu_model": gpu_name,
-            "gsync": npi.get("gsync_enabled"),
-            "vsync": npi.get("vsync_mode"),
-            "fps_cap": npi.get("fps_cap"),
-            "rebar_driver": npi.get("rebar_driver"),
-            "dlss_preset": npi.get("dlss_preset"),
-            "power_mgmt": npi.get("power_mgmt"),
-        },
-        "expected": {
-            "gsync": True,
-            "vsync": "force_on",
-            "fps_cap": expected_fps,
-            "rebar_driver": True if bios_rebar else None,
-            "dlss_preset": dlss_preset.letter if dlss_preset else None,
-            "power_mgmt": "max_performance",
-        },
+        "current": current,
+        "expected": expected,
         "message": f"NVIDIA driver profile not optimized: {summary}",
         "can_auto_fix": True,
         "sub_findings": sub_findings,

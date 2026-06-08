@@ -57,10 +57,10 @@ class NvidiaProfileCard(QFrame):
         self._status_lbl.setObjectName("pollStatus")
         self._status_lbl.setWordWrap(True)
         self._status_lbl.setProperty("sev", "medium")
+        self._status_lbl.setTextFormat(Qt.TextFormat.RichText)
         left.addWidget(self._status_lbl)
 
-        root.addLayout(left)
-        root.addStretch()
+        root.addLayout(left, 1)
 
         self._apply_btn = QPushButton(button_label)
         self._apply_btn.setObjectName("primary")
