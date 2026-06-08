@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from src.gui.widgets.monitor_refresh_card import MonitorEmptyCard, MonitorRefreshCard
 from src.gui.widgets.mouse_poll_card import MousePollCard
+from src.gui.widgets.nvidia_dlss_card import NvidiaDlssCard
 from src.gui.widgets.nvidia_profile_card import NvidiaProfileCard
 from src.gui.widgets.stat_card import STAT_CARDS, StatCard
 from src.utils.debug_logger import get_debug_logger
@@ -126,10 +127,7 @@ class Dashboard(QWidget):
         # creation during the splash's nested event loop fails to parent in the
         # bundled PyInstaller exe. Hidden until set_nvidia_data shows them when
         # nvidia-smi detects a GPU and NPI.exe is available.
-        self._nvidia_dlss_card = NvidiaProfileCard(
-            "nvidia_dlss_preset", "DLSS Preset", "Apply Preset", parent=self,
-            with_priority_toggle=True,
-        )
+        self._nvidia_dlss_card = NvidiaDlssCard("DLSS Preset", "Apply Preset", parent=self)
         self._nvidia_dlss_card.apply_requested.connect(self.nvidia_fix_requested)
         self._nvidia_dlss_card.priority_changed.connect(self._on_dlss_priority_changed)
         self._nvidia_dlss_card.hide()

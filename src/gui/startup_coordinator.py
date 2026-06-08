@@ -492,16 +492,17 @@ class StartupCoordinator(QObject):
             title = f"Set DLSS Preset {letter}"
             desc = (
                 f"{gpu_name}: force DLSS Preset {letter} (the recommended AI upscaling "
-                f"model for your GPU). Changes ONLY the DLSS preset — nothing else in "
-                f"your driver profile. A profile backup is saved for revert."
+                f"model for your GPU). Changes ONLY the DLSS preset — "
+                f"All changes revertable and backed up, lil_bro has your back"
             )
             tag = "NVIDIA DLSS"
         else:  # nvidia_profile (full)
             title = "Optimize NVIDIA Driver Profile"
             desc = (
-                f"{gpu_name}: apply the full gaming profile — G-Sync, VSync, FPS cap, "
-                f"ReBar, DLSS preset, and Maximum Performance power mode. A profile "
-                f"backup is saved for revert."
+                f"{gpu_name}: apply the Nvidia Profile Inspector gaming profile (MORE FPS) — "
+                f"enables G-Sync, VSync, FPS cap, ReBar, "
+                f"and Maximum Performance power mode. All changes revertable and backed up "
+                f"with lil_bro looking out"
             )
             tag = "NVIDIA"
 

@@ -88,6 +88,7 @@ a = Analysis(
         'src.gui.widgets.monitor_refresh_card',
         'src.gui.widgets.mouse_poll_card',
         'src.gui.widgets.mouse_ready_dialog',
+        'src.gui.widgets.nvidia_dlss_card',
         'src.gui.widgets.nvidia_profile_card',
         'src.gui.widgets.output_panel',
         'src.gui.widgets.output_view',
