@@ -8,6 +8,7 @@ finding dict -- all settings are fixed atomically via one .nip import.
 
 from typing import Any
 
+from ..config import config
 from ..utils.dlss_presets import classify, get_preset
 from ..utils.nvidia_npi import (
     DLSS_LETTER_MAP,
@@ -37,7 +38,18 @@ def _get_primary_refresh_hz(specs: dict) -> int | None:
 
 
 def _check_gsync(npi: dict, raw: dict[int, int]) -> dict[str, Any]:
-    """Check all 7 G-Sync settings."""
+    """Check G-Sync settings against configured target."""
+    if not config.nvidia.profile.gsync:
+        val = raw.get(SETTING_IDS["gsync_global_feature"])
+        if val == 0:
+            return {"name": "G-Sync", "ok": True, "message": "G-Sync disabled (per config)"}
+        return {
+            "name": "G-Sync",
+            "ok": False,
+            "message": "G-Sync is enabled in driver; config target is disabled",
+            "mismatches": ["gsync_global_feature"],
+        }
+
     gsync_keys = [
         "gsync_global_feature", "gsync_global_mode", "gsync_app_mode",
         "gsync_app_state", "gsync_app_requested",
@@ -62,50 +74,68 @@ def _check_gsync(npi: dict, raw: dict[int, int]) -> dict[str, Any]:
 
 
 def _check_vsync(npi: dict, raw: dict[int, int]) -> dict[str, Any]:
-    """Check VSync force-on + tear control + smooth AFR."""
-    vsync_keys = ["vsync", "vsync_tear_control", "vsync_smooth_afr"]
-    mismatches = []
-    for key in vsync_keys:
-        sid = SETTING_IDS[key]
-        current = raw.get(sid)
-        expected = TARGET_VALUES[key]
-        if current != expected:
-            mismatches.append(key)
+    """Check VSync mode against configured target."""
+    _VSYNC_RAW = {"force_on": 0x47814940, "off": 0}
+    target_vsync_raw = _VSYNC_RAW.get(config.nvidia.profile.vsync, 0x47814940)
+    current_vsync = raw.get(SETTING_IDS["vsync"])
 
-    if not mismatches:
-        return {"name": "VSync", "ok": True, "message": "VSync correctly forced on"}
+    if config.nvidia.profile.vsync == "force_on":
+        vsync_keys = ["vsync", "vsync_tear_control", "vsync_smooth_afr"]
+        mismatches = []
+        for key in vsync_keys:
+            sid = SETTING_IDS[key]
+            if raw.get(sid) != TARGET_VALUES[key]:
+                mismatches.append(key)
+        if not mismatches:
+            return {"name": "VSync", "ok": True, "message": "VSync correctly forced on"}
+        return {
+            "name": "VSync",
+            "ok": False,
+            "message": f"VSync not configured for Blur Busters optimal ({len(mismatches)} settings)",
+            "mismatches": mismatches,
+        }
+
+    # "off" or other: check only the main vsync setting
+    if current_vsync == target_vsync_raw:
+        return {"name": "VSync", "ok": True, "message": f"VSync set to '{config.nvidia.profile.vsync}' (per config)"}
     return {
         "name": "VSync",
         "ok": False,
-        "message": f"VSync not configured for Blur Busters optimal ({len(mismatches)} settings)",
-        "mismatches": mismatches,
+        "message": f"VSync does not match config target '{config.nvidia.profile.vsync}'",
+        "mismatches": ["vsync"],
     }
 
 
 def _check_fps_cap(npi: dict, raw: dict[int, int], refresh_hz: int | None) -> dict[str, Any]:
-    """Check frame rate limiter against formula-calculated cap."""
-    if refresh_hz is None:
+    """Check frame rate limiter against configured cap (override or formula)."""
+    override = config.nvidia.profile.fps_cap_override
+    if override is not None:
+        expected_cap = override
+    elif refresh_hz is None:
         return {
             "name": "FPS Cap",
             "ok": True,
             "message": "Could not determine monitor refresh rate -- FPS cap not checked",
             "skipped": True,
         }
+    else:
+        expected_cap = calculate_fps_cap(refresh_hz)
 
-    expected_cap = calculate_fps_cap(refresh_hz)
     current_cap = raw.get(SETTING_IDS["fps_limiter_v3"])
 
     if current_cap == expected_cap:
+        source = f"override={override}" if override is not None else f"{refresh_hz}Hz monitor"
         return {
             "name": "FPS Cap",
             "ok": True,
-            "message": f"FPS cap correctly set to {expected_cap} for {refresh_hz}Hz monitor",
+            "message": f"FPS cap correctly set to {expected_cap} ({source})",
         }
     current_str = str(current_cap) if current_cap is not None else "not set"
+    source = f"override={override}" if override is not None else f"{refresh_hz}Hz monitor"
     return {
         "name": "FPS Cap",
         "ok": False,
-        "message": f"FPS cap is {current_str}, should be {expected_cap} for {refresh_hz}Hz monitor",
+        "message": f"FPS cap is {current_str}, should be {expected_cap} ({source})",
         "current": current_cap,
         "expected": expected_cap,
     }
@@ -173,17 +203,20 @@ def _check_dlss(npi: dict, raw: dict[int, int], gpu_name: str) -> dict[str, Any]
 
 
 def _check_power_mgmt(npi: dict, raw: dict[int, int]) -> dict[str, Any]:
-    """Check power management mode."""
+    """Check power management mode against configured target."""
+    _POWER_RAW = {"max_performance": 1, "adaptive": 0}
+    target_raw = _POWER_RAW.get(config.nvidia.profile.power_mgmt, 1)
     current = raw.get(SETTING_IDS["power_mgmt"])
-    if current == TARGET_VALUES["power_mgmt"]:
-        return {"name": "Power Management", "ok": True, "message": "Prefer Maximum Performance is set"}
+    if current == target_raw:
+        label = "Prefer Maximum Performance" if target_raw == 1 else "Adaptive"
+        return {"name": "Power Management", "ok": True, "message": f"{label} is set"}
     current_str = npi.get("power_mgmt") or ("not set" if current is None else f"value {current}")
     return {
         "name": "Power Management",
         "ok": False,
-        "message": f"Power management is '{current_str}', should be 'Prefer Maximum Performance'",
+        "message": f"Power management is '{current_str}', config target is '{config.nvidia.profile.power_mgmt}'",
         "current": current,
-        "expected": TARGET_VALUES["power_mgmt"],
+        "expected": target_raw,
     }
 
 
@@ -254,7 +287,11 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
     failed = [s for s in sub_findings if not s["ok"]]
     all_ok = len(failed) == 0
 
-    expected_fps = calculate_fps_cap(refresh_hz) if refresh_hz else None
+    override = config.nvidia.profile.fps_cap_override
+    expected_fps = (
+        override if override is not None
+        else (calculate_fps_cap(refresh_hz) if refresh_hz else None)
+    )
     dlss_preset = get_preset(gpu_name)
 
     current = {
@@ -267,12 +304,12 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
         "power_mgmt": npi.get("power_mgmt"),
     }
     expected = {
-        "gsync": True,
-        "vsync": "force_on",
+        "gsync": config.nvidia.profile.gsync,
+        "vsync": config.nvidia.profile.vsync,
         "fps_cap": expected_fps,
         "rebar_driver": True if bios_rebar else None,
         "dlss_preset": dlss_preset.letter if dlss_preset else None,
-        "power_mgmt": "max_performance",
+        "power_mgmt": config.nvidia.profile.power_mgmt,
     }
 
     if all_ok:

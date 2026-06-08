@@ -164,20 +164,35 @@ def fix_nvidia_profile(
 
         target: dict[int, int] = {}
 
-        for key in [
-            "gsync_global_feature", "gsync_global_mode", "gsync_app_mode",
-            "gsync_app_state", "gsync_app_requested",
-            "gsync_indicator_overlay", "gsync_support_indicator",
-        ]:
-            target[SETTING_IDS[key]] = TARGET_VALUES[key]
+        # G-Sync
+        if config.nvidia.profile.gsync:
+            for key in [
+                "gsync_global_feature", "gsync_global_mode", "gsync_app_mode",
+                "gsync_app_state", "gsync_app_requested",
+                "gsync_indicator_overlay", "gsync_support_indicator",
+            ]:
+                target[SETTING_IDS[key]] = TARGET_VALUES[key]
+        else:
+            target[SETTING_IDS["gsync_global_feature"]] = 0
 
-        for key in ["vsync", "vsync_tear_control", "vsync_smooth_afr"]:
-            target[SETTING_IDS[key]] = TARGET_VALUES[key]
+        # VSync
+        _VSYNC_RAW = {"force_on": 0x47814940, "off": 0}
+        if config.nvidia.profile.vsync == "force_on":
+            for key in ["vsync", "vsync_tear_control", "vsync_smooth_afr"]:
+                target[SETTING_IDS[key]] = TARGET_VALUES[key]
+        else:
+            target[SETTING_IDS["vsync"]] = _VSYNC_RAW.get(config.nvidia.profile.vsync, 0)
 
+        # FPS cap
         if refresh_hz is None:
             refresh_hz = _get_primary_refresh_hz(specs)
         cap: int | None = None
-        if refresh_hz and refresh_hz > 0:
+        fps_override = config.nvidia.profile.fps_cap_override
+        if fps_override is not None:
+            cap = fps_override
+            target[SETTING_IDS["fps_limiter_v3"]] = cap
+            action_logger.log_action("NPI Fix", f"FPS cap: {cap}", "config override")
+        elif refresh_hz and refresh_hz > 0:
             cap = calculate_fps_cap(refresh_hz)
             target[SETTING_IDS["fps_limiter_v3"]] = cap
             action_logger.log_action("NPI Fix", f"FPS cap: {cap}", f"{refresh_hz}Hz monitor")
@@ -193,7 +208,9 @@ def fix_nvidia_profile(
             target[SETTING_IDS["dlss_preset_profile"]] = TARGET_VALUES["dlss_preset_profile"]
             target[SETTING_IDS["dlss_preset_letter"]] = preset.value
 
-        target[SETTING_IDS["power_mgmt"]] = TARGET_VALUES["power_mgmt"]
+        # Power management
+        _POWER_RAW = {"max_performance": 1, "adaptive": 0}
+        target[SETTING_IDS["power_mgmt"]] = _POWER_RAW.get(config.nvidia.profile.power_mgmt, 1)
 
         modified_nip = build_optimized_nip(source_nip, target)
 
@@ -213,7 +230,9 @@ def fix_nvidia_profile(
             changes.append(f"DLSS={preset.letter}")
         if bios_rebar is True:
             changes.append("ReBar=ON")
-        changes.extend(["G-Sync=ON", "VSync=ForceOn", "PowerMgmt=MaxPerf"])
+        changes.append("G-Sync=ON" if config.nvidia.profile.gsync else "G-Sync=OFF")
+        changes.append(f"VSync={config.nvidia.profile.vsync}")
+        changes.append(f"PowerMgmt={config.nvidia.profile.power_mgmt}")
         action_logger.log_action("NPI Fix", "Applied", ", ".join(changes))
         return True
 

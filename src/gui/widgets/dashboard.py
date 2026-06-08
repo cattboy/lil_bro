@@ -272,11 +272,13 @@ class Dashboard(QWidget):
             self._nvidia_dlss_card.hide()
             self._nvidia_full_card.hide()
             self._nvidia_gpu_name = None
+            self._nvidia_last_expected = {}
             self._log.info("Dashboard.set_nvidia_data: hidden (no NVIDIA GPU or NPI absent)")
             return
 
         gpu_name = str(nvidia[0].get("GPU") or "NVIDIA GPU")
         self._nvidia_gpu_name = gpu_name
+        self._nvidia_last_expected = {}
 
         # Full-profile card: valid for any detected NVIDIA GPU.
         full_prop = propose_for_check("nvidia_profile") or {}
@@ -466,14 +468,15 @@ class Dashboard(QWidget):
         status = result.get("status")
         gpu = _html.escape(self._nvidia_gpu_name or "")
         if status == "OK":
-            current = result.get("current", {})
-            expected = result.get("expected", {})
+            current = result.get("current") or self._nvidia_last_expected
+            expected = result.get("expected") or self._nvidia_last_expected
             if current and expected:
                 text = self._nvidia_ok_text(current, expected)
             else:
                 text = f"<span style='color:{_NPI_GREEN}'>✓ All settings optimal</span>"
             self._nvidia_full_card.set_gpu(gpu, text, "", sev="low")
         elif status == "WARNING":
+            self._nvidia_last_expected = result.get("expected", {})
             text, sev = self._nvidia_delta_text(result["current"], result["expected"])
             self._nvidia_full_card.set_gpu(
                 gpu,
@@ -483,10 +486,11 @@ class Dashboard(QWidget):
             )
 
     def _nvidia_delta_text(self, current: dict, expected: dict) -> tuple[str, str]:
-        """Build compact per-setting change text from analysis dicts.
+        """Build per-setting text from analysis dicts for the WARNING state.
 
-        Returns (html_status_text, sev). Only includes settings that differ from
-        expected; skips dlss_preset (handled by the DLSS card).
+        Already-correct settings get a green checkmark; settings that need
+        fixing show current (red) → expected (green). Skips dlss_preset and
+        settings with no expected value.
         """
         _BOOL = {True: "ON", False: "OFF"}
         _VSYNC = {"force_on": "Force On", "adaptive": "Adaptive", "off": "OFF"}
@@ -502,19 +506,24 @@ class Dashboard(QWidget):
             ("rebar_driver", "ReBar",    lambda v: _BOOL.get(v, str(v))),
             ("power_mgmt",   "Power",    lambda v: _POWER.get(v, str(v))),
         ]
-        deltas = []
+        items = []
         for key, label, fmt in _fields:
             cur = current.get(key)
             exp = expected.get(key)
-            if exp is None or cur == exp:
+            if exp is None:
                 continue
-            deltas.append(
-                f"{label}: <span style='color:{_NPI_RED}'>{fmt(cur)}</span>"
-                f"→<span style='color:{_NPI_GREEN}'>{fmt(exp)}</span>"
-            )
-        if not deltas:
+            if cur == exp:
+                items.append(
+                    f"{label}: <span style='color:{_NPI_GREEN}'>{fmt(exp)} ✓</span>"
+                )
+            else:
+                items.append(
+                    f"{label}: <span style='color:{_NPI_RED}'>{fmt(cur)}</span>"
+                    f"→<span style='color:{_NPI_GREEN}'>{fmt(exp)}</span>"
+                )
+        if not items:
             return (f"<span style='color:{_NPI_GREEN}'>✓ All settings optimal</span>", "low")
-        return (" · ".join(deltas), "medium")
+        return (" · ".join(items), "medium")
 
     def _nvidia_ok_text(self, current: dict, expected: dict) -> str:
         """Build per-setting checkmark list for the all-optimal case.
