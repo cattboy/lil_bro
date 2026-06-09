@@ -64,8 +64,7 @@ class MonitorRefreshCard(QFrame):
         self._status_lbl.setObjectName("pollStatus")
         left.addWidget(self._status_lbl)
 
-        root.addLayout(left)
-        root.addStretch()
+        root.addLayout(left, 1)
 
         # Right: Fix button (hidden when optimal)
         self._fix_btn = QPushButton("Fix Now")
@@ -168,8 +167,7 @@ class MonitorEmptyCard(QFrame):
         # Intentionally no sev — hint stays in default secondary-text color.
         left.addWidget(hint)
 
-        root.addLayout(left)
-        root.addStretch()
+        root.addLayout(left, 1)
 
         self._refresh_btn = QPushButton("Refresh")
         self._refresh_btn.setObjectName("secondary")
