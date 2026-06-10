@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import math
 
+from src.agent_tools.power_plan import KNOWN_PLANS
 from src.utils.dlss_presets import get_preset
 from src.utils.nvidia_npi import SETTING_IDS, TARGET_VALUES, calculate_fps_cap
 
@@ -124,6 +125,40 @@ def displays(key: str) -> list[dict]:
     return copy.deepcopy(DISPLAYS[key])
 
 
+# ── PowerPlan / GameMode spec entries (consumed by set_power_plan_data / ────
+# set_game_mode_data + the REAL analyze_power_plan / analyze_game_mode).
+# GUIDs + names come from the production KNOWN_PLANS table so fixtures can't
+# drift from the analyzer's _PERF_GUIDS classification.
+_GUID_HIGH_PERF = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
+_GUID_ULTIMATE = "e9a42b02-d5df-448d-aa00-03f14749eb61"
+_GUID_BALANCED = "381b4222-f694-41f0-9685-ff5bb260df2e"
+_GUID_POWER_SAVER = "a1841308-3541-4fab-bc81-f71556f20b4a"
+
+POWER_PLANS: dict[str, dict] = {
+    "high_perf": {"guid": _GUID_HIGH_PERF, "name": KNOWN_PLANS[_GUID_HIGH_PERF]},
+    "ultimate": {"guid": _GUID_ULTIMATE, "name": KNOWN_PLANS[_GUID_ULTIMATE]},
+    "balanced": {"guid": _GUID_BALANCED, "name": KNOWN_PLANS[_GUID_BALANCED]},
+    "power_saver": {"guid": _GUID_POWER_SAVER, "name": KNOWN_PLANS[_GUID_POWER_SAVER]},
+    "missing": {"error": "powercfg not found (mock)"},  # card hidden
+}
+
+GAME_MODES: dict[str, dict] = {
+    "enabled": {"enabled": True},
+    "disabled": {"enabled": False},
+    "missing": {"error": "registry read failed (mock)"},  # card hidden
+}
+
+
+def power_plan(key: str) -> dict:
+    """Deep copy so appliers can mutate without corrupting fixtures."""
+    return copy.deepcopy(POWER_PLANS[key])
+
+
+def game_mode(key: str) -> dict:
+    """Deep copy so appliers can mutate without corrupting fixtures."""
+    return copy.deepcopy(GAME_MODES[key])
+
+
 # ── NVIDIA specs (consumed by set_nvidia_data + the REAL analyze_nvidia_profile)
 
 
@@ -196,18 +231,22 @@ def nvidia_specs(state: str) -> dict:
 SCENARIOS: dict[str, dict] = {
     "All optimal": {
         "stats": "normal", "thermal": "normal", "mouse": "ok_1000",
-        "monitors": "optimal", "nvidia": "ok", "animate": True,
+        "monitors": "optimal", "nvidia": "ok",
+        "power": "high_perf", "game": "enabled", "animate": True,
     },
     "Mixed issues": {
         "stats": "normal", "thermal": "warning", "mouse": "warn_500",
-        "monitors": "suboptimal", "nvidia": "warning", "animate": False,
+        "monitors": "suboptimal", "nvidia": "warning",
+        "power": "balanced", "game": "disabled", "animate": False,
     },
     "Everything broken": {
         "stats": "hot", "thermal": "critical", "mouse": "low_125",
-        "monitors": "wmi", "nvidia": "warning", "animate": False,
+        "monitors": "wmi", "nvidia": "warning",
+        "power": "power_saver", "game": "disabled", "animate": False,
     },
     "Fresh install": {
         "stats": "missing", "thermal": "offline", "mouse": "not_measured",
-        "monitors": "empty", "nvidia": "no_gpu", "animate": False,
+        "monitors": "empty", "nvidia": "no_gpu",
+        "power": "missing", "game": "missing", "animate": False,
     },
 }
