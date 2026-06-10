@@ -26,10 +26,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.gui.widgets.game_mode_card import GameModeCard
 from src.gui.widgets.monitor_refresh_card import MonitorEmptyCard, MonitorRefreshCard
 from src.gui.widgets.mouse_poll_card import MousePollCard
 from src.gui.widgets.nvidia_dlss_card import NvidiaDlssCard
 from src.gui.widgets.nvidia_profile_card import NvidiaProfileCard
+from src.gui.widgets.power_plan_card import PowerPlanCard
 from src.gui.widgets.stat_card import STAT_CARDS, StatCard
 from src.utils.debug_logger import get_debug_logger
 
@@ -52,6 +54,12 @@ class Dashboard(QWidget):
     # Apply-button request from either NVIDIA card; carries the fix check name
     # ("nvidia_dlss_preset" or "nvidia_profile"). Bubbled to StartupCoordinator.
     nvidia_fix_requested = Signal(str)
+
+    # Fix-button requests from the Power Plan / Game Mode cards (one card per
+    # fix -- the dashboard is the pick-and-choose path). Bubbled to
+    # StartupCoordinator.on_power_plan_fix_requested / on_game_mode_fix_requested.
+    power_plan_fix_requested = Signal()
+    game_mode_fix_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -162,6 +170,21 @@ class Dashboard(QWidget):
         self._monitor_empty_slot.refresh_requested.connect(self.monitor_refresh_requested)
         self._monitor_empty_slot.hide()
         outer.addWidget(self._monitor_empty_slot)
+
+        # ── Power Plan / Game Mode fix cards (T-034) ─────────────────────
+        # Pre-allocated like the slots above (dynamic creation during the
+        # splash's nested event loop fails to parent in the bundled
+        # PyInstaller exe). Hidden until set_power_plan_data /
+        # set_game_mode_data show them when their spec entry was collected.
+        self._power_plan_card = PowerPlanCard(parent=self)
+        self._power_plan_card.apply_requested.connect(self.power_plan_fix_requested)
+        self._power_plan_card.hide()
+        outer.addWidget(self._power_plan_card)
+
+        self._game_mode_card = GameModeCard(parent=self)
+        self._game_mode_card.apply_requested.connect(self.game_mode_fix_requested)
+        self._game_mode_card.hide()
+        outer.addWidget(self._game_mode_card)
 
         # Extras list (slots are separate). Uses indexOf(slot) at insert
         # time rather than a cached index, so it's robust to layout
@@ -484,6 +507,37 @@ class Dashboard(QWidget):
                 result.get("message", ""),
                 sev=sev,
             )
+
+    # ── Power Plan / Game Mode fix cards (T-034) ───────────────────────
+
+    def set_power_plan_data(self, plan) -> None:
+        """Show/hide the Power Plan card based on the ``PowerPlan`` spec entry.
+
+        Hidden when the entry is missing or carries an ``"error"`` key
+        (collection failed) -- a fix applied without a before-state would
+        record as non-revertible in the session manifest.
+        """
+        visible = isinstance(plan, dict) and bool(plan) and "error" not in plan
+        self._log.info("Dashboard.set_power_plan_data: visible=%s", visible)
+        self._power_plan_card.setVisible(visible)
+
+    def set_game_mode_data(self, gm) -> None:
+        """Show/hide the Game Mode card based on the ``GameMode`` spec entry.
+
+        Same gate as set_power_plan_data: hidden on missing entry or
+        collection error (no before-state -> non-revertible fix).
+        """
+        visible = isinstance(gm, dict) and bool(gm) and "error" not in gm
+        self._log.info("Dashboard.set_game_mode_data: visible=%s", visible)
+        self._game_mode_card.setVisible(visible)
+
+    def set_power_plan_findings(self, result: dict) -> None:
+        """Feed an ``analyze_power_plan`` finding to the Power Plan card."""
+        self._power_plan_card.set_findings(result or {})
+
+    def set_game_mode_findings(self, result: dict) -> None:
+        """Feed an ``analyze_game_mode`` finding to the Game Mode card."""
+        self._game_mode_card.set_findings(result or {})
 
     def _nvidia_delta_text(self, current: dict, expected: dict) -> tuple[str, str]:
         """Build per-setting text from analysis dicts for the WARNING state.
