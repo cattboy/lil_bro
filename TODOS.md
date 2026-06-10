@@ -193,6 +193,21 @@ template (error dialog → `#FF6B6B` accent, not amber).
 
 ---
 
+### T-034 — Power Plan + Game Mode Dashboard fix cards (with post-revert refresh)
+**Priority:** P3 — **COMPLETED 2026-06-11**
+Two separate card widgets (user direction: one card per fix — the Dashboard is the à-la-carte pick-and-choose path; the pipeline is apply-all): `PowerPlanCard` (`src/gui/widgets/power_plan_card.py`) + `GameModeCard` (`src/gui/widgets/game_mode_card.py`), each owning its own rendering via `set_findings(result)` (MonitorRefreshCard style — WARNING = analyzer message + `FALLBACK_PROPOSALS` explanation tooltip + Fix Now; OK = `✓` text, button hidden; bare `{"status": "OK"}` = optimistic post-fix text). Cards hidden when the spec entry is missing/errored (no before-state ⇒ fix would record non-revertible). Coordinator: `on_power_plan_fix_requested`/`on_game_mode_fix_requested` → shared `_start_setting_fix` (guards, spec gate, proposal from `propose_for_check`, BatchSelectionDialog, restore-point gate, `_CardFixWorker` — renamed from `_NvidiaProfileFixWorker`, already fully generic — with bound-method cleanup). Post-revert refresh extends `refresh_fix_cards_after_revert` with both analyzers over cached `preloaded_specs`. Both wiring paths covered (app.py fast path + `on_finished` late path); drive-by: late path gained the previously fast-path-only `set_nvidia_profile_findings` call. Mock GUI: `POWER_PLANS` fixtures built from production `KNOWN_PLANS`, combos + scenario keys + smoke-report lines; smoke also surfaced and fixed a cp1252 `UnicodeEncodeError` printing `✓` (same `errors="replace"` guard as `src/main.py`). 17 new tests; suite 1035 green. Original scope kept below as historical context.
+**Effort:** M human / S-M with CC
+**Why:** power_plan and game_mode are the only revertible fixes with no one-click Dashboard card — they can be applied only through the full pipeline, unlike NVIDIA (`NvidiaProfileCard`) and display (`MonitorRefreshCard`). Both already have pure, GUI-safe analyzers (`analyze_power_plan` `src/agent_tools/power_plan.py:20`, `analyze_game_mode` `src/agent_tools/game_mode.py:9`), `@register_fix` handlers in `fix_dispatch.py`, and revert handlers (`_revert_power_plan`/`_revert_game_mode` in `src/utils/revert.py`). The only gap is the card UI + wiring.
+**Fix:**
+1. New card widget(s) modelled on `src/gui/widgets/nvidia_profile_card.py` — pre-allocate the slot in `Dashboard.__init__`, populate via a `set_*_data` method, reuse the `monitorCard`/`pollLabel`/`pollStatus`/`primary` QSS (no new theme rules); add each new module to `lil_bro.spec` hiddenimports (CLAUDE.md bundling rule).
+2. Wire through the CLAUDE.md **Dashboard Fix Pattern**: apply button → Dashboard signal → `StartupCoordinator.on_*_fix_requested` → `start_session_manifest(restore_point_created=False)` then `execute_fix(check, filtered_specs)` on a worker mirroring `_NvidiaProfileFixWorker`; `BatchSelectionDialog` + restore-point gate; guard on `pipeline_thread` + `card_fix_in_progress`.
+3. Findings: call `set_*_findings(analyze_*(specs))` at startup wiring (mirror `app.py:326`) and optimistically mark applied after a successful card fix (mirror `_on_nvidia_fix_result`).
+4. **Post-revert refresh (REQUIRED):** extend `StartupCoordinator.refresh_fix_cards_after_revert` to also re-run `analyze_power_plan`/`analyze_game_mode` over `preloaded_specs` and feed the new cards — same pure-analyzer-on-cached-specs path as the NVIDIA card. Omitting this reproduces the optimistic-"applied"-after-revert bug that introduced `refresh_fix_cards_after_revert`.
+**Blocked by:** the "refresh dashboard fix cards after revert" change (provides the `refresh_fix_cards_after_revert` hook these cards plug into) — shipped.
+**Added:** 2026-06-10 (user request during the revert-refresh fix)
+
+---
+
 ## Completed
 
 ### T-013 — Convert `PipelineWorker._cancel_requested` bool to `threading.Event`

@@ -53,6 +53,11 @@ When a fix can be triggered from a Dashboard card button (outside the pipeline `
 4. **Pass a filtered `specs` dict** narrowed to only the targeted item so the handler doesn't act on everything.
 5. Wire the button signal → `StartupCoordinator` method → `QThread` + worker, mirroring `on_monitor_fix_requested` in `src/gui/startup_coordinator.py`.
 
+### Mock GUI (dashboard card preview)
+- `scripts/mock_gui.py` is the dev-only layout viewer: the real `MainWindow` + Dashboard fed entirely by `scripts/mock_fixtures.py`, with a floating state-switcher panel. It is NOT bundled — no `lil_bro.spec` entry, no production imports of it.
+- **Every new dashboard card MUST also be wired into the mock GUI**: add per-state fixture data to `scripts/mock_fixtures.py` (reuse production constants so fixtures can't drift), a combo + `apply_*` method in `scripts/mock_gui.py` (`MockDriver`/`MockControls`) routing through the card's real public population API, and an entry in each `SCENARIOS` preset.
+- Verify with `python scripts/mock_gui.py --smoke` (offscreen auto-cycle of all scenarios + multi-monitor) and extend `_smoke_report` with the new card's visibility/state.
+
 ### Subprocess & Temp Files
 - **All subprocess temp files must be stored in CWD, not `%TEMP%`.** Use `get_temp_dir()` from `src/utils/paths.py` as the `dir=` argument for `tempfile.TemporaryDirectory()` and `tempfile.mkstemp()`. This ensures all runtime artifacts live under `./lil_bro/` and get cleaned up on exit via `post_run_cleanup.py`.
 - Any new code spawning subprocesses that produce temp files must use `dir=str(get_temp_dir())` — never rely on the system default temp directory.
