@@ -54,6 +54,9 @@ class StartupCoordinator(QObject):
         # result slot reads it without a fragile self.sender() lookup on a
         # possibly-deleted worker.
         self._nvidia_fix_check_name: str | None = None
+        # Power Plan / Game Mode card-fix check_name -- same capture-at-request
+        # rationale as _nvidia_fix_check_name.
+        self._setting_fix_check_name: str | None = None
         # Applied Fixes card (T-016): a QFileSystemWatcher refreshes it live; a
         # single-shot QTimer debounces the double directoryChanged per write.
         self._last_run_watcher = None
@@ -162,15 +165,25 @@ class StartupCoordinator(QObject):
         # mutually exclusive, so this should not normally fire then, but guard anyway.
         if runtime.get("pipeline_thread") is not None:
             return
+        specs = runtime.get("preloaded_specs", {}) or {}
         # NVIDIA: analyze_nvidia_profile is pure over the cached preloaded_specs --
         # the same snapshot startup wiring used and that the apply never updated --
         # so re-running it restores the pre-apply WARNING/OK state on the GUI thread.
         try:
             from src.agent_tools.nvidia_profile import analyze_nvidia_profile
-            specs = runtime.get("preloaded_specs", {}) or {}
             self._main._dashboard.set_nvidia_profile_findings(analyze_nvidia_profile(specs))
         except Exception as exc:
             self._log.warning("NVIDIA card refresh after revert failed: %s", exc, exc_info=True)
+        # Power Plan / Game Mode: same pure-analyzer-over-cached-specs path --
+        # the apply never mutated preloaded_specs, so the cached snapshot
+        # reflects the pre-fix state these cards should return to.
+        try:
+            from src.agent_tools.game_mode import analyze_game_mode
+            from src.agent_tools.power_plan import analyze_power_plan
+            self._main._dashboard.set_power_plan_findings(analyze_power_plan(specs))
+            self._main._dashboard.set_game_mode_findings(analyze_game_mode(specs))
+        except Exception as exc:
+            self._log.warning("Power Plan/Game Mode card refresh after revert failed: %s", exc, exc_info=True)
         # Monitor (display): same staleness gap after a display revert.
         # refresh_monitor_card re-probes capabilities LIVE on its own worker thread
         # and already guards against a running pipeline / an in-flight refresh.
@@ -271,9 +284,21 @@ class StartupCoordinator(QObject):
                 main._dashboard.monitor_refresh_requested.connect(self.refresh_monitor_card)
                 main._dashboard.seed_dlss_priority(_specs)
                 main._dashboard.set_nvidia_data(_specs.get("NVIDIA", []))
+                # Findings parity with the fast path (app.py run()) -- without
+                # this, slow-path machines never got the NVIDIA WARNING/OK text.
+                from src.agent_tools.nvidia_profile import analyze_nvidia_profile
+                main._dashboard.set_nvidia_profile_findings(analyze_nvidia_profile(_specs))
                 main._dashboard.nvidia_fix_requested.connect(self.on_nvidia_fix_requested)
+                from src.agent_tools.game_mode import analyze_game_mode
+                from src.agent_tools.power_plan import analyze_power_plan
+                main._dashboard.set_power_plan_data(_specs.get("PowerPlan"))
+                main._dashboard.set_game_mode_data(_specs.get("GameMode"))
+                main._dashboard.set_power_plan_findings(analyze_power_plan(_specs))
+                main._dashboard.set_game_mode_findings(analyze_game_mode(_specs))
+                main._dashboard.power_plan_fix_requested.connect(self.on_power_plan_fix_requested)
+                main._dashboard.game_mode_fix_requested.connect(self.on_game_mode_fix_requested)
                 runtime["_monitor_wired"] = True
-                log.info("GUI Startup: monitor + NVIDIA cards wired (late-fire path)")
+                log.info("GUI Startup: monitor + NVIDIA + power/game cards wired (late-fire path)")
             except Exception as exc:
                 log.warning("Could not wire monitor/NVIDIA cards (late path): %s", exc, exc_info=True)
 
@@ -473,6 +498,14 @@ class StartupCoordinator(QObject):
         runtime.pop("nvidia_fix_worker", None)
 
     @Slot()
+    def _on_setting_fix_thread_finished(self) -> None:
+        runtime = self._runtime
+        runtime.pop("card_fix_in_progress", None)
+        runtime.pop("restore_point_in_progress", None)
+        runtime.pop("setting_fix_thread", None)
+        runtime.pop("setting_fix_worker", None)
+
+    @Slot()
     def _on_refresh_thread_finished(self) -> None:
         runtime = self._runtime
         runtime.pop("monitor_refresh_thread", None)
@@ -501,6 +534,24 @@ class StartupCoordinator(QObject):
         self._on_card_fix_result(check_name, ok)
         if ok and check_name == "nvidia_profile":
             self._main._dashboard.set_nvidia_profile_findings({"status": "OK"})
+
+    @Slot(bool)
+    def _on_setting_fix_result(self, ok: bool) -> None:
+        """Queued (main-thread) wrapper for the Power Plan / Game Mode result.
+
+        Reads the check_name captured in _start_setting_fix rather than
+        self.sender() -- the latter is unreliable for queued connections and
+        risks dereferencing a deleteLater-d worker.
+        """
+        check_name = self._setting_fix_check_name or "power_plan"
+        self._on_card_fix_result(check_name, ok)
+        if ok:
+            # Optimistic applied state; a revert re-scans via
+            # refresh_fix_cards_after_revert.
+            if check_name == "game_mode":
+                self._main._dashboard.set_game_mode_findings({"status": "OK"})
+            else:
+                self._main._dashboard.set_power_plan_findings({"status": "OK"})
 
     def on_nvidia_fix_requested(self, check_name: str) -> None:
         runtime = self._runtime
@@ -580,6 +631,94 @@ class StartupCoordinator(QObject):
         if create_rp:
             runtime["restore_point_in_progress"] = True
         fix_thread.finished.connect(self._on_nvidia_fix_thread_finished)
+        fix_thread.start()
+
+    # ── Power Plan / Game Mode card fixes (T-034) ───────────────────────
+    # One card per fix (the dashboard is the pick-and-choose path; the
+    # pipeline is apply-all); both route through the shared
+    # _start_setting_fix below.
+
+    def on_power_plan_fix_requested(self) -> None:
+        self._start_setting_fix("power_plan", "PowerPlan", "POWER PLAN")
+
+    def on_game_mode_fix_requested(self) -> None:
+        self._start_setting_fix("game_mode", "GameMode", "GAME MODE")
+
+    def _start_setting_fix(self, check_name: str, spec_key: str, tag: str) -> None:
+        """Shared approval + worker spawn for the Power Plan / Game Mode cards.
+
+        Mirrors on_nvidia_fix_requested: guards -> BatchSelectionDialog ->
+        restore-point gate -> _CardFixWorker on its own QThread. ``check_name``
+        must exactly match the @register_fix key in fix_dispatch.py.
+        """
+        runtime = self._runtime
+        main = self._main
+        log = self._log
+        # Guard: a dashboard fix during a pipeline run races ApplyPhase's
+        # handler for the same check -- concurrent system writes + manifest
+        # appends.
+        if runtime.get("pipeline_thread") is not None:
+            log.warning("%s fix suppressed: pipeline is running", check_name)
+            return
+        # Guard: only one card fix at a time. Prevents double restore-point
+        # creation and manifest-write races.
+        if runtime.get("card_fix_in_progress"):
+            log.warning("%s fix suppressed: a card fix is already in progress", check_name)
+            return
+        specs = runtime.get("preloaded_specs", {}) or {}
+        entry = specs.get(spec_key)
+        # Same gate as Dashboard.set_*_data: no before-state means the fix
+        # would record as non-revertible -- never offer that path.
+        if not isinstance(entry, dict) or not entry or "error" in entry:
+            log.warning("%s fix requested but no usable %s entry in specs", check_name, spec_key)
+            return
+
+        # Canonical title/explanation from FALLBACK_PROPOSALS -- single source
+        # of truth shared with the pipeline approval flow (no hardcoded copy).
+        from src.llm.action_proposer import propose_for_check
+        prop = propose_for_check(check_name) or {}
+        sev = {"HIGH": "high", "MEDIUM": "medium"}.get(str(prop.get("severity", "")), "medium")
+        proposal = {
+            "finding": check_name,
+            "title": str(prop.get("proposed_action", check_name)),
+            "sev": sev,
+            "desc": (
+                f"{prop.get('explanation', '')} "
+                f"All changes revertable and backed up, lil_bro has your back"
+            ),
+            "can_auto_fix": True,
+            "mode": "AUTO",
+            "tag": tag,
+        }
+        from src.gui.widgets.batch_selection_dialog import BatchSelectionDialog
+        dialog = BatchSelectionDialog([proposal], parent=main)
+        if not dialog.exec() or not dialog.selected_indices():
+            return
+
+        # Restore-point gate (shared with the monitor/NVIDIA fixes). Approval
+        # collected here on the GUI thread; the worker creates it
+        # non-interactively.
+        create_rp = self._ensure_restore_point_choice(main)
+
+        # Strictly narrowed: _fix_power_plan/_fix_game_mode read only their
+        # own spec key.
+        filtered_specs = {spec_key: dict(entry)}
+        self._setting_fix_check_name = check_name
+        from src.gui.worker import _CardFixWorker
+        fix_thread = QThread()
+        fix_worker = _CardFixWorker(check_name, filtered_specs, create_rp)
+        fix_worker.moveToThread(fix_thread)
+        fix_thread.started.connect(fix_worker.run)
+        fix_worker.finished.connect(fix_thread.quit)
+        fix_thread.finished.connect(fix_worker.deleteLater)
+        fix_thread.finished.connect(fix_thread.deleteLater)
+        fix_worker.result.connect(self._on_setting_fix_result)
+        runtime["setting_fix_thread"] = fix_thread
+        runtime["setting_fix_worker"] = fix_worker
+        runtime["card_fix_in_progress"] = True
+        if create_rp:
+            runtime["restore_point_in_progress"] = True
+        fix_thread.finished.connect(self._on_setting_fix_thread_finished)
         fix_thread.start()
 
 

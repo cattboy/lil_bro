@@ -28,7 +28,9 @@ from src.gui.signals import PipelineSignals
 from src.gui.startup import StartupOrchestrator
 from src.gui.startup_coordinator import StartupCompleter, StartupCoordinator
 from src.gui.windows.main_window import MainWindow
+from src.agent_tools.game_mode import analyze_game_mode
 from src.agent_tools.nvidia_profile import analyze_nvidia_profile
+from src.agent_tools.power_plan import analyze_power_plan
 from src.utils.action_logger import action_logger
 
 
@@ -332,6 +334,12 @@ def run(debug: bool = False) -> int:
             main._dashboard.set_nvidia_data(_specs.get("NVIDIA", []))
             main._dashboard.set_nvidia_profile_findings(analyze_nvidia_profile(_specs))
             main._dashboard.nvidia_fix_requested.connect(startup.on_nvidia_fix_requested)
+            main._dashboard.set_power_plan_data(_specs.get("PowerPlan"))
+            main._dashboard.set_game_mode_data(_specs.get("GameMode"))
+            main._dashboard.set_power_plan_findings(analyze_power_plan(_specs))
+            main._dashboard.set_game_mode_findings(analyze_game_mode(_specs))
+            main._dashboard.power_plan_fix_requested.connect(startup.on_power_plan_fix_requested)
+            main._dashboard.game_mode_fix_requested.connect(startup.on_game_mode_fix_requested)
             runtime["_monitor_wired"] = True
         except Exception as exc:
             log.warning("Could not wire monitor card: %s", exc, exc_info=True)
