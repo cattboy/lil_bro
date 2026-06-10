@@ -163,13 +163,15 @@ class _MonitorFixWorker(QObject):
         self.finished.emit()
 
 
-class _NvidiaProfileFixWorker(QObject):
-    """Runs a dashboard NVIDIA card fix off the GUI thread via ``_apply_card_fix``.
+class _CardFixWorker(QObject):
+    """Runs a dashboard card fix off the GUI thread via ``_apply_card_fix``.
 
-    ``check_name`` is ``"nvidia_dlss_preset"`` or ``"nvidia_profile"``. Like
-    ``_MonitorFixWorker`` this runs synchronously with no thread event loop, so
-    the fix handler must not call ``prompt_approval`` -- approval (including the
-    restore-point prompt) is gated on the GUI thread before this worker spawns.
+    ``check_name`` is the ``@register_fix`` key for the fix to run (e.g.
+    ``"nvidia_dlss_preset"``, ``"nvidia_profile"``, ``"power_plan"``,
+    ``"game_mode"``). Like ``_MonitorFixWorker`` this runs synchronously with
+    no thread event loop, so the fix handler must not call ``prompt_approval``
+    -- approval (including the restore-point prompt) is gated on the GUI
+    thread before this worker spawns.
     """
 
     finished = Signal()
@@ -187,7 +189,7 @@ class _NvidiaProfileFixWorker(QObject):
             success = _apply_card_fix(self._check_name, self._specs, self._create_rp)
         except Exception:
             from src.utils.debug_logger import get_debug_logger
-            get_debug_logger().error("NvidiaProfileFixWorker uncaught exception", exc_info=True)
+            get_debug_logger().error("Card-fix worker uncaught exception", exc_info=True)
         self.result.emit(success)
         self.finished.emit()
 

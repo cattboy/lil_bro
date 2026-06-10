@@ -565,9 +565,9 @@ class StartupCoordinator(QObject):
         # Filter so the handler only sees the NVIDIA payload.
         filtered_specs = {**specs, "NVIDIA": nvidia}
         self._nvidia_fix_check_name = check_name
-        from src.gui.worker import _NvidiaProfileFixWorker
+        from src.gui.worker import _CardFixWorker
         fix_thread = QThread()
-        fix_worker = _NvidiaProfileFixWorker(check_name, filtered_specs, create_rp)
+        fix_worker = _CardFixWorker(check_name, filtered_specs, create_rp)
         fix_worker.moveToThread(fix_thread)
         fix_thread.started.connect(fix_worker.run)
         fix_worker.finished.connect(fix_thread.quit)
