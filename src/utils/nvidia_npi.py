@@ -17,6 +17,7 @@ from .action_logger import action_logger
 from .errors import NvapiInitError, SetterError
 from .nip_io import parse_nip_with_retry, wait_for_nip_ready
 from .paths import get_lil_bro_dir
+from .subprocess_utils import CREATE_NO_WINDOW
 
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -119,6 +120,7 @@ def export_current_profile(npi_exe: str, dest_dir: str) -> tuple[str, dict[int, 
         cwd=str(npi_dir),
         capture_output=True,
         timeout=30,
+        creationflags=CREATE_NO_WINDOW,
     )
     if result.returncode != 0:
         stderr = result.stderr.decode(errors="replace").strip()

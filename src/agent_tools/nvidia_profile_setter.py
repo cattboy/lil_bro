@@ -25,6 +25,7 @@ from ..utils.nvidia_npi import (
     find_npi_exe,
 )
 from ..utils.paths import get_backups_dir, get_temp_dir
+from ..utils.subprocess_utils import CREATE_NO_WINDOW
 from .nvidia_profile import _get_primary_refresh_hz
 
 
@@ -115,6 +116,7 @@ def apply_nvidia_profile(npi_exe: str, nip_path: str) -> tuple[bool, str]:
             [npi_exe, "-silentImport", nip_path],
             capture_output=True,
             timeout=15,
+            creationflags=CREATE_NO_WINDOW,
         )
     except subprocess.TimeoutExpired:
         return False, "NPI import timed out (15s)"

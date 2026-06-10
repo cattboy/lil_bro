@@ -4,6 +4,7 @@ from .utils.errors import AdminRequiredError, RestorePointError
 from .utils.formatting import prompt_approval, print_step, print_step_done, print_error, print_success
 from .utils.action_logger import action_logger
 from .utils.platform import is_admin
+from .utils.subprocess_utils import CREATE_NO_WINDOW
 
 def check_admin():
     """Ensure we have admin privileges, or raise an error."""
@@ -19,7 +20,8 @@ def is_system_restore_enabled() -> bool:
     try:
         result = subprocess.run(
             ["powershell", "-Command", ps_command],
-            capture_output=True, text=True, check=False
+            capture_output=True, text=True, check=False,
+            creationflags=CREATE_NO_WINDOW,
         )
         return "TRUE" in result.stdout
     except Exception:
@@ -31,7 +33,8 @@ def enable_system_restore() -> bool:
     try:
         result = subprocess.run(
             ["powershell", "-Command", ps_command],
-            capture_output=True, text=True, check=False
+            capture_output=True, text=True, check=False,
+            creationflags=CREATE_NO_WINDOW,
         )
         if result.returncode == 0:
             action_logger.log_action("System Restore", "Enabled System Restore on C: drive", f"Execution: {ps_command}")
@@ -91,6 +94,7 @@ def create_restore_point(description: str | None = None, *, assume_approved: boo
             text=True,
             check=False,  # We handle the check manually to provide better error messages
             timeout=240,
+            creationflags=CREATE_NO_WINDOW,
         )
 
         if result.returncode == 0:

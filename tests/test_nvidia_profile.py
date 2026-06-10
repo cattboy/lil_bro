@@ -198,7 +198,7 @@ class TestGetNvidiaProfile:
         from src.collectors.sub.nvidia_profile_dumper import get_nvidia_profile
         import src.collectors.sub.nvidia_profile_dumper as mod
 
-        def fake_run(cmd, cwd, capture_output, timeout):
+        def fake_run(cmd, cwd, capture_output, timeout, **kwargs):
             _write_nip(os.path.join(cwd, "profile.nip"), _SAMPLE_NIP)
             return MagicMock(returncode=0)
 

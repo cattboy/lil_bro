@@ -22,6 +22,7 @@ from src.utils.formatting import print_info, print_dim
 from src.utils.action_logger import action_logger
 from src.utils.debug_logger import get_debug_logger
 from src.utils.platform import is_admin
+from src.utils.subprocess_utils import CREATE_NO_WINDOW
 
 _PAWNIO_SERVICE = "PawnIO"
 
@@ -32,6 +33,7 @@ def _pawnio_service_exists() -> bool:
         result = subprocess.run(
             ["sc", "query", _PAWNIO_SERVICE],
             capture_output=True, timeout=10, text=True,
+            creationflags=CREATE_NO_WINDOW,
         )
         # rc=0: service found; rc=1060: service does not exist
         return result.returncode == 0
@@ -45,6 +47,7 @@ def _run_sc(*args: str) -> bool:
         result = subprocess.run(
             ["sc", *args],
             capture_output=True, timeout=10, text=True,
+            creationflags=CREATE_NO_WINDOW,
         )
         # 0    = success
         # 1060 = service does not exist
@@ -55,14 +58,21 @@ def _run_sc(*args: str) -> bool:
         return False
 
 
-def _wait_for_driver_stopped(timeout: float = 10.0) -> bool:
-    """Poll sc query until PawnIO reports STOPPED or disappears. Returns True when safe."""
+def _wait_for_driver_stopped(timeout: float = 5.0) -> bool:
+    """Poll sc query until PawnIO reports STOPPED or disappears. Returns True when safe.
+
+    Capped at 5 s with 0.25 s polls: a handle-free kernel driver stops
+    near-instantly after `sc stop`; if it hasn't stopped by 5 s the handle is
+    stuck and more waiting won't free it -- the caller proceeds to the
+    uninstaller either way.
+    """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
             result = subprocess.run(
                 ["sc", "query", _PAWNIO_SERVICE],
                 capture_output=True, timeout=5, text=True,
+                creationflags=CREATE_NO_WINDOW,
             )
             if result.returncode == 1060:  # service no longer exists
                 return True
@@ -70,7 +80,7 @@ def _wait_for_driver_stopped(timeout: float = 10.0) -> bool:
                 return True
         except Exception:
             return True
-        time.sleep(0.5)
+        time.sleep(0.25)
     return False
 
 
@@ -80,6 +90,7 @@ def _find_pawnio_oem_inf() -> "str | None":
         result = subprocess.run(
             ["pnputil", "/enum-drivers"],
             capture_output=True, timeout=15, text=True,
+            creationflags=CREATE_NO_WINDOW,
         )
         if result.returncode != 0:
             return None
@@ -102,6 +113,7 @@ def _run_pnputil(*args: str) -> bool:
         result = subprocess.run(
             ["pnputil", *args],
             capture_output=True, timeout=30, text=True,
+            creationflags=CREATE_NO_WINDOW,
         )
         return result.returncode == 0
     except Exception:
@@ -142,10 +154,15 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
         return
 
     pawnio_exists = _pawnio_service_exists()
-    oem_inf = _find_pawnio_oem_inf()
 
-    if not pawnio_exists and not oem_inf:
-        return  # nothing to clean
+    # pnputil /enum-drivers walks the whole Driver Store (seconds) -- defer it
+    # to the two paths that actually need an OEM INF: the orphaned-entry check
+    # below, and the pnputil fallback when pawnio_setup.exe fails or is absent.
+    oem_inf: "str | None" = None
+    if not pawnio_exists:
+        oem_inf = _find_pawnio_oem_inf()
+        if not oem_inf:
+            return  # nothing to clean
 
     print_step("Removing PawnIO kernel driver")
     action_logger.log_action("PawnIO", "Uninstalling kernel driver")
@@ -165,7 +182,7 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
             result = subprocess.run(
                 [setup_exe, "-uninstall", "-silent"],
                 capture_output=True, timeout=60, text=True,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                creationflags=CREATE_NO_WINDOW,
             )
             if result.returncode == 0:
                 action_logger.log_action("Cleanup", "PawnIO removed via pawnio_setup.exe -uninstall")
@@ -181,11 +198,14 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
             )
 
     # 3. Fallback: pnputil /delete-driver if pawnio_setup.exe unavailable or failed.
-    if not pawnio_setup_uninstalled and oem_inf:
-        if _run_pnputil("/delete-driver", oem_inf, "/uninstall"):
-            action_logger.log_action("Cleanup", f"PawnIO removed from Driver Store ({oem_inf})")
-        else:
-            action_logger.log_action("Cleanup", f"pnputil /delete-driver {oem_inf} failed")
+    if not pawnio_setup_uninstalled:
+        if oem_inf is None:
+            oem_inf = _find_pawnio_oem_inf()
+        if oem_inf:
+            if _run_pnputil("/delete-driver", oem_inf, "/uninstall"):
+                action_logger.log_action("Cleanup", f"PawnIO removed from Driver Store ({oem_inf})")
+            else:
+                action_logger.log_action("Cleanup", f"pnputil /delete-driver {oem_inf} failed")
 
     # 4. Explicit sc delete — guarantees the SCM entry is removed.  If a driver
     #    handle is still open (rare once the LHM sidecar has shut down
@@ -195,6 +215,7 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
         delete_result = subprocess.run(
             ["sc", "delete", _PAWNIO_SERVICE],
             capture_output=True, timeout=10, text=True,
+            creationflags=CREATE_NO_WINDOW,
         )
         if delete_result.returncode == 0:
             action_logger.log_action("Cleanup", "PawnIO service entry removed (sc delete)")

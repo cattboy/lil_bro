@@ -27,6 +27,7 @@ from ..utils.formatting import (
     prompt_approval,
 )
 from ..utils.paths import get_lil_bro_dir, get_temp_dir
+from ..utils.subprocess_utils import CREATE_NO_WINDOW
 from .cinebench_discovery import _REPO_ROOT, _CINEBENCH_SEARCH_PATHS, find_cinebench
 from .cinebench_monitor import (
     SW_HIDE,
@@ -212,10 +213,12 @@ class BenchmarkRunner:
                         subprocess.run(
                             ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
                             capture_output=True,
+                            creationflags=CREATE_NO_WINDOW,
                         )
                         subprocess.run(
                             ["taskkill", "/F", "/IM", cb_exe],
                             capture_output=True,
+                            creationflags=CREATE_NO_WINDOW,
                         )
                         proc.communicate()
                         if watchdog and watchdog.abort_reason:
@@ -237,10 +240,12 @@ class BenchmarkRunner:
                         subprocess.run(
                             ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
                             capture_output=True,
+                            creationflags=CREATE_NO_WINDOW,
                         )
                         subprocess.run(
                             ["taskkill", "/F", "/IM", cb_exe],
                             capture_output=True,
+                            creationflags=CREATE_NO_WINDOW,
                         )
                         proc.communicate()
                         raise subprocess.TimeoutExpired(
