@@ -245,8 +245,15 @@ def _cleanup_cwd_tempdir() -> None:
     try:
         shutil.rmtree(lil_bro_dir)
         action_logger.log_action("Cleanup", "Removed runtime temp dir", str(lil_bro_dir))
-    except OSError:
-        pass
+    except OSError as e:
+        # Locked by a leftover handle (e.g. a subprocess still holding a temp
+        # file open). Record it -- the action log is the only always-on sink,
+        # and a silent pass here is exactly why this failure went untraced.
+        action_logger.log_action(
+            "Cleanup", "Failed to remove runtime temp dir",
+            f"{lil_bro_dir} ({e})", outcome="FAIL",
+        )
+        get_debug_logger().warning("Temp dir cleanup failed: %s", lil_bro_dir, exc_info=True)
 
 
 def _cleanup_stale_mei() -> None:
@@ -270,8 +277,15 @@ def _cleanup_stale_mei() -> None:
         try:
             shutil.rmtree(entry)
             action_logger.log_action("Cleanup", "Removed stale PyInstaller dir", str(entry))
-        except OSError:
-            pass
+        except OSError as e:
+            # A leftover handle inside the dir (e.g. _MEI*/tools open in a
+            # command prompt) blocks removal. Log it instead of swallowing,
+            # then move on to the next orphan.
+            action_logger.log_action(
+                "Cleanup", "Failed to remove stale PyInstaller dir",
+                f"{entry} ({e})", outcome="FAIL",
+            )
+            get_debug_logger().warning("Stale _MEI cleanup failed: %s", entry, exc_info=True)
 
 
 def post_run_cleanup(lhm: Optional[LHMSidecar], pawnio_was_preinstalled: bool = False) -> None:

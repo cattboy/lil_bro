@@ -159,7 +159,6 @@ class PipelineController:
         self.set_flow_controls(False)
         main.show_output()
         main.set_running(True)
-        main._output_panel.clear_log()
         main._benchmark_row.reset()
         main.status_bar_widget.set_state("run", "Pipeline starting…")
 
@@ -274,3 +273,67 @@ class PipelineController:
         from src.gui.widgets.ai_setup_dialog import AISetupDialog
         dialog = AISetupDialog(parent=self._main)
         dialog.exec()
+
+    # ── System Restore ─────────────────────────────────────────────────
+
+    def open_system_restore(self) -> None:
+        """Launch Windows System Restore (rstrui.exe) behind a confirm dialog.
+
+        The dialog copy adapts to whether lil_bro created a restore point this
+        session: it names the exact 'lil_bro Pre-Tuning <date>' point when one
+        exists, otherwise tells the user to pick any point from before lil_bro
+        ran. ``trigger_system_restore`` is a non-blocking ``Popen``, so this
+        runs on the GUI thread with no worker (unlike ``start_revert``). See
+        ``src.utils.revert.trigger_system_restore``.
+        """
+        from PySide6.QtWidgets import QDialog
+
+        from src.gui.widgets.dialogs import CardDialog
+        from src.utils.revert import load_manifest, trigger_system_restore
+
+        manifest = load_manifest()
+        restore_point_created = bool(
+            isinstance(manifest, dict) and manifest.get("restore_point_created")
+        )
+        session_date = ""
+        if isinstance(manifest, dict):
+            session_date = str(manifest.get("session_date", ""))[:10]
+
+        if restore_point_created:
+            label = f"lil_bro Pre-Tuning {session_date}".strip()
+            description = (
+                "This opens Windows System Restore and rolls your entire PC back "
+                "to the snapshot lil_bro saved before tuning — undoing everything "
+                "since then, not just lil_bro's changes. Your PC will restart.\n\n"
+                f'In the wizard, pick the point named "{label}", then follow the prompts.'
+            )
+        else:
+            description = (
+                "This opens Windows System Restore and rolls your entire PC back "
+                "to an earlier snapshot — undoing everything since then, not just "
+                "lil_bro's changes. Your PC will restart.\n\n"
+                "lil_bro didn't create a restore point this session, so pick any "
+                "point dated before you ran lil_bro, then follow the prompts."
+            )
+
+        confirm = CardDialog(
+            "Open System Restore?",
+            description,
+            tone="warning",
+            primary_label="Open System Restore",
+            secondary_label="Cancel",
+            parent=self._main,
+        )
+        if confirm.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        if not trigger_system_restore(session_date):
+            CardDialog(
+                "Couldn't open System Restore",
+                'lil_bro couldn\'t launch System Restore automatically. Open it '
+                'manually: press Start, type "Create a restore point", open it, '
+                'then click "System Restore…".',
+                tone="error",
+                primary_label="OK",
+                parent=self._main,
+            ).exec()

@@ -35,6 +35,7 @@ class RevertView(QWidget):
     """Dedicated revert page: shows applied fixes and a revert action button."""
 
     revert_requested = Signal()
+    system_restore_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -109,6 +110,48 @@ class RevertView(QWidget):
 
         btn_v.addLayout(btn_row)
         outer.addWidget(btn_wrap)
+
+        # ── System Restore card (the big undo) ────────────────────────────
+        # Always visible: System Restore is a general Windows feature, not tied
+        # to whether lil_bro made a restore point this session. The button only
+        # emits system_restore_requested; the confirm dialog + rstrui.exe launch
+        # live in PipelineController.open_system_restore (wired in app.py).
+        restore_wrap = QFrame()
+        restore_wrap.setObjectName("chartWrap")
+        restore_v = QVBoxLayout(restore_wrap)
+        restore_v.setContentsMargins(20, 16, 20, 16)
+        restore_v.setSpacing(6)
+
+        restore_hdr = QLabel("SYSTEM RESTORE — THE BIG UNDO")
+        restore_hdr.setObjectName("pollLabel")
+        restore_v.addWidget(restore_hdr)
+
+        restore_desc = QLabel(
+            "If reverting the fixes above isn't enough, Windows System Restore "
+            "rolls your entire PC back to the snapshot lil_bro saved before "
+            "tuning. This undoes everything since that point — not just lil_bro's "
+            "changes — and requires a restart. Click the button, pick the point "
+            "named \"lil_bro Pre-Tuning <date>\", and follow Windows' prompts."
+        )
+        restore_desc.setObjectName("pollStatus")
+        restore_desc.setWordWrap(True)
+        restore_v.addWidget(restore_desc)
+
+        restore_row = QHBoxLayout()
+        restore_row.addStretch()
+
+        self._restore_btn = QPushButton("↻  Open System Restore")
+        self._restore_btn.setObjectName("openRestoreBtn")
+        self._restore_btn.setProperty("navRole", "nav")
+        self._restore_btn.setProperty("navState", "warning")
+        self._restore_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._restore_btn.setMinimumHeight(40)
+        self._restore_btn.setMinimumWidth(200)
+        self._restore_btn.clicked.connect(self.system_restore_requested)
+        restore_row.addWidget(self._restore_btn)
+
+        restore_v.addLayout(restore_row)
+        outer.addWidget(restore_wrap)
 
         outer.addStretch(1)
 

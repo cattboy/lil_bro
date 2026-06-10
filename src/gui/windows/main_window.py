@@ -263,7 +263,6 @@ class MainWindow(QMainWindow):
         # so external access (main._benchmark_row, main._output_panel, …)
         # stays unchanged after the OutputView extraction.
         self._output_title = self._output_view._output_title
-        self._phase_pill = self._output_view._phase_pill
         self._live_stat_row = self._output_view._live_stat_row
         self._benchmark_row = self._output_view._benchmark_row
         self._progress_label = self._output_view._progress_label
@@ -297,13 +296,10 @@ class MainWindow(QMainWindow):
     def update_benchmark_score(self, phase: str, scores: dict, cpu_peak: float | None) -> None:
         if phase == "baseline":
             self._benchmark_row.set_baseline(scores, cpu_peak)
-            self._phase_pill.setText("● Benchmark")
         elif phase == "final":
             self._benchmark_row.set_final(scores)
-            self._phase_pill.setText("✓ Complete")
         elif phase == "final_skipped":
             self._benchmark_row.set_final_skipped()
-            self._phase_pill.setText("✓ Complete")
 
     # ── Nav "working" indicator for Run button ─────────────────────────
 
