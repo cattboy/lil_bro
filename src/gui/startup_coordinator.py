@@ -144,6 +144,41 @@ class StartupCoordinator(QObject):
         except Exception as exc:
             self._log.warning("Applied Fixes refresh failed: %s", exc, exc_info=True)
 
+    @Slot()
+    def refresh_fix_cards_after_revert(self) -> None:
+        """Re-scan the Dashboard fix cards after a revert.
+
+        A successful card fix optimistically flips its card to the "applied"
+        state (e.g. _on_nvidia_fix_result -> set_nvidia_profile_findings({"status":
+        "OK"})) without updating preloaded_specs. A revert restores the original
+        settings but nothing re-scanned those cards, so they stayed "applied".
+
+        Wired to RevertWorker.revert_finished from PipelineController.start_revert.
+        This coordinator is a QObject on the GUI thread, so the cross-thread
+        signal delivers here as a QueuedConnection -- safe to mutate widgets.
+        """
+        runtime = self._runtime
+        # Specs may be mid-mutation during a pipeline run; revert and pipeline are
+        # mutually exclusive, so this should not normally fire then, but guard anyway.
+        if runtime.get("pipeline_thread") is not None:
+            return
+        # NVIDIA: analyze_nvidia_profile is pure over the cached preloaded_specs --
+        # the same snapshot startup wiring used and that the apply never updated --
+        # so re-running it restores the pre-apply WARNING/OK state on the GUI thread.
+        try:
+            from src.agent_tools.nvidia_profile import analyze_nvidia_profile
+            specs = runtime.get("preloaded_specs", {}) or {}
+            self._main._dashboard.set_nvidia_profile_findings(analyze_nvidia_profile(specs))
+        except Exception as exc:
+            self._log.warning("NVIDIA card refresh after revert failed: %s", exc, exc_info=True)
+        # Monitor (display): same staleness gap after a display revert.
+        # refresh_monitor_card re-probes capabilities LIVE on its own worker thread
+        # and already guards against a running pipeline / an in-flight refresh.
+        try:
+            self.refresh_monitor_card()
+        except Exception as exc:
+            self._log.warning("Monitor card refresh after revert failed: %s", exc, exc_info=True)
+
     # ── Orchestrator step / completion ─────────────────────────────────
 
     def on_step(self, name: str, status: str) -> None:

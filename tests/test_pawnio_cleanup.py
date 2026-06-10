@@ -193,6 +193,20 @@ class TestCleanupStaleMei:
         assert our_mei.exists(), "Must not delete current process _MEIPASS"
         assert not other_mei.exists(), "Must delete orphaned _MEI dirs"
 
+    def test_logs_fail_when_rmtree_locked(self, tmp_path, monkeypatch):
+        """A locked _MEI dir (OSError) must be logged, not silently swallowed."""
+        from src.pipeline.post_run_cleanup import _cleanup_stale_mei
+        orphan = tmp_path / "_MEI123456"
+        orphan.mkdir()
+        monkeypatch.chdir(tmp_path)
+        with patch("src.pipeline.post_run_cleanup.action_logger") as mock_logger, \
+             patch("shutil.rmtree", side_effect=OSError("tools locked by cmd")):
+            _cleanup_stale_mei()  # must not raise; loop continues past the failure
+        outcomes = [kw.get("outcome") for _, kw in mock_logger.log_action.call_args_list]
+        messages = [a[1] for a, _ in mock_logger.log_action.call_args_list]
+        assert "FAIL" in outcomes
+        assert any("Failed to remove stale PyInstaller dir" in m for m in messages)
+
 
 # ---------------------------------------------------------------------------
 # _cleanup_cwd_tempdir
@@ -214,6 +228,20 @@ class TestCleanupCwdTempdir:
         from src.pipeline.post_run_cleanup import _cleanup_cwd_tempdir
         monkeypatch.chdir(tmp_path)
         _cleanup_cwd_tempdir()  # must not raise
+
+    def test_logs_fail_when_rmtree_locked(self, tmp_path, monkeypatch):
+        """A locked dir (OSError) must be logged, not silently swallowed."""
+        from src.pipeline.post_run_cleanup import _cleanup_cwd_tempdir
+        lil_bro_dir = tmp_path / "lil_bro"
+        lil_bro_dir.mkdir()
+        monkeypatch.chdir(tmp_path)
+        with patch("src.pipeline.post_run_cleanup.action_logger") as mock_logger, \
+             patch("shutil.rmtree", side_effect=OSError("dir locked")):
+            _cleanup_cwd_tempdir()  # must not raise
+        outcomes = [kw.get("outcome") for _, kw in mock_logger.log_action.call_args_list]
+        messages = [a[1] for a, _ in mock_logger.log_action.call_args_list]
+        assert "FAIL" in outcomes
+        assert any("Failed to remove runtime temp dir" in m for m in messages)
 
 
 # ---------------------------------------------------------------------------

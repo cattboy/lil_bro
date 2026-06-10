@@ -263,6 +263,15 @@ class PipelineController:
         revert_worker.revert_failed.connect(_on_revert_failed)
         revert_thread.finished.connect(_on_revert_thread_done)
 
+        # Re-scan the Dashboard fix cards once the revert succeeds, so the NVIDIA /
+        # monitor cards drop the optimistic "applied" state set at apply time. Routed
+        # through StartupCoordinator (a QObject on the GUI thread) -- the local
+        # closures above are plain callables that run on the worker thread, so they
+        # must not touch dashboard widgets. QObject receiver => QueuedConnection.
+        startup = runtime.get("_startup_coordinator")
+        if startup is not None:
+            revert_worker.revert_finished.connect(startup.refresh_fix_cards_after_revert)
+
         runtime["revert_thread"] = revert_thread
         runtime["revert_worker"] = revert_worker
         revert_thread.start()

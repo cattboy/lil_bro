@@ -280,3 +280,43 @@ class TestManifestSignatureGuard:
             coord._on_backups_changed("/cwd")
         coord._last_run_debounce.start.assert_called_once()
         assert coord._last_manifest_sig == (333, 444)
+
+
+class TestRefreshFixCardsAfterRevert:
+    """refresh_fix_cards_after_revert re-scans the NVIDIA + monitor fix cards so a
+    revert drops the optimistic 'applied' state set at apply time (the post-revert
+    staleness bug). Routed here from RevertWorker.revert_finished on the GUI thread."""
+
+    def test_rescans_nvidia_and_monitor(self):
+        runtime = {"preloaded_specs": {"NVIDIA": [{"GPU": "RTX 4080"}]}}
+        coord = _make_coordinator(runtime)
+        sentinel = {"status": "WARNING", "current": {}, "expected": {}}
+        with patch(
+            "src.agent_tools.nvidia_profile.analyze_nvidia_profile",
+            return_value=sentinel,
+        ) as mock_analyze, \
+             patch("src.gui.worker._MonitorRefreshWorker"), \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_fix_cards_after_revert()
+        # NVIDIA card re-scanned with the fresh analysis of the cached specs.
+        mock_analyze.assert_called_once_with(runtime["preloaded_specs"])
+        coord._main._dashboard.set_nvidia_profile_findings.assert_called_once_with(sentinel)
+        # Monitor card re-probed live (refresh_monitor_card spawned its worker thread).
+        mock_thread_cls.return_value.start.assert_called_once()
+
+    def test_noop_when_pipeline_running(self):
+        runtime = {
+            "pipeline_thread": MagicMock(),
+            "preloaded_specs": {"NVIDIA": [{"GPU": "RTX 4080"}]},
+        }
+        coord = _make_coordinator(runtime)
+        with patch(
+            "src.agent_tools.nvidia_profile.analyze_nvidia_profile",
+        ) as mock_analyze, \
+             patch("src.gui.worker._MonitorRefreshWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_fix_cards_after_revert()
+        mock_analyze.assert_not_called()
+        coord._main._dashboard.set_nvidia_profile_findings.assert_not_called()
+        mock_worker_cls.assert_not_called()
+        mock_thread_cls.assert_not_called()

@@ -48,8 +48,7 @@ class MousePollCard(QFrame):
         self._poll_status.setObjectName("pollStatus")
         poll_left.addWidget(self._poll_status)
 
-        poll_h.addLayout(poll_left)
-        poll_h.addStretch()
+        poll_h.addLayout(poll_left, 1)
 
         self._poll_btn = QPushButton("Test Polling")
         self._poll_btn.setObjectName("secondary")
