@@ -40,3 +40,39 @@ def test_dashboard_card_accessible_names(qtbot):
     for _key, label, _tone in STAT_CARDS:
         card_names = [c.accessibleName() for c in dash._cards.values()]
         assert any(label in name for name in card_names)
+
+
+# ── Power Plan / Game Mode fix card slots (T-034) ───────────────────────────
+
+
+def test_setting_cards_hidden_on_missing_or_error(qtbot):
+    dash = Dashboard()
+    qtbot.addWidget(dash)
+    for bad in (None, {}, {"error": "collection failed"}):
+        dash.set_power_plan_data(bad)
+        dash.set_game_mode_data(bad)
+        assert not dash._power_plan_card.isVisibleTo(dash)
+        assert not dash._game_mode_card.isVisibleTo(dash)
+
+
+def test_setting_cards_shown_on_valid_entries(qtbot):
+    dash = Dashboard()
+    qtbot.addWidget(dash)
+    dash.set_power_plan_data({"guid": "381b4222-f694-41f0-9685-ff5bb260df2e", "name": "Balanced"})
+    dash.set_game_mode_data({"enabled": False})
+    assert dash._power_plan_card.isVisibleTo(dash)
+    assert dash._game_mode_card.isVisibleTo(dash)
+
+
+def test_power_plan_card_click_bubbles_to_dashboard_signal(qtbot):
+    dash = Dashboard()
+    qtbot.addWidget(dash)
+    with qtbot.waitSignal(dash.power_plan_fix_requested, timeout=1000):
+        dash._power_plan_card._apply_btn.click()
+
+
+def test_game_mode_card_click_bubbles_to_dashboard_signal(qtbot):
+    dash = Dashboard()
+    qtbot.addWidget(dash)
+    with qtbot.waitSignal(dash.game_mode_fix_requested, timeout=1000):
+        dash._game_mode_card._apply_btn.click()
