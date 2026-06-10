@@ -256,12 +256,18 @@ def _cleanup_cwd_tempdir() -> None:
         get_debug_logger().warning("Temp dir cleanup failed: %s", lil_bro_dir, exc_info=True)
 
 
-def _cleanup_stale_mei() -> None:
+def _cleanup_stale_mei(at_startup: bool = False) -> None:
     """Remove orphaned _MEI* directories left by prior crashed runs.
 
     PyInstaller onefile extracts to CWD/_MEIxxxxxx (via runtime_tmpdir='.').
     Normal exits clean up automatically, but crashes leave orphans.
     Skip the current process's own _MEI directory (sys._MEIPASS).
+
+    When ``at_startup`` is True the sweep runs at boot: any leftover _MEI* is
+    evidence that a *prior* run's bootloader could not remove its own extraction
+    dir (a locked file, e.g. _MEI*/tools held open). That failure happens after
+    the Python interpreter exits and is unloggable in-process, so we record it
+    here -- one run later -- before deleting the orphan.
     """
     import sys as _sys
 
@@ -274,6 +280,17 @@ def _cleanup_stale_mei() -> None:
         # Don't delete our own extraction directory
         if current_mei and entry == Path(current_mei):
             continue
+        if at_startup:
+            # The orphan itself is the trace of a prior bootloader cleanup
+            # failure -- the only place Python can record that event.
+            action_logger.log_action(
+                "Cleanup",
+                "Previous run left a temp dir the bootloader could not remove (likely a locked file)",
+                str(entry), outcome="WARN",
+            )
+            get_debug_logger().warning(
+                "Startup: leftover PyInstaller temp dir from a prior run: %s", entry
+            )
         try:
             shutil.rmtree(entry)
             action_logger.log_action("Cleanup", "Removed stale PyInstaller dir", str(entry))
@@ -286,6 +303,23 @@ def _cleanup_stale_mei() -> None:
                 f"{entry} ({e})", outcome="FAIL",
             )
             get_debug_logger().warning("Stale _MEI cleanup failed: %s", entry, exc_info=True)
+
+
+def cleanup_orphaned_mei_at_startup() -> None:
+    """Sweep _MEI* dirs a PRIOR run's bootloader couldn't remove; log then delete.
+
+    Call this once at boot, after logging is initialized. A leftover _MEI* in the
+    CWD means the previous run's PyInstaller bootloader failed to clean up its own
+    extraction dir (a locked file) and showed the at-exit "Failed to remove
+    temporary directory" dialog -- which is unloggable in-process. This records
+    the event on the next launch, then removes the orphan.
+
+    Best-effort, never raises. No-op in dev mode (no _MEI*); skips current _MEIPASS.
+    """
+    try:
+        _cleanup_stale_mei(at_startup=True)
+    except Exception:
+        get_debug_logger().warning("Startup _MEI sweep failed", exc_info=True)
 
 
 def post_run_cleanup(lhm: Optional[LHMSidecar], pawnio_was_preinstalled: bool = False) -> None:

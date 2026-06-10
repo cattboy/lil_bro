@@ -95,6 +95,13 @@ def main():
 
         action_logger.log_session_start()
 
+        # Sweep any _MEI* extraction dir a PRIOR run's bootloader could not
+        # remove (a locked file -> the at-exit "Failed to remove temporary
+        # directory" dialog, unloggable in-process). Record it now, on this
+        # launch, then delete it. No-op in dev mode (no _MEI*).
+        from src.pipeline.post_run_cleanup import cleanup_orphaned_mei_at_startup
+        cleanup_orphaned_mei_at_startup()
+
         from src.utils.pawnio_check import is_pawnio_installed
         pawnio_was_preinstalled = is_pawnio_installed()
 
