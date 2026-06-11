@@ -96,6 +96,7 @@ a = Analysis(
         'src.gui.widgets.power_plan_card',
         'src.gui.widgets.benchmark_row',
         'src.gui.widgets.revert_view',
+        'src.gui.widgets.scroll_hint',
         'src.gui.widgets.splash',
         'src.gui.widgets.stat_card',
         'src.gui.widgets.status_bar_widget',

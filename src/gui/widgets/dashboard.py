@@ -15,13 +15,14 @@ from __future__ import annotations
 
 import html as _html
 
-from PySide6.QtCore import QThread, QTimer, Signal
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
@@ -32,6 +33,7 @@ from src.gui.widgets.mouse_poll_card import MousePollCard
 from src.gui.widgets.nvidia_dlss_card import NvidiaDlssCard
 from src.gui.widgets.nvidia_profile_card import NvidiaProfileCard
 from src.gui.widgets.power_plan_card import PowerPlanCard
+from src.gui.widgets.scroll_hint import ScrollHintArrow
 from src.gui.widgets.stat_card import STAT_CARDS, StatCard
 from src.utils.debug_logger import get_debug_logger
 
@@ -67,7 +69,17 @@ class Dashboard(QWidget):
 
         from src.gui.widgets.thermal_chart import ThermalChart
 
-        outer = QVBoxLayout(self)
+        # Scrollable card column. Every card lives on `content`, which sits
+        # inside a QScrollArea so the column keeps its natural height and
+        # scrolls when more cards are visible than the viewport fits.
+        # Previously the column was Dashboard's own layout: once NVIDIA +
+        # multi-monitor + power/game cards all showed, Qt compressed the
+        # monitor cards to fit (squashed 36px Hz labels — see
+        # docs/debugging/bug-monitor-refresh-cards-squished/).
+        content = QWidget()
+        self._content = content
+
+        outer = QVBoxLayout(content)
         outer.setContentsMargins(20, 16, 20, 20)
         outer.setSpacing(12)
 
@@ -132,7 +144,7 @@ class Dashboard(QWidget):
         outer.addWidget(chart_wrap)
 
         # ── Mouse polling card ──────────────────────────────────────────
-        self._mouse_poll_card = MousePollCard(parent=self)
+        self._mouse_poll_card = MousePollCard(parent=content)
         outer.addWidget(self._mouse_poll_card)
 
         # ── NVIDIA driver-profile cards (DLSS preset + full profile) ─────
@@ -140,14 +152,14 @@ class Dashboard(QWidget):
         # creation during the splash's nested event loop fails to parent in the
         # bundled PyInstaller exe. Hidden until set_nvidia_data shows them when
         # nvidia-smi detects a GPU and NPI.exe is available.
-        self._nvidia_dlss_card = NvidiaDlssCard("DLSS Preset", "Apply Preset", parent=self)
+        self._nvidia_dlss_card = NvidiaDlssCard("DLSS Preset", "Apply Preset", parent=content)
         self._nvidia_dlss_card.apply_requested.connect(self.nvidia_fix_requested)
         self._nvidia_dlss_card.priority_changed.connect(self._on_dlss_priority_changed)
         self._nvidia_dlss_card.hide()
         outer.addWidget(self._nvidia_dlss_card)
 
         self._nvidia_full_card = NvidiaProfileCard(
-            "nvidia_profile", "NVIDIA Driver Profile", "Optimize", parent=self
+            "nvidia_profile", "NVIDIA Driver Profile", "Optimize", parent=content
         )
         self._nvidia_full_card.apply_requested.connect(self.nvidia_fix_requested)
         self._nvidia_full_card.hide()
@@ -161,12 +173,12 @@ class Dashboard(QWidget):
         # exe (3 rounds of evidence). Slots are hidden initially; one is
         # shown by set_monitor_data based on whether displays were
         # detected. Extras for displays 2..N go through dynamic creation.
-        self._monitor_card_slot = MonitorRefreshCard(parent=self)
+        self._monitor_card_slot = MonitorRefreshCard(parent=content)
         self._monitor_card_slot.fix_requested.connect(self.monitor_fix_requested)
         self._monitor_card_slot.hide()
         outer.addWidget(self._monitor_card_slot)
 
-        self._monitor_empty_slot = MonitorEmptyCard(parent=self)
+        self._monitor_empty_slot = MonitorEmptyCard(parent=content)
         self._monitor_empty_slot.refresh_requested.connect(self.monitor_refresh_requested)
         self._monitor_empty_slot.hide()
         outer.addWidget(self._monitor_empty_slot)
@@ -176,12 +188,12 @@ class Dashboard(QWidget):
         # splash's nested event loop fails to parent in the bundled
         # PyInstaller exe). Hidden until set_power_plan_data /
         # set_game_mode_data show them when their spec entry was collected.
-        self._power_plan_card = PowerPlanCard(parent=self)
+        self._power_plan_card = PowerPlanCard(parent=content)
         self._power_plan_card.apply_requested.connect(self.power_plan_fix_requested)
         self._power_plan_card.hide()
         outer.addWidget(self._power_plan_card)
 
-        self._game_mode_card = GameModeCard(parent=self)
+        self._game_mode_card = GameModeCard(parent=content)
         self._game_mode_card.apply_requested.connect(self.game_mode_fix_requested)
         self._game_mode_card.hide()
         outer.addWidget(self._game_mode_card)
@@ -193,6 +205,25 @@ class Dashboard(QWidget):
         self._monitor_cards: list = []
 
         outer.addStretch(1)
+
+        # ── Scroll shell ─────────────────────────────────────────────────
+        self._scroll = QScrollArea()
+        self._scroll.setObjectName("dashboardScroll")
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._scroll.setWidget(content)
+
+        shell = QVBoxLayout(self)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
+        shell.addWidget(self._scroll)
+
+        # Pulsing "more cards below" affordance floating over the viewport's
+        # bottom edge. Manages its own visibility from the scrollbar range.
+        self._scroll_hint = ScrollHintArrow(self._scroll)
 
         self._worker_thread: QThread | None = None
         self._worker = None  # SystemStatsWorker — lazily created in start_polling()
@@ -400,18 +431,18 @@ class Dashboard(QWidget):
 
         # Diagnostic: confirm dashboard widget state at call time
         self._log.info(
-            "Dashboard: self.parent()=%s self.parentWidget()=%s layout_is_outer=%s",
+            "Dashboard: self.parent()=%s self.parentWidget()=%s content_layout_is_outer=%s",
             type(self.parent()).__name__ if self.parent() else "None",
             type(self.parentWidget()).__name__ if self.parentWidget() else "None",
-            self.layout() is self._outer_layout,
+            self._content.layout() is self._outer_layout,
         )
 
         self._rebuild_monitor_cards(displays)
 
         # Force layout + style recompute (belt-and-suspenders)
         self.updateGeometry()
-        if self.layout() is not None:
-            self.layout().activate()
+        if self._content.layout() is not None:
+            self._content.layout().activate()
         self._monitor_card_slot.ensurePolished()
         self._monitor_empty_slot.ensurePolished()
 
@@ -449,14 +480,17 @@ class Dashboard(QWidget):
 
         # Extras (displays 2..N) — dynamic. Use indexOf(slot) so we're
         # position-independent even if other widgets shift around.
+        # Cards belong to the scroll content widget, not the Dashboard
+        # itself — the parent guard must target self._content or it would
+        # rip the card back out of the content layout.
         base_idx = self._outer_layout.indexOf(self._monitor_card_slot)
         for offset, d in enumerate(displays[1:], start=1):
-            card = MonitorRefreshCard(parent=self)
+            card = MonitorRefreshCard(parent=self._content)
             card.set_display(d)
             card.fix_requested.connect(self.monitor_fix_requested)
             self._outer_layout.insertWidget(base_idx + offset, card)
-            if card.parentWidget() is not self:
-                card.setParent(self)
+            if card.parentWidget() is not self._content:
+                card.setParent(self._content)
             self._monitor_cards.append(card)
             self._log.info("Dashboard: extra card[%d] %s parent=%s",
                      offset, d.get("device"),

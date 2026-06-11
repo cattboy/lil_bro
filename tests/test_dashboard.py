@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from PySide6.QtWidgets import QScrollArea
+
 from src.gui.widgets.dashboard import Dashboard
 from src.gui.widgets.stat_card import STAT_CARDS
 
@@ -76,3 +78,57 @@ def test_game_mode_card_click_bubbles_to_dashboard_signal(qtbot):
     qtbot.addWidget(dash)
     with qtbot.waitSignal(dash.game_mode_fix_requested, timeout=1000):
         dash._game_mode_card._apply_btn.click()
+
+
+# ── Scroll shell + monitor-card squish regression ────────────────────────────
+# docs/debugging/bug-monitor-refresh-cards-squished: with NVIDIA + power/game
+# + 2 monitor cards all visible, the old non-scrolling column compressed the
+# monitor cards (squashed 36px Hz labels) to fit the viewport.
+
+
+_DISPLAYS = [
+    {"device": "\\\\.\\DISPLAY1", "current_refresh_hz": 60,
+     "max_refresh_hz": 60, "at_resolution": "1920x1080"},
+    {"device": "\\\\.\\DISPLAY2", "current_refresh_hz": 144,
+     "max_refresh_hz": 144, "at_resolution": "2560x1440"},
+]
+
+
+def test_dashboard_hosts_cards_in_scroll_area(qtbot):
+    dash = Dashboard()
+    qtbot.addWidget(dash)
+    assert isinstance(dash._scroll, QScrollArea)
+    assert dash._scroll.widget() is dash._content
+    assert dash._outer_layout.parentWidget() is dash._content
+
+
+def test_extra_monitor_cards_parent_to_scroll_content(qtbot):
+    dash = Dashboard()
+    qtbot.addWidget(dash)
+    dash.set_monitor_data(list(_DISPLAYS))
+    assert len(dash._monitor_cards) == 1
+    extra = dash._monitor_cards[0]
+    assert extra.parentWidget() is dash._content
+    base_idx = dash._outer_layout.indexOf(dash._monitor_card_slot)
+    assert dash._outer_layout.indexOf(extra) == base_idx + 1
+
+
+def test_monitor_cards_keep_natural_height_when_column_overflows(qtbot):
+    dash = Dashboard()
+    qtbot.addWidget(dash)
+    dash.resize(1000, 420)  # viewport far shorter than the full card column
+    dash._nvidia_dlss_card.show()
+    dash._nvidia_full_card.show()
+    dash._power_plan_card.show()
+    dash._game_mode_card.show()
+    dash.set_monitor_data(list(_DISPLAYS))
+    dash.show()
+    qtbot.waitUntil(dash.isVisible, timeout=2000)
+    qtbot.wait(50)
+
+    for card in (dash._monitor_card_slot, *dash._monitor_cards):
+        assert card.height() >= card.sizeHint().height()
+
+    vbar = dash._scroll.verticalScrollBar()
+    assert vbar.maximum() > 0
+    assert dash._scroll_hint.isVisibleTo(dash._scroll)

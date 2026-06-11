@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
 )
 
@@ -31,6 +32,11 @@ class MonitorRefreshCard(QFrame):
         super().__init__(parent)
         self.setObjectName("monitorCard")
         self.setAccessibleName("Monitor refresh rate card")
+
+        # Pin height to sizeHint — a squeezed parent layout must never
+        # compress the card below its natural height (the 36px Hz label
+        # squish, see docs/debugging/bug-monitor-refresh-cards-squished/).
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         self._device: str = ""
 
@@ -147,6 +153,9 @@ class MonitorEmptyCard(QFrame):
         super().__init__(parent)
         self.setObjectName("monitorEmptyCard")
         self.setAccessibleName("Monitor refresh rate — no displays detected")
+
+        # Same height pin as MonitorRefreshCard — never compress below sizeHint.
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
         root = QHBoxLayout(self)
         root.setContentsMargins(20, 16, 20, 16)

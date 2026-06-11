@@ -403,6 +403,7 @@ class MockControls(QWidget):
 
 def _smoke_report(driver: MockDriver, name: str) -> None:
     d = driver.dashboard
+    vbar = d._scroll.verticalScrollBar()
     print(
         f"[smoke] {name!r}: "
         f"cpu={d._cards['cpu_usage']._value.text()!r} "
@@ -414,7 +415,9 @@ def _smoke_report(driver: MockDriver, name: str) -> None:
         f"power={d._power_plan_card.isVisibleTo(d)}/{d._power_plan_card._status_lbl.text()!r} "
         f"game={d._game_mode_card.isVisibleTo(d)}/{d._game_mode_card._status_lbl.text()!r} "
         f"chart_offline={d.thermal_chart._offline} "
-        f"mouse={d._mouse_poll_card._poll_status.text()!r}"
+        f"mouse={d._mouse_poll_card._poll_status.text()!r} "
+        f"scroll_overflow={vbar.maximum() > 0} "
+        f"hint={d._scroll_hint.isVisibleTo(d._scroll)}"
     )
 
 

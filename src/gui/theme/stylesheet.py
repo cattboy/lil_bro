@@ -18,6 +18,7 @@ from src.gui.theme.stylesheet_interactive import (
 )
 from src.gui.theme.stylesheet_monitoring import (
     _qss_chart,
+    _qss_dashboard_scroll,
     _qss_phase_row,
     _qss_poll,
     _qss_stat_cards,
@@ -43,6 +44,7 @@ def build_stylesheet() -> str:
         _qss_stat_cards(c),
         _qss_chart(c),
         _qss_poll(c),
+        _qss_dashboard_scroll(c),
         _qss_phase_row(c),
         _qss_output_header(c),
         _qss_log_toolbar(c),
