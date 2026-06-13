@@ -123,3 +123,26 @@ def test_w_key_applies_not_cancels_through_wasd_filter(qtbot):
     # Pressing W therefore applies every selected fix instead of cancelling.
     assert WASDInputFilter()._proceed(dialog) is True
     assert dialog.selected_indices() == [1, 2, 3]
+
+
+def test_long_list_clamps_height_and_keeps_footer_visible(qtbot):
+    """Many fixes must not push the Apply footer off-screen.
+
+    Future pipeline checks can grow the proposal list unboundedly. The dialog
+    clamps its height to the available screen and scrolls the card body, so the
+    footer (Apply/Skip) stays on-screen no matter how many cards appear.
+    """
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtWidgets import QScrollArea
+
+    dialog = BatchSelectionDialog(_proposals(40))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QTest.qWait(10)
+
+    avail = QGuiApplication.primaryScreen().availableGeometry().height()
+    # The dialog never grows past the screen, so its footer stays reachable.
+    assert dialog.height() <= avail
+    assert dialog._apply_btn.isVisible()
+    # The card body is wrapped in a scroll area that absorbs the overflow.
+    assert dialog.findChild(QScrollArea) is not None

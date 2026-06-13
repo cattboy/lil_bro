@@ -33,6 +33,15 @@ def _qss_batch_dialog(c: dict[str, str]) -> str:
         border: 1px solid {c["border_default"]};
         border-radius: 12px;
     }}
+    /* Scrollable card body: transparent shell so the dialog surface shows
+     * through; the scrollbar itself is themed by the global QScrollBar rules. */
+    QScrollArea#dialogScroll {{
+        background-color: transparent;
+        border: none;
+    }}
+    QScrollArea#dialogScroll > QWidget > QWidget {{
+        background-color: transparent;
+    }}
     QLabel#dlgTitle {{
         font-family: "{FONTS["mono"]}";
         font-size: 16px;
