@@ -134,7 +134,13 @@ def fix_nvidia_profile(
     gpu_generation: str | None = None,
     pre_backup_path: str | None = None,
 ) -> bool:
-    """Apply optimized NVIDIA driver profile.
+    """Apply optimized NVIDIA driver profile (everything EXCEPT the DLSS preset).
+
+    DLSS is intentionally not touched here -- it is owned by
+    ``fix_nvidia_dlss_preset`` / the ``nvidia_dlss_preset`` fix so the two are
+    independently selectable (Dashboard cards + pipeline batch dialog). This
+    handler applies G-Sync, VSync, FPS cap, driver-side ReBar, and power
+    management.
 
     1. Backup current profile (skipped if pre_backup_path provided)
     2. Export fresh .nip
@@ -144,8 +150,7 @@ def fix_nvidia_profile(
     Args:
         specs: Full system specs dict.
         refresh_hz: Override for monitor refresh rate (auto-detected if None).
-        gpu_generation: Deprecated/ignored; the DLSS preset is now resolved from
-            GPU capability + config.nvidia.dlss.priority via get_preset.
+        gpu_generation: Deprecated/ignored; retained for signature compatibility.
         pre_backup_path: Path to an already-created backup .nip. If provided,
             the internal backup step is skipped (avoids duplicate exports).
 
@@ -204,11 +209,7 @@ def fix_nvidia_profile(
         if bios_rebar is True:
             target[SETTING_IDS["rebar_enable"]] = TARGET_VALUES["rebar_enable"]
 
-        gpu_name = nvidia[0].get("GPU", "") if isinstance(nvidia, list) and nvidia else ""
-        preset = get_preset(gpu_name, config.nvidia.dlss.priority)
-        if preset is not None:
-            target[SETTING_IDS["dlss_preset_profile"]] = TARGET_VALUES["dlss_preset_profile"]
-            target[SETTING_IDS["dlss_preset_letter"]] = preset.value
+        # DLSS preset is intentionally omitted -- owned by fix_nvidia_dlss_preset.
 
         # Power management
         _POWER_RAW = {"max_performance": 1, "adaptive": 0}
@@ -228,8 +229,6 @@ def fix_nvidia_profile(
         changes = []
         if cap is not None:
             changes.append(f"FPS cap={cap}")
-        if preset is not None:
-            changes.append(f"DLSS={preset.letter}")
         if bios_rebar is True:
             changes.append("ReBar=ON")
         changes.append("G-Sync=ON" if config.nvidia.profile.gsync else "G-Sync=OFF")

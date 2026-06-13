@@ -438,12 +438,13 @@ class TestAnalyzeNvidiaProfile:
         rebar_sub = next(s for s in r.get("sub_findings", []) if s["name"] == "ReBar Driver")
         assert rebar_sub.get("skipped") is True
 
-    def test_dlss_skipped_for_gtx_gpu(self):
+    def test_no_dlss_sub_finding_in_profile(self):
         from src.agent_tools.nvidia_profile import analyze_nvidia_profile
-        specs = _nvidia_specs(gpu_name="NVIDIA GeForce GTX 1080")
+        # DLSS is de-bundled -- owned by analyze_nvidia_dlss_preset, so the
+        # profile analyzer must never carry a "DLSS Preset" sub-finding.
+        specs = _nvidia_specs(gpu_name="NVIDIA GeForce RTX 4090")
         r = analyze_nvidia_profile(specs)
-        dlss_sub = next(s for s in r.get("sub_findings", []) if s["name"] == "DLSS Preset")
-        assert dlss_sub.get("skipped") is True
+        assert not any(s["name"] == "DLSS Preset" for s in r.get("sub_findings", []))
 
     def test_fps_cap_skipped_when_no_display_data(self):
         from src.agent_tools.nvidia_profile import analyze_nvidia_profile
@@ -465,6 +466,53 @@ class TestAnalyzeNvidiaProfile:
         r = analyze_nvidia_profile(specs)
         fps_sub = next(s for s in r.get("sub_findings", []) if s["name"] == "FPS Cap")
         assert fps_sub.get("skipped") is True
+
+
+class TestAnalyzeNvidiaDlssPreset:
+    """analyze_nvidia_dlss_preset -- the standalone DLSS-preset finding that
+    surfaces independently of the rest of the driver profile."""
+
+    def test_warning_when_preset_mismatched(self):
+        from src.agent_tools.nvidia_profile import analyze_nvidia_dlss_preset
+        # Default _nvidia_specs has empty raw_settings -> no DLSS preset set.
+        specs = _nvidia_specs(gpu_name="NVIDIA GeForce RTX 4090")
+        r = analyze_nvidia_dlss_preset(specs)
+        assert r["check"] == "nvidia_dlss_preset"
+        assert r["status"] == "WARNING"
+        assert r["can_auto_fix"] is True
+        # RTX 40-series (FP8, default priority quality) -> Preset M.
+        assert r["expected_letter"] == "M"
+
+    def test_ok_when_preset_correct(self):
+        from src.agent_tools.nvidia_profile import analyze_nvidia_dlss_preset
+        from src.utils.nvidia_npi import SETTING_IDS, TARGET_VALUES
+        raw = {
+            SETTING_IDS["dlss_preset_profile"]: TARGET_VALUES["dlss_preset_profile"],
+            SETTING_IDS["dlss_preset_letter"]: 0x0D,  # Preset M
+        }
+        npi = {"available": True, "raw_settings": raw}
+        specs = _nvidia_specs(gpu_name="NVIDIA GeForce RTX 4090", npi_data=npi)
+        r = analyze_nvidia_dlss_preset(specs)
+        assert r["status"] == "OK"
+        assert r["can_auto_fix"] is False
+
+    def test_skipped_for_gtx_gpu(self):
+        from src.agent_tools.nvidia_profile import analyze_nvidia_dlss_preset
+        specs = _nvidia_specs(gpu_name="NVIDIA GeForce GTX 1080")
+        r = analyze_nvidia_dlss_preset(specs)
+        assert r["status"] == "SKIPPED"
+
+    def test_skipped_for_no_nvidia(self):
+        from src.agent_tools.nvidia_profile import analyze_nvidia_dlss_preset
+        assert analyze_nvidia_dlss_preset({"NVIDIA": []})["status"] == "SKIPPED"
+
+    def test_skipped_when_npi_unavailable(self):
+        from src.agent_tools.nvidia_profile import analyze_nvidia_dlss_preset
+        specs = _nvidia_specs(
+            gpu_name="NVIDIA GeForce RTX 4090",
+            npi_data={"available": False, "reason": "not found"},
+        )
+        assert analyze_nvidia_dlss_preset(specs)["status"] == "SKIPPED"
 
 
 # ── 7. NIP XML modifier ──────────────────────────────────────────────────────
@@ -676,6 +724,35 @@ class TestActionProposerNvidiaProfile:
         proposals = _build_fallback(findings)
         assert len(proposals) == 1
         assert proposals[0]["finding"] == "nvidia_profile"
+
+    def test_nvidia_profile_fallback_excludes_dlss(self):
+        from src.llm.action_proposer import FALLBACK_PROPOSALS
+        # DLSS is de-bundled -> the profile proposal must not advertise it.
+        t = FALLBACK_PROPOSALS["nvidia_profile"]
+        assert "DLSS" not in t["proposed_action"]
+        assert "DLSS" not in t["explanation"]
+
+    def test_build_llm_input_includes_dlss_preset(self):
+        from src.llm.action_proposer import build_llm_input
+        findings = [{
+            "check": "nvidia_dlss_preset",
+            "status": "WARNING",
+            "can_auto_fix": True,
+            "current": {"gpu_model": "RTX 4090"},
+            "current_letter": "not set",
+            "expected_letter": "M",
+        }]
+        result = build_llm_input({}, findings)
+        entry = next((f for f in result["findings"] if f["check"] == "nvidia_dlss_preset"), None)
+        assert entry is not None
+        assert entry["gpu_model"] == "RTX 4090"
+        assert entry["recommended_preset"] == "M"
+
+    def test_build_fallback_returns_dlss_template(self):
+        from src.llm.action_proposer import _build_fallback
+        proposals = _build_fallback([{"check": "nvidia_dlss_preset", "status": "WARNING"}])
+        assert len(proposals) == 1
+        assert proposals[0]["finding"] == "nvidia_dlss_preset"
 
 
 

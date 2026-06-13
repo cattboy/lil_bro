@@ -334,11 +334,12 @@ class Dashboard(QWidget):
         self._nvidia_gpu_name = gpu_name
         self._nvidia_last_expected = {}
 
-        # Full-profile card: valid for any detected NVIDIA GPU.
+        # Full-profile card: valid for any detected NVIDIA GPU. DLSS is owned by
+        # the separate DLSS card, so it is not listed here.
         full_prop = propose_for_check("nvidia_profile") or {}
         self._nvidia_full_card.set_gpu(
             gpu_name,
-            "Optimize: G-Sync · VSync · FPS cap · ReBar · DLSS · Power",
+            "Optimize: G-Sync · VSync · FPS cap · ReBar · Power",
             full_prop.get("explanation", ""),
         )
         self._nvidia_full_card.show()

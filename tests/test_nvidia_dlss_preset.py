@@ -63,15 +63,19 @@ class TestFixNvidiaDlssPreset:
     @patch("src.agent_tools.nvidia_profile_setter.export_current_profile", return_value=("src.nip", {}))
     @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="b.nip")
     @patch("src.agent_tools.nvidia_profile_setter.find_npi_exe", return_value="npi.exe")
-    def test_full_profile_writes_m_for_fp8(self, _npi, _backup, _export, mock_build, _apply, tmp_path):
-        """Regression: the FULL profile fix re-letters FP8 from L to M (default priority)."""
+    def test_full_profile_excludes_dlss(self, _npi, _backup, _export, mock_build, _apply, tmp_path):
+        """De-bundle: the FULL profile fix must NOT write the DLSS SettingIDs --
+        DLSS is owned solely by fix_nvidia_dlss_preset. The other settings (e.g.
+        power management) are still applied."""
         from src.agent_tools.nvidia_profile_setter import fix_nvidia_profile
         with patch("src.agent_tools.nvidia_profile_setter.get_temp_dir", return_value=tmp_path), \
              patch("src.agent_tools.nvidia_profile_setter.os.unlink"):
             assert fix_nvidia_profile(_SPECS_5090) is True
         target = mock_build.call_args[0][1]
-        assert target[SETTING_IDS["dlss_preset_profile"]] == TARGET_VALUES["dlss_preset_profile"]
-        assert target[SETTING_IDS["dlss_preset_letter"]] == 13  # M
+        assert SETTING_IDS["dlss_preset_profile"] not in target
+        assert SETTING_IDS["dlss_preset_letter"] not in target
+        # Power management is always written by the profile fix.
+        assert SETTING_IDS["power_mgmt"] in target  # M
 
     @patch("src.agent_tools.nvidia_profile_setter.find_npi_exe", return_value="npi.exe")
     def test_raises_on_unmapped_generation(self, _npi):

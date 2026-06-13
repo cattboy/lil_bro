@@ -223,8 +223,11 @@ def _check_power_mgmt(npi: dict, raw: dict[int, int]) -> dict[str, Any]:
 def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
     """Analyze NVIDIA driver profile settings against gaming best practices.
 
-    Returns a single finding dict. All sub-checks are bundled because they're
-    fixed atomically via one .nip import operation.
+    Returns a single finding dict. The remaining sub-checks are bundled because
+    they're fixed atomically via one .nip import. DLSS is intentionally NOT
+    checked here -- it is owned by ``analyze_nvidia_dlss_preset`` / the
+    ``nvidia_dlss_preset`` fix so the two surface as independent options (the
+    Dashboard cards and the pipeline batch dialog).
     """
     nvidia = specs.get("NVIDIA", "")
 
@@ -280,7 +283,6 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
         _check_vsync(npi, raw_settings),
         _check_fps_cap(npi, raw_settings, refresh_hz),
         _check_rebar_driver(npi, raw_settings, bios_rebar),
-        _check_dlss(npi, raw_settings, gpu_name),
         _check_power_mgmt(npi, raw_settings),
     ]
 
@@ -292,7 +294,6 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
         override if override is not None
         else (calculate_fps_cap(refresh_hz) if refresh_hz else None)
     )
-    dlss_preset = get_preset(gpu_name)
 
     current = {
         "gpu_model": gpu_name,
@@ -300,7 +301,6 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
         "vsync": npi.get("vsync_mode"),
         "fps_cap": npi.get("fps_cap"),
         "rebar_driver": npi.get("rebar_driver"),
-        "dlss_preset": npi.get("dlss_preset"),
         "power_mgmt": npi.get("power_mgmt"),
     }
     expected = {
@@ -308,7 +308,6 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
         "vsync": config.nvidia.profile.vsync,
         "fps_cap": expected_fps,
         "rebar_driver": True if bios_rebar else None,
-        "dlss_preset": dlss_preset.letter if dlss_preset else None,
         "power_mgmt": config.nvidia.profile.power_mgmt,
     }
 
@@ -334,4 +333,79 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
         "message": f"NVIDIA driver profile not optimized: {summary}",
         "can_auto_fix": True,
         "sub_findings": sub_findings,
+    }
+
+
+def analyze_nvidia_dlss_preset(specs: dict) -> dict[str, Any]:
+    """Analyze ONLY the DLSS preset against the GPU's capability tier + priority.
+
+    Split out from ``analyze_nvidia_profile`` so the DLSS preset surfaces as its
+    own selectable fix (``nvidia_dlss_preset``) in both the Dashboard card and
+    the full pipeline's batch dialog, independent of the rest of the driver
+    profile. Reuses ``_check_dlss`` and the same NVIDIA/NPI gating.
+
+    Returns a finding dict keyed ``nvidia_dlss_preset``:
+      * SKIPPED  -- no NVIDIA GPU / AMD GPU / NPI unavailable / GPU not DLSS-capable.
+      * OK       -- the recommended preset is already set (``can_auto_fix`` False).
+      * WARNING  -- the preset is missing or wrong (``can_auto_fix`` True).
+    """
+    nvidia = specs.get("NVIDIA", "")
+    if not (isinstance(nvidia, list) and nvidia):
+        return {
+            "check": "nvidia_dlss_preset",
+            "status": "SKIPPED",
+            "message": "No NVIDIA GPU detected -- DLSS preset requires an NVIDIA GPU.",
+            "can_auto_fix": False,
+        }
+
+    gpu_name = nvidia[0].get("GPU", "Unknown GPU")
+
+    npi = specs.get("NVIDIAProfile", {})
+    if not npi.get("available") or "error" in npi:
+        reason = npi.get("reason") or npi.get("error") or "unknown"
+        return {
+            "check": "nvidia_dlss_preset",
+            "status": "SKIPPED",
+            "message": f"NVIDIA Profile Inspector unavailable: {reason}",
+            "can_auto_fix": False,
+        }
+
+    try:
+        raw_settings = {int(k): v for k, v in npi.get("raw_settings", {}).items()}
+    except (ValueError, TypeError):
+        raw_settings = {}
+
+    dlss = _check_dlss(npi, raw_settings, gpu_name)
+
+    # GPU not DLSS-capable / undetectable RTX generation -> nothing to offer.
+    if dlss.get("skipped"):
+        return {
+            "check": "nvidia_dlss_preset",
+            "status": "SKIPPED",
+            "message": dlss["message"],
+            "can_auto_fix": False,
+        }
+
+    current = {"gpu_model": gpu_name, "dlss_preset": dlss.get("current_letter")}
+    expected = {"dlss_preset": dlss.get("expected_letter")}
+
+    if dlss["ok"]:
+        return {
+            "check": "nvidia_dlss_preset",
+            "status": "OK",
+            "message": dlss["message"],
+            "can_auto_fix": False,
+            "current": current,
+            "expected": expected,
+        }
+
+    return {
+        "check": "nvidia_dlss_preset",
+        "status": "WARNING",
+        "message": dlss["message"],
+        "can_auto_fix": True,
+        "current_letter": dlss.get("current_letter"),
+        "expected_letter": dlss.get("expected_letter"),
+        "current": current,
+        "expected": expected,
     }

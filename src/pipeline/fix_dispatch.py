@@ -243,7 +243,7 @@ def _fix_game_mode(specs: dict) -> bool:
 
 @register_fix("nvidia_profile")
 def _fix_nvidia_profile(specs: dict) -> bool:
-    """Applies optimized NVIDIA driver profile via NPI."""
+    """Applies optimized NVIDIA driver profile via NPI (DLSS excluded)."""
     from src.agent_tools.nvidia_profile_setter import backup_nvidia_profile, fix_nvidia_profile
     from src.utils.nvidia_npi import find_npi_exe
 
@@ -278,7 +278,7 @@ def _fix_nvidia_profile(specs: dict) -> bool:
 
     print_success(
         "[nvidia_profile] NVIDIA driver profile optimized "
-        "(G-Sync, VSync, FPS cap, DLSS, power management)."
+        "(G-Sync, VSync, FPS cap, ReBar, power management)."
     )
     return True
 
