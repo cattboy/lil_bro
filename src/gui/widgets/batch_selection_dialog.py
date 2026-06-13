@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -120,7 +121,10 @@ class BatchSelectionDialog(QDialog):
         self.setWindowTitle("Apply These Fixes?")
         self.setObjectName("batchDialog")
         self.setModal(True)
-        self.setFixedWidth(540)
+        # Two columns when there is more than one fix: halves the card stack's
+        # height so the footer (Apply/Skip) stays on screen for long lists. A
+        # lone fix keeps the narrower single-column width.
+        self.setFixedWidth(820 if len(proposals) > 1 else 540)
         self.setAccessibleName("Batch selection dialog")
 
         self._proposals = proposals
@@ -164,12 +168,26 @@ class BatchSelectionDialog(QDialog):
         subtitle.setWordWrap(True)
         body_layout.addWidget(subtitle)
 
+        # Fix cards in a grid, filled left-to-right then top-to-bottom. Two
+        # columns once there is more than one fix; a single fix stays in one
+        # column so it isn't stranded beside an empty cell.
+        cols = 2 if count > 1 else 1
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+
         self._fix_items: list[_FixItem] = []
         for i, proposal in enumerate(proposals):
             item = _FixItem(i, proposal, self)
             item.toggled.connect(lambda idx=i: self._on_item_toggled(idx))
             self._fix_items.append(item)
-            body_layout.addWidget(item)
+            grid.addWidget(item, i // cols, i % cols)
+
+        for c in range(cols):
+            grid.setColumnStretch(c, 1)
+
+        body_layout.addLayout(grid)
 
         layout.addWidget(body)
 
