@@ -182,6 +182,18 @@ def run(debug: bool = False) -> int:
     QApplication.setOrganizationName("lil_bro")
     app = QApplication.instance() or QApplication(sys.argv)
 
+    # Explicit AppUserModelID so the Windows taskbar groups this process as
+    # "lil_bro" and shows our window icon instead of the host python.exe's
+    # (dev mode). Must run before any window — including the splash — is
+    # shown, or the splash-phase taskbar entry keeps the default icon.
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("lil_bro")
+    except Exception:
+        pass  # safe: non-Windows or shell32 unavailable; window icon still applies
+
+    app.setWindowIcon(theme.app_icon())
+
     theme.load_fonts()
     app.setStyleSheet(theme.build_stylesheet())
 
@@ -202,7 +214,11 @@ def run(debug: bool = False) -> int:
 
     # ── Splash dialog ──────────────────────────────────────────────────
     from src.gui.widgets.splash import SplashDialog
-    splash = SplashDialog(parent=main)
+    # parent=None on purpose: an owned (parented) dialog gets no taskbar
+    # button on Windows, and `main` isn't shown yet — the app would be
+    # invisible in the taskbar for the whole 3-9 s splash. Top-level +
+    # setModal(True) keeps it application-modal and taskbar-visible.
+    splash = SplashDialog(parent=None)
 
     bridge = GuiBridge(PipelineSignals(), parent=app)
     bridge.install()

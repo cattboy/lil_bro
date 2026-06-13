@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;}
+    html,body{margin:0;background:#101117;}
+  </style>
+</helmet>
+
+<div style="position:relative; min-height:100%; background:radial-gradient(140% 100% at 50% 0%, #1A1B23 0%, #101117 60%); font-family:'DM Sans',system-ui,sans-serif; color:#E8E6E3; padding:56px 48px 80px;">
+  <div style="position:absolute; inset:0; pointer-events:none; opacity:0.5; background:repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.04) 2px, rgba(0,0,0,0.04) 4px);"></div>
+
+  <div style="position:relative; max-width:1320px; margin:0 auto;">
+
+    <!-- ── Header ── -->
+    <header style="display:flex; align-items:flex-end; justify-content:space-between; gap:32px; flex-wrap:wrap; padding-bottom:28px; border-bottom:1px solid #2A2B34; margin-bottom:44px;">
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:600; letter-spacing:0.16em; text-transform:uppercase; color:#6B6A70; margin-bottom:14px;">App Icon System &nbsp;·&nbsp; Windows Desktop</div>
+        <h1 style="margin:0; font-family:'JetBrains Mono',monospace; font-weight:800; font-size:46px; letter-spacing:-0.02em; line-height:1; color:#F2F1EE;">lil_bro<span style="color:#00E5CC; text-shadow:0 0 24px rgba(0,229,204,0.6);">.exe</span> &nbsp;icons</h1>
+        <p style="margin:16px 0 0; font-size:15.5px; line-height:1.55; color:#9B9AA0; max-width:640px;">Seven directions for the main app + taskbar icon, all built from the <span style="font-family:'JetBrains Mono',monospace; color:#C9C8CC;">lb_</span> terminal mark. Each shown at full size and reduced to taskbar / file-list sizes so you can judge legibility where it counts.</p>
+      </div>
+      <div style="display:flex; align-items:center; gap:18px;">
+        <dc-import name="IconTile" variant="classic" size="84" hint-size="84px,84px"></dc-import>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#6B6A70; line-height:1.7;">CURRENT<br><span style="color:#9B9AA0;">mark</span></div>
+      </div>
+    </header>
+
+    <!-- ── Section: main icons grid ── -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:24px;">
+
+      <sc-for list="{{ cards }}" as="c" hint-placeholder-count="7">
+        <div style="position:relative; background:linear-gradient(180deg, #24252F 0%, #1F2029 100%); border:1px solid #2E2F3A; border-radius:14px; padding:24px 24px 22px; overflow:hidden; box-shadow:0 1px 0 rgba(255,255,255,0.02) inset, 0 10px 28px rgba(0,0,0,0.3);">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+            <div style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600; letter-spacing:0.12em; color:#9B9AA0;"><span style="color:#00E5CC;">{{ c.num }}</span> · {{ c.name }}</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:600; letter-spacing:0.1em; color:#6B6A70; border:1px solid #363745; border-radius:9999px; padding:4px 10px;">{{ c.tag }}</div>
+          </div>
+
+          <div style="display:flex; align-items:flex-end; gap:30px;">
+            <dc-import name="IconTile" variant="{{ c.variant }}" size="172" hint-size="172px,172px"></dc-import>
+
+            <div style="flex:1; display:flex; align-items:flex-end; gap:18px; padding-bottom:6px;">
+              <sc-for list="{{ c.ramp }}" as="r" hint-placeholder-count="4">
+                <div style="display:flex; flex-direction:column; align-items:center; gap:9px;">
+                  <dc-import name="IconTile" variant="{{ c.variant }}" size="{{ r }}" hint-size="48px,48px"></dc-import>
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#6B6A70;">{{ r }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <p style="margin:22px 0 0; font-size:13.5px; line-height:1.5; color:#9B9AA0;">{{ c.desc }}</p>
+        </div>
+      </sc-for>
+
+    </div>
+
+    <!-- ── Section: taskbar context ── -->
+    <h2 style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:13px; letter-spacing:0.14em; text-transform:uppercase; color:#6B6A70; margin:60px 0 20px;">In context · Windows 11 taskbar</h2>
+
+    <div style="position:relative; border-radius:14px; overflow:hidden; border:1px solid #2E2F3A; background:linear-gradient(180deg, #2A3340 0%, #1C2530 100%); padding:46px 0 0;">
+      <div style="text-align:center; font-family:'DM Sans',sans-serif; font-size:13px; color:rgba(255,255,255,0.4); padding-bottom:40px;">desktop wallpaper</div>
+      <div style="background:rgba(28,29,36,0.86); backdrop-filter:blur(18px); border-top:1px solid rgba(255,255,255,0.06); height:56px; display:flex; align-items:center; justify-content:center; gap:14px;">
+        <div style="width:24px; height:24px; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:2px;">
+          <div style="background:#5B8FD6; border-radius:1px;"></div><div style="background:#5B8FD6; border-radius:1px;"></div>
+          <div style="background:#5B8FD6; border-radius:1px;"></div><div style="background:#5B8FD6; border-radius:1px;"></div>
+        </div>
+        <div style="width:1px; height:24px; background:rgba(255,255,255,0.1); margin:0 4px;"></div>
+        <div style="width:30px; height:30px; border-radius:6px; background:#3A3B45; display:flex; align-items:center; justify-content:center; font-size:15px; color:#9B9AA0;">&#128269;</div>
+        <div style="width:30px; height:30px; border-radius:6px; background:#3A3B45; display:flex; align-items:center; justify-content:center; font-size:14px; color:#9B9AA0;">&#128193;</div>
+        <sc-for list="{{ taskbarVariants }}" as="tv" hint-placeholder-count="4">
+          <div style="position:relative; display:flex; flex-direction:column; align-items:center;">
+            <dc-import name="IconTile" variant="{{ tv }}" size="30" hint-size="30px,30px"></dc-import>
+            <div style="width:5px; height:5px; border-radius:9999px; background:#00E5CC; margin-top:5px; box-shadow:0 0 6px rgba(0,229,204,0.7);"></div>
+          </div>
+        </sc-for>
+        <div style="width:30px; height:30px; border-radius:6px; background:#3A3B45; display:flex; align-items:center; justify-content:center; font-size:14px; color:#9B9AA0;">&#9881;</div>
+      </div>
+    </div>
+    <p style="margin:14px 2px 0; font-size:13px; color:#6B6A70;">Pinned at 30&times;30. Left&rarr;right: classic, cyan, prompt, cursor — the four that hold up smallest, each with a cyan &ldquo;running&rdquo; dot.</p>
+
+    <!-- ── Section: file explorer ── -->
+    <h2 style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:13px; letter-spacing:0.14em; text-transform:uppercase; color:#6B6A70; margin:54px 0 20px;">In context · File Explorer</h2>
+
+    <div style="max-width:520px; background:#FBFBFC; border:1px solid #E2E0DC; border-radius:10px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.3); font-family:'Segoe UI','DM Sans',sans-serif;">
+      <div style="display:flex; align-items:center; gap:8px; padding:9px 16px; border-bottom:1px solid #ECEAE6; font-size:12.5px; color:#5A5960; font-weight:600;">Name</div>
+      <sc-for list="{{ explorerVariants }}" as="ev" hint-placeholder-count="4">
+        <div style="display:flex; align-items:center; gap:11px; padding:7px 16px; border-bottom:1px solid #F3F1EE; background:{{ ev.bg }};">
+          <dc-import name="IconTile" variant="{{ ev.variant }}" size="18" hint-size="18px,18px"></dc-import>
+          <span style="font-size:13px; color:#222;">lil_bro.exe</span>
+          <span style="margin-left:auto; font-family:'JetBrains Mono',monospace; font-size:10px; color:#A8A6A2;">{{ ev.label }}</span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin:14px 2px 0; font-size:13px; color:#6B6A70;">At 18px in a bright list, the high-contrast <span style="color:#9B9AA0;">cyan</span> and bold <span style="color:#9B9AA0;">duotone</span> tiles stay sharpest against white.</p>
+
+    <!-- ── Recommendation ── -->
+    <div style="margin-top:54px; display:flex; align-items:flex-start; gap:18px; background:rgba(0,229,204,0.06); border:1px solid rgba(0,229,204,0.22); border-radius:12px; padding:22px 26px;">
+      <dc-import name="IconTile" variant="classic" size="56" hint-size="56px,56px"></dc-import>
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:#00E5CC; margin-bottom:7px;">Recommendation</div>
+        <p style="margin:0; font-size:14px; line-height:1.55; color:#C9C8CC;">Ship <strong style="color:#F2F1EE;">01 Classic</strong> as the primary <span style="font-family:'JetBrains Mono',monospace;">.exe</span> icon — it's the brand mark and reads cleanly down to 24px. Pair it with <strong style="color:#F2F1EE;">02 Cyan</strong> as the small-size / taskbar fallback where contrast matters most. The other five are alternates if you want more personality (06 Pulse) or boldness (07 Duotone).</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const ramp = [48, 32, 24, 16];
+    const cards = [
+      { num: '01', name: 'CLASSIC', tag: 'PRIMARY', variant: 'classic', ramp,
+        desc: 'The canonical brand mark — lb_ wordmark with the cyan cursor. Safe, unmistakably "terminal," and the most on-system choice.' },
+      { num: '02', name: 'CYAN', tag: 'INVERTED', variant: 'cyan', ramp,
+        desc: 'Inverted tile: dark lb_ on electric cyan. Maximum contrast — pops hardest in a dark taskbar and stays readable at the smallest sizes.' },
+      { num: '03', name: 'PROMPT', tag: 'CONSOLE', variant: 'prompt', ramp,
+        desc: 'A command prompt ❯ with a solid cyan cursor block. Reads as "command line" before you parse any letters.' },
+      { num: '04', name: 'CURSOR', tag: 'MINIMAL', variant: 'cursor', ramp,
+        desc: 'Just the blinking cursor. The most legible mark at 16px — abstract, ownable, and pure terminal phosphor.' },
+      { num: '05', name: 'CRT', tag: 'RETRO', variant: 'crt', ramp,
+        desc: 'Classic with heavy scanlines, vignette and phosphor glow. The most "retro-CRT" personality of the set.' },
+      { num: '06', name: 'PULSE', tag: 'DIAGNOSTIC', variant: 'pulse', ramp,
+        desc: 'lb_ over a diagnostic heartbeat line — signals that this tool reads and fixes your PC\u2019s health.' },
+      { num: '07', name: 'DUOTONE', tag: 'BOLD', variant: 'duotone', ramp,
+        desc: 'Cyan/magenta diagonal with a knockout lb_. Brand-banner energy — the boldest icon in a crowded row.' },
+    ];
+    const taskbarVariants = ['classic', 'cyan', 'prompt', 'cursor'];
+    const explorerVariants = [
+      { variant: 'classic', label: 'classic', bg: '#FFFFFF' },
+      { variant: 'cyan', label: 'cyan', bg: '#F7F6F4' },
+      { variant: 'duotone', label: 'duotone', bg: '#FFFFFF' },
+      { variant: 'pulse', label: 'pulse', bg: '#F7F6F4' },
+    ];
+    return { cards, ramp, taskbarVariants, explorerVariants };
+  }
+}
+</script>
+</body>
+</html>

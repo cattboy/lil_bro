@@ -32,14 +32,19 @@ if os.path.isfile(_npi_exe):
 if os.path.isfile(_pawnio_setup):
     _extra_datas.append((_pawnio_setup, 'tools'))
 
-# ── GUI resources (bundled .ttf fonts) --------------------------------
+# ── GUI resources (bundled .ttf fonts + window icon) -------------------
 _resources_dir = os.path.join(ROOT, 'resources')
 _fonts_dir     = os.path.join(_resources_dir, 'fonts')
+_icons_dir     = os.path.join(_resources_dir, 'icons')
+_app_icon      = os.path.join(_icons_dir, 'lil_bro-01-classic.ico')
 
 if os.path.isdir(_fonts_dir):
     for _name in os.listdir(_fonts_dir):
         if _name.lower().endswith('.ttf'):
             _extra_datas.append((os.path.join(_fonts_dir, _name), 'resources/fonts'))
+
+if os.path.isfile(_app_icon):
+    _extra_datas.append((_app_icon, 'resources/icons'))
 
 
 a = Analysis(
@@ -173,5 +178,5 @@ exe = EXE(
     entitlements_file=None,
     runtime_tmpdir='.',  # Extract _MEI* to CWD, not %TEMP%
     uac_admin=True,      # Embeds requireAdministrator manifest
-    icon=None,           # TODO: Add icon when ready
+    icon=_app_icon if os.path.isfile(_app_icon) else None,  # exe / taskbar icon
 )

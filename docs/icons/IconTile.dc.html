@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="{{ tileStyle }}">
+  <sc-if value="{{ isDuotone }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ duoFillStyle }}"></div>
+  </sc-if>
+  <div style="{{ scanStyle }}"></div>
+
+  <sc-if value="{{ isPulse }}" hint-placeholder-val="{{ false }}">
+    <svg viewBox="0 0 100 36" preserveAspectRatio="none" style="{{ pulseSvgStyle }}">
+      <polyline points="0,18 28,18 36,18 42,4 50,33 58,12 64,18 100,18" fill="none" stroke="#00E5CC" stroke-width="{{ pulseStroke }}" stroke-linejoin="round" stroke-linecap="round"></polyline>
+    </svg>
+  </sc-if>
+
+  <sc-if value="{{ isCursor }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ cursorBarStyle }}"></div>
+  </sc-if>
+
+  <sc-if value="{{ isPrompt }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ promptRowStyle }}">
+      <span style="{{ chevronStyle }}">&#10095;</span>
+      <span style="{{ blockStyle }}"></span>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showLb }}" hint-placeholder-val="{{ true }}">
+    <div style="{{ lbStyle }}">lb<span style="{{ usStyle }}">_</span></div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:240,&quot;height&quot;:240},&quot;variant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;classic&quot;,&quot;cyan&quot;,&quot;prompt&quot;,&quot;cursor&quot;,&quot;crt&quot;,&quot;pulse&quot;,&quot;duotone&quot;],&quot;default&quot;:&quot;classic&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;size&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:240,&quot;min&quot;:16,&quot;max&quot;:512,&quot;tsType&quot;:&quot;number&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const s = Number(this.props.size) || 240;
+    const v = this.props.variant || 'classic';
+    const r = Math.max(2, Math.round(s * 0.22));
+    const bw = Math.max(1, s * 0.012);
+    const glow = (px, a) => `0 0 ${px}px rgba(0,229,204,${a})`;
+
+    const isCyan = v === 'cyan';
+    const isPrompt = v === 'prompt';
+    const isCursor = v === 'cursor';
+    const isCrt = v === 'crt';
+    const isPulse = v === 'pulse';
+    const isDuotone = v === 'duotone';
+    const isClassic = v === 'classic';
+    const showLb = isClassic || isCyan || isCrt || isPulse || isDuotone;
+
+    // ---- outer tile ----
+    let bg = 'radial-gradient(120% 120% at 30% 20%, #2A2B36 0%, #1A1B23 70%)';
+    let border = `${bw}px solid #363745`;
+    let shadow = `0 ${s*0.03}px ${s*0.08}px rgba(0,0,0,0.45), ${glow(s*0.07, 0.18)}`;
+    if (isCyan) {
+      bg = 'linear-gradient(150deg, #00E9CF 0%, #00C2AD 100%)';
+      border = `${bw}px solid rgba(0,0,0,0.18)`;
+      shadow = `0 ${s*0.03}px ${s*0.09}px rgba(0,0,0,0.45), inset 0 ${s*0.01}px 0 rgba(255,255,255,0.35)`;
+    }
+    if (isCrt) {
+      bg = 'radial-gradient(120% 120% at 50% 35%, #2C2D38 0%, #181922 75%, #121219 100%)';
+      shadow = `0 ${s*0.03}px ${s*0.08}px rgba(0,0,0,0.5), ${glow(s*0.1, 0.3)}`;
+    }
+    if (isDuotone) {
+      bg = '#15161D';
+      border = `${bw}px solid rgba(0,0,0,0.25)`;
+      shadow = `0 ${s*0.03}px ${s*0.09}px rgba(0,0,0,0.45)`;
+    }
+
+    const tileStyle = {
+      position: 'relative', width: s + 'px', height: s + 'px',
+      borderRadius: r + 'px', background: bg, border,
+      boxShadow: shadow, overflow: 'hidden', flex: 'none',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    };
+
+    // ---- duotone diagonal fill ----
+    const duoFillStyle = {
+      position: 'absolute', inset: 0,
+      background: 'linear-gradient(135deg, #00E5CC 0%, #00E5CC 49.5%, #D183E8 50.5%, #D183E8 100%)',
+    };
+
+    // ---- scanline overlay ----
+    const scanOp = isCrt ? 0.5 : (isCyan ? 0.12 : 0.32);
+    const scanStep = Math.max(2, Math.round(s * 0.016));
+    const scanDark = isCyan ? 'rgba(0,0,0,0.10)' : 'rgba(0,0,0,0.16)';
+    const scanStyle = {
+      position: 'absolute', inset: 0, opacity: scanOp, pointerEvents: 'none',
+      background: `repeating-linear-gradient(0deg, transparent, transparent ${scanStep}px, ${scanDark} ${scanStep}px, ${scanDark} ${scanStep*2}px)`,
+      mixBlendMode: 'multiply',
+      boxShadow: isCrt ? `inset 0 0 ${s*0.22}px rgba(0,0,0,0.6)` : 'none',
+    };
+
+    // ---- lb_ wordmark ----
+    let lbColor = '#EEEDEA', usColor = '#00E5CC';
+    let lbShadow = `0 0 ${s*0.02}px rgba(0,0,0,0.4)`;
+    let usShadow = glow(s*0.14, 0.85);
+    let lbSize = s * 0.42;
+    let lbTop = 0;
+    if (isCyan || isDuotone) { lbColor = '#10131A'; usColor = '#10131A'; usShadow = 'none'; lbShadow = isDuotone ? `0 ${s*0.006}px 0 rgba(255,255,255,0.12)` : 'none'; }
+    if (isCrt) { lbColor = '#F2F1EE'; lbShadow = `0 0 ${s*0.03}px rgba(209,131,232,0.5), 0 0 ${s*0.02}px rgba(0,0,0,0.5)`; usShadow = glow(s*0.18, 0.95); }
+    if (isPulse) { lbSize = s * 0.34; lbTop = -s * 0.1; }
+
+    const lbStyle = {
+      position: 'relative', zIndex: 2,
+      fontFamily: "'JetBrains Mono', monospace", fontWeight: 800,
+      fontSize: lbSize + 'px', letterSpacing: (-s*0.028) + 'px',
+      lineHeight: 1, color: lbColor, textShadow: lbShadow,
+      transform: lbTop ? `translateY(${lbTop}px)` : 'none',
+    };
+    const usStyle = { color: usColor, textShadow: usShadow };
+
+    // ---- pulse EKG ----
+    const pulseSvgStyle = {
+      position: 'absolute', left: s*0.12, right: s*0.12, bottom: s*0.2,
+      width: s*0.76 + 'px', height: s*0.26 + 'px', zIndex: 2,
+      filter: `drop-shadow(${glow(s*0.04, 0.9)})`,
+    };
+    const pulseStroke = Math.max(1.5, s * 0.018);
+
+    // ---- cursor bar ----
+    const cursorBarStyle = {
+      position: 'absolute', zIndex: 2,
+      left: '50%', top: '52%', transform: 'translate(-50%,-50%)',
+      width: s*0.44 + 'px', height: s*0.13 + 'px',
+      borderRadius: Math.round(s*0.03) + 'px',
+      background: 'linear-gradient(180deg, #2BFFE6 0%, #00E5CC 100%)',
+      boxShadow: `${glow(s*0.16, 0.9)}, ${glow(s*0.28, 0.4)}`,
+    };
+
+    // ---- prompt ----
+    const promptRowStyle = {
+      position: 'relative', zIndex: 2, display: 'flex',
+      alignItems: 'center', gap: s*0.045 + 'px', transform: `translateX(${-s*0.02}px)`,
+    };
+    const chevronStyle = {
+      fontFamily: "'JetBrains Mono', monospace", fontWeight: 800,
+      fontSize: s*0.4 + 'px', color: '#EEEDEA', lineHeight: 1,
+      textShadow: `0 0 ${s*0.02}px rgba(0,0,0,0.4)`,
+    };
+    const blockStyle = {
+      width: s*0.13 + 'px', height: s*0.34 + 'px',
+      borderRadius: Math.round(s*0.012) + 'px',
+      background: 'linear-gradient(180deg, #2BFFE6 0%, #00E5CC 100%)',
+      boxShadow: glow(s*0.13, 0.85),
+    };
+
+    return {
+      tileStyle, scanStyle, duoFillStyle,
+      isCyan, isPrompt, isCursor, isCrt, isPulse, isDuotone, isClassic, showLb,
+      lbStyle, usStyle,
+      pulseSvgStyle, pulseStroke,
+      cursorBarStyle, promptRowStyle, chevronStyle, blockStyle,
+    };
+  }
+}
+</script>
+</body>
+</html>
