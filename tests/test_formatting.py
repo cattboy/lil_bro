@@ -82,6 +82,42 @@ def test_unicode_safe_no_encoding_attr():
         importlib.reload(formatting)
 
 
+# ── _emit console-encoding hardening ──────────────────────────────────────────
+# A raw print() of a glyph the console can't encode (cp1252 + ✓/⚠/ℹ) raises
+# UnicodeEncodeError. _emit must swallow+retry rather than propagate, because on a
+# worker thread an uncaught error becomes a flaky unhandled-thread exception.
+
+def test_emit_does_not_raise_on_console_encode_error(monkeypatch):
+    monkeypatch.setattr(formatting, "_DEFAULT_SINK", None, raising=False)
+    calls = []
+
+    def flaky_print(text, end="\n", flush=False):
+        calls.append(text)
+        if len(calls) == 1:
+            raise UnicodeEncodeError("charmap", text, 0, 1, "character maps to <undefined>")
+        # the sanitized retry succeeds silently
+
+    monkeypatch.setattr("builtins.print", flaky_print)
+    formatting._emit("ℹ hello")  # must not raise
+    assert len(calls) == 2  # raised once, retried once with sanitized text
+
+
+def test_print_info_survives_console_encode_error(monkeypatch):
+    """The real symptom: print_info's ℹ glyph on a cp1252 console must not crash."""
+    monkeypatch.setattr(formatting, "_ASCII_FALLBACK", False)
+    monkeypatch.setattr(formatting, "_DEFAULT_SINK", None, raising=False)
+    n = {"c": 0}
+
+    def flaky_print(text, end="\n", flush=False):
+        n["c"] += 1
+        if n["c"] == 1 and "ℹ" in text:
+            raise UnicodeEncodeError("charmap", text, 0, 1, "character maps to <undefined>")
+
+    monkeypatch.setattr("builtins.print", flaky_print)
+    formatting.print_info("hello")  # must not raise
+    assert n["c"] == 2
+
+
 # ── Unicode fallbacks (8 tests) ─────────────────────────────────────────────
 # Monkeypatch _ASCII_FALLBACK directly to avoid module reload issues with capsys.
 
