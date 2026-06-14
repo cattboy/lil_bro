@@ -193,6 +193,8 @@ template (error dialog → `#FF6B6B` accent, not amber).
 
 ---
 
+## Completed
+
 ### T-034 — Power Plan + Game Mode Dashboard fix cards (with post-revert refresh)
 **Priority:** P3 — **COMPLETED 2026-06-11**
 Two separate card widgets (user direction: one card per fix — the Dashboard is the à-la-carte pick-and-choose path; the pipeline is apply-all): `PowerPlanCard` (`src/gui/widgets/power_plan_card.py`) + `GameModeCard` (`src/gui/widgets/game_mode_card.py`), each owning its own rendering via `set_findings(result)` (MonitorRefreshCard style — WARNING = analyzer message + `FALLBACK_PROPOSALS` explanation tooltip + Fix Now; OK = `✓` text, button hidden; bare `{"status": "OK"}` = optimistic post-fix text). Cards hidden when the spec entry is missing/errored (no before-state ⇒ fix would record non-revertible). Coordinator: `on_power_plan_fix_requested`/`on_game_mode_fix_requested` → shared `_start_setting_fix` (guards, spec gate, proposal from `propose_for_check`, BatchSelectionDialog, restore-point gate, `_CardFixWorker` — renamed from `_NvidiaProfileFixWorker`, already fully generic — with bound-method cleanup). Post-revert refresh extends `refresh_fix_cards_after_revert` with both analyzers over cached `preloaded_specs`. Both wiring paths covered (app.py fast path + `on_finished` late path); drive-by: late path gained the previously fast-path-only `set_nvidia_profile_findings` call. Mock GUI: `POWER_PLANS` fixtures built from production `KNOWN_PLANS`, combos + scenario keys + smoke-report lines; smoke also surfaced and fixed a cp1252 `UnicodeEncodeError` printing `✓` (same `errors="replace"` guard as `src/main.py`). 17 new tests; suite 1035 green. Original scope kept below as historical context.
@@ -207,8 +209,6 @@ Two separate card widgets (user direction: one card per fix — the Dashboard is
 **Added:** 2026-06-10 (user request during the revert-refresh fix)
 
 ---
-
-## Completed
 
 ### T-013 — Convert `PipelineWorker._cancel_requested` bool to `threading.Event`
 **Completed:** 2026-05-29
