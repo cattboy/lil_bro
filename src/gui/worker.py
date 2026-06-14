@@ -261,6 +261,37 @@ class _MonitorRefreshWorker(QObject):
         self.finished.emit(displays)
 
 
+class _DashboardRescanWorker(QObject):
+    """Re-collects the dashboard fix-relevant spec sections off the GUI thread.
+
+    Generalizes ``_MonitorRefreshWorker`` to every fix card: after the pipeline
+    (or a revert) mutates the system, the cards must be rebuilt from fresh data.
+    ``collect_fix_sections()`` re-runs the same collectors ``spec_dumper`` uses
+    for DisplayCapabilities / NVIDIA(+Profile) / PowerPlan / GameMode; the NVIDIA
+    profile export can block for a second or two, so it runs here, not on the GUI
+    thread. ``sections`` scopes the re-collect to only what changed this session
+    (``None`` = everything). Result is delivered via ``finished(dict)`` for the
+    main-thread caller to merge into ``preloaded_specs`` and repopulate the cards.
+    """
+
+    finished = Signal(dict)
+    failed = Signal(str)
+
+    def __init__(self, sections: set[str] | None = None) -> None:
+        super().__init__()
+        self._sections = sections
+
+    def run(self) -> None:
+        try:
+            from src.collectors.spec_dumper import collect_fix_sections
+            sections = collect_fix_sections(self._sections)
+        except Exception as exc:
+            get_debug_logger().error("DashboardRescanWorker uncaught exception", exc_info=True)
+            self.failed.emit(str(exc))
+            return
+        self.finished.emit(sections)
+
+
 class _MousePollWorker(QObject):
     """Runs ``check_polling_rate()`` off the GUI thread.
 

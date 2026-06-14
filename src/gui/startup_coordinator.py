@@ -29,6 +29,27 @@ class StartupCompleter(QObject):
         self._on_done(startup_lhm)
 
 
+# Maps a fix-dispatch check name (the @register_fix key in fix_dispatch.py) to the
+# spec sections its card reads. Used to scope the post-apply dashboard re-collect to
+# only what changed this session. Any NEW dashboard fix card must extend this map.
+_FIX_TO_SECTIONS: dict[str, set[str]] = {
+    "display": {"DisplayCapabilities"},
+    "nvidia_profile": {"NVIDIA", "NVIDIAProfile"},
+    "nvidia_dlss_preset": {"NVIDIA", "NVIDIAProfile"},
+    "power_plan": {"PowerPlan"},
+    "game_mode": {"GameMode"},
+    # temp_folders has no dashboard card -> no section to refresh.
+}
+
+
+def _sections_for_fixes(fix_keys) -> set[str]:
+    """Union the fix->section map over an iterable of fix-dispatch check names."""
+    out: set[str] = set()
+    for key in fix_keys:
+        out |= _FIX_TO_SECTIONS.get(key, set())
+    return out
+
+
 class StartupCoordinator(QObject):
     """Owns the StartupOrchestrator + monitor-refresh-card signal handlers.
 
@@ -151,46 +172,23 @@ class StartupCoordinator(QObject):
     def refresh_fix_cards_after_revert(self) -> None:
         """Re-scan the Dashboard fix cards after a revert.
 
-        A successful card fix optimistically flips its card to the "applied"
-        state (e.g. _on_nvidia_fix_result -> set_nvidia_profile_findings({"status":
-        "OK"})) without updating preloaded_specs. A revert restores the original
-        settings but nothing re-scanned those cards, so they stayed "applied".
+        A revert restores the pre-apply settings, but the cards may be showing
+        the optimistic "applied" state (card fixes) or the post-run state (the
+        cached ``preloaded_specs`` is refreshed after a pipeline run). Delegates
+        to the shared live re-collect so the cards reflect the real, just-reverted
+        system state -- the same path used after the optimization pipeline, so the
+        two surfaces never diverge.
+
+        ``start_revert`` captured the reverted fixes' sections in
+        ``_revert_refresh_scope`` before the manifest was deleted, so only those
+        cards are re-collected; falls back to a full refresh when unset.
 
         Wired to RevertWorker.revert_finished from PipelineController.start_revert.
         This coordinator is a QObject on the GUI thread, so the cross-thread
-        signal delivers here as a QueuedConnection -- safe to mutate widgets.
+        signal delivers here as a QueuedConnection -- safe to spawn the worker.
         """
-        runtime = self._runtime
-        # Specs may be mid-mutation during a pipeline run; revert and pipeline are
-        # mutually exclusive, so this should not normally fire then, but guard anyway.
-        if runtime.get("pipeline_thread") is not None:
-            return
-        specs = runtime.get("preloaded_specs", {}) or {}
-        # NVIDIA: analyze_nvidia_profile is pure over the cached preloaded_specs --
-        # the same snapshot startup wiring used and that the apply never updated --
-        # so re-running it restores the pre-apply WARNING/OK state on the GUI thread.
-        try:
-            from src.agent_tools.nvidia_profile import analyze_nvidia_profile
-            self._main._dashboard.set_nvidia_profile_findings(analyze_nvidia_profile(specs))
-        except Exception as exc:
-            self._log.warning("NVIDIA card refresh after revert failed: %s", exc, exc_info=True)
-        # Power Plan / Game Mode: same pure-analyzer-over-cached-specs path --
-        # the apply never mutated preloaded_specs, so the cached snapshot
-        # reflects the pre-fix state these cards should return to.
-        try:
-            from src.agent_tools.game_mode import analyze_game_mode
-            from src.agent_tools.power_plan import analyze_power_plan
-            self._main._dashboard.set_power_plan_findings(analyze_power_plan(specs))
-            self._main._dashboard.set_game_mode_findings(analyze_game_mode(specs))
-        except Exception as exc:
-            self._log.warning("Power Plan/Game Mode card refresh after revert failed: %s", exc, exc_info=True)
-        # Monitor (display): same staleness gap after a display revert.
-        # refresh_monitor_card re-probes capabilities LIVE on its own worker thread
-        # and already guards against a running pipeline / an in-flight refresh.
-        try:
-            self.refresh_monitor_card()
-        except Exception as exc:
-            self._log.warning("Monitor card refresh after revert failed: %s", exc, exc_info=True)
+        scope = self._runtime.pop("_revert_refresh_scope", None)
+        self.refresh_dashboard_fix_cards(scope)
 
     # ── Orchestrator step / completion ─────────────────────────────────
 
@@ -362,6 +360,115 @@ class StartupCoordinator(QObject):
         runtime["monitor_refresh_thread"] = refresh_thread
         runtime["monitor_refresh_worker"] = refresh_worker
         refresh_thread.start()
+
+
+    def refresh_dashboard_fix_cards(self, scope: set[str] | None = None) -> None:
+        """Re-collect the fix-relevant spec sections on a worker thread and
+        repopulate the affected Dashboard fix cards.
+
+        Generalizes the monitor card's post-fix live re-probe
+        (``refresh_monitor_card``) to all fix cards. The cards are built once at
+        startup from the cached ``preloaded_specs`` snapshot; after the pipeline
+        (or a revert) mutates the system that snapshot is stale and the cards
+        keep showing old data / offering already-applied fixes.
+
+        ``scope`` is the set of spec-section keys to re-collect (derived from the
+        session's applied fixes via ``_sections_for_fixes``):
+          * ``None``      -> re-collect every fix section (full refresh / fallback).
+          * a non-empty set -> re-collect only those sections (and repaint only
+            their cards) -- e.g. skip the slow NVIDIA export when no NVIDIA fix ran.
+          * an empty set  -> nothing changed this session; do nothing.
+
+        Re-collection runs through the same ``collect_fix_sections`` collectors and
+        the same analyzers the startup wiring uses -- one source of truth shared by
+        the Dashboard and the optimization flow.
+        """
+        runtime = self._runtime
+        if scope is not None and not scope:
+            self._log.info("Dashboard rescan skipped: no fix sections changed this session")
+            return
+        # Revert and pipeline are mutually exclusive; this fires from
+        # pipeline-finished (after the thread is cleared) and revert-finished.
+        if runtime.get("pipeline_thread") is not None:
+            self._log.warning("Dashboard rescan suppressed: pipeline is running")
+            return
+        if runtime.get("dashboard_rescan_thread") is not None:
+            return  # already in-flight; the existing worker will deliver the result
+        from src.gui.worker import _DashboardRescanWorker
+        rescan_thread = QThread()
+        rescan_worker = _DashboardRescanWorker(sections=scope)
+        rescan_worker.moveToThread(rescan_thread)
+        rescan_thread.started.connect(rescan_worker.run)
+        rescan_worker.finished.connect(self._on_dashboard_rescan_result)
+        rescan_worker.failed.connect(self._on_dashboard_rescan_failed)
+        rescan_worker.finished.connect(rescan_thread.quit)
+        rescan_worker.failed.connect(rescan_thread.quit)
+        rescan_thread.finished.connect(rescan_worker.deleteLater)
+        rescan_thread.finished.connect(rescan_thread.deleteLater)
+        rescan_thread.finished.connect(self._on_dashboard_rescan_thread_finished)
+        runtime["dashboard_rescan_thread"] = rescan_thread
+        runtime["dashboard_rescan_worker"] = rescan_worker
+        rescan_thread.start()
+
+    @Slot(dict)
+    def _on_dashboard_rescan_result(self, sections: dict) -> None:
+        """Merge fresh fix sections into preloaded_specs and repopulate the cards
+        for the sections that were actually re-collected.
+
+        Mirrors ``_on_refresh_result`` (monitor) for every fix card, using the
+        same ``set_*`` / ``analyze_*`` calls the startup wiring in app.py uses, so
+        the Dashboard and the optimization flow always derive from one source.
+        Only cards whose section key is present in ``sections`` are touched -- a
+        scoped re-collect leaves the other cards alone, and a failed/empty
+        collector for an unscoped section can't clobber a good card. Each card is
+        guarded independently so one failure can't strand the rest.
+        """
+        main = self._main
+        runtime = self._runtime
+        specs = runtime.get("preloaded_specs", {}) or {}
+        specs.update(sections)
+        runtime["preloaded_specs"] = specs
+
+        # Monitor (display) card.
+        if "DisplayCapabilities" in sections:
+            try:
+                main._dashboard.set_monitor_data(specs.get("DisplayCapabilities", []) or [])
+            except Exception as exc:
+                self._log.warning("Monitor card rescan failed: %s", exc, exc_info=True)
+        # NVIDIA: re-show/hide cards + DLSS recommendation, then per-setting findings.
+        if "NVIDIA" in sections:
+            try:
+                from src.agent_tools.nvidia_profile import analyze_nvidia_profile
+                main._dashboard.set_nvidia_data(specs.get("NVIDIA", []))
+                main._dashboard.set_nvidia_profile_findings(analyze_nvidia_profile(specs))
+            except Exception as exc:
+                self._log.warning("NVIDIA card rescan failed: %s", exc, exc_info=True)
+        # Power Plan card.
+        if "PowerPlan" in sections:
+            try:
+                from src.agent_tools.power_plan import analyze_power_plan
+                main._dashboard.set_power_plan_data(specs.get("PowerPlan"))
+                main._dashboard.set_power_plan_findings(analyze_power_plan(specs))
+            except Exception as exc:
+                self._log.warning("Power Plan card rescan failed: %s", exc, exc_info=True)
+        # Game Mode card.
+        if "GameMode" in sections:
+            try:
+                from src.agent_tools.game_mode import analyze_game_mode
+                main._dashboard.set_game_mode_data(specs.get("GameMode"))
+                main._dashboard.set_game_mode_findings(analyze_game_mode(specs))
+            except Exception as exc:
+                self._log.warning("Game Mode card rescan failed: %s", exc, exc_info=True)
+
+    @Slot(str)
+    def _on_dashboard_rescan_failed(self, exc_str: str) -> None:
+        self._log.warning("Could not rescan dashboard fix cards: %s", exc_str)
+
+    @Slot()
+    def _on_dashboard_rescan_thread_finished(self) -> None:
+        runtime = self._runtime
+        runtime.pop("dashboard_rescan_thread", None)
+        runtime.pop("dashboard_rescan_worker", None)
 
     def _on_refresh_result(self, displays: list) -> None:
         main = self._main

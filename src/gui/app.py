@@ -123,6 +123,17 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
         except Exception:
             pass  # safe: monitor-refresh-on-quit best-effort
 
+    # Wait for an in-flight dashboard fix-card rescan (the post-pipeline /
+    # post-revert live re-collect). It is read-only, but its NVIDIA profile
+    # export can take a second or two, so allow a slightly longer wait so the
+    # worker's QThread isn't destroyed mid-run.
+    dashboard_rescan_thread = runtime.get("dashboard_rescan_thread")
+    if dashboard_rescan_thread is not None:
+        try:
+            dashboard_rescan_thread.wait(3000)
+        except Exception:
+            pass  # safe: dashboard-rescan-on-quit best-effort
+
     try:
         main._dashboard.stop_polling()
     except Exception:
@@ -138,7 +149,7 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
     try:
         settings.save_geometry(main)
     except Exception:
-        pass  # safe: QSettings write failure should not block window close  # safe: QSettings write failure should not block window close
+        pass  # safe: QSettings write failure should not block window close
 
 
 def run(debug: bool = False) -> int:

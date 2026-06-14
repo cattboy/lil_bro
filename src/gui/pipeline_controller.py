@@ -162,6 +162,13 @@ class PipelineController:
         main._benchmark_row.reset()
         main.status_bar_widget.set_state("run", "Pipeline starting…")
 
+        # Snapshot the session manifest's fix count BEFORE the run. The delta
+        # after the run is exactly this run's applied fixes (card fixes are
+        # guarded off while the pipeline runs), which scopes the post-run
+        # dashboard re-collect to only the cards that changed.
+        from src.utils.revert import load_manifest
+        runtime["_pipeline_manifest_fix_count"] = len((load_manifest() or {}).get("fixes", []))
+
         pipeline_thread = QThread()
         pipeline_worker = PipelineWorker(lhm=runtime["lhm"], llm=None, preloaded_specs=runtime.get("preloaded_specs", {}))
         pipeline_worker.moveToThread(pipeline_thread)
@@ -199,6 +206,20 @@ class PipelineController:
                 pass
             pipeline_worker.deleteLater()
             pipeline_thread.deleteLater()
+            # Dashboard fix cards were built from the pre-run spec snapshot; the
+            # run may have applied fixes, leaving the cards showing stale data /
+            # offering already-applied fixes. Scope the live re-collect to just
+            # the sections this run's fixes touched (manifest delta) and skip it
+            # entirely when nothing was applied. Runs after pipeline_thread is
+            # cleared above so refresh_dashboard_fix_cards' guard passes.
+            startup = runtime.get("_startup_coordinator")
+            if startup is not None:
+                from src.gui.startup_coordinator import _sections_for_fixes
+                from src.utils.revert import load_manifest
+                before = runtime.pop("_pipeline_manifest_fix_count", 0)
+                new_fixes = (load_manifest() or {}).get("fixes", [])[before:]
+                scope = _sections_for_fixes(e.get("fix", "") for e in new_fixes)
+                startup.refresh_dashboard_fix_cards(scope)
 
         pipeline_worker.pipeline_started.connect(_on_pipeline_started)
         pipeline_worker.pipeline_finished.connect(_on_pipeline_finished)
@@ -231,9 +252,19 @@ class PipelineController:
         if runtime.get("revert_thread") is not None:
             return
         from src.utils.revert import load_manifest
-        if load_manifest() is None:
+        manifest = load_manifest()
+        if manifest is None:
             main.status_bar_widget.set_state("ok", "No session backup found — nothing to revert")
             return
+
+        # Capture which sections the to-be-reverted fixes touch BEFORE the worker
+        # runs -- a successful revert deletes the manifest, so refresh_fix_cards_
+        # after_revert can no longer read it. This scopes the post-revert live
+        # re-collect to just the affected cards.
+        from src.gui.startup_coordinator import _sections_for_fixes
+        runtime["_revert_refresh_scope"] = _sections_for_fixes(
+            e.get("fix", "") for e in manifest.get("fixes", [])
+        )
 
         self.set_flow_controls(False)
         main.status_bar_widget.set_state("run", "Reverting session…")

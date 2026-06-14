@@ -41,6 +41,40 @@ def _collect_game_mode() -> dict:
         return {"error": str(e)}
 
 
+def collect_fix_sections(sections: set[str] | None = None) -> dict:
+    """Re-collect the dashboard fix-relevant spec sections (optionally scoped).
+
+    Same collectors as ``dump_system_specs``, narrowed to the sections the
+    Dashboard fix cards consume (display, NVIDIA profile/DLSS, power plan, game
+    mode). Lets the GUI refresh those cards live after an apply (pipeline / card
+    fix / revert) without a full system dump -- the single source of truth shared
+    with the optimization flow.
+
+    ``sections`` scopes the work to just the requested keys (e.g. ``{"PowerPlan"}``)
+    so a refresh only re-runs the collectors for whatever actually changed this
+    session; ``None`` collects everything. The slow NVIDIA profile export is
+    skipped unless an NVIDIA GPU is actually present (and only run when the
+    ``NVIDIA``/``NVIDIAProfile`` keys are in scope).
+    """
+    def _want(key: str) -> bool:
+        return sections is None or key in sections
+
+    out: dict = {}
+    if _want("DisplayCapabilities"):
+        out["DisplayCapabilities"] = _safe_collect(get_monitor_refresh_capabilities)
+    if _want("NVIDIA") or _want("NVIDIAProfile"):
+        nvidia = _safe_collect(get_nvidia_smi)
+        if _want("NVIDIA"):
+            out["NVIDIA"] = nvidia
+        if _want("NVIDIAProfile") and isinstance(nvidia, list) and nvidia:
+            out["NVIDIAProfile"] = _safe_collect(get_nvidia_profile)
+    if _want("PowerPlan"):
+        out["PowerPlan"] = _collect_power_plan()
+    if _want("GameMode"):
+        out["GameMode"] = _collect_game_mode()
+    return out
+
+
 def dump_system_specs(output_path: str | None = None) -> str:
     """
     Consolidates data from all hardware tools into a single JSON file.

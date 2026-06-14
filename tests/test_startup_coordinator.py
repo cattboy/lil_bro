@@ -284,73 +284,182 @@ class TestManifestSignatureGuard:
 
 
 class TestRefreshFixCardsAfterRevert:
-    """refresh_fix_cards_after_revert re-scans the NVIDIA + monitor fix cards so a
-    revert drops the optimistic 'applied' state set at apply time (the post-revert
-    staleness bug). Routed here from RevertWorker.revert_finished on the GUI thread."""
+    """After a revert the fix cards must reflect the just-reverted system state.
+    refresh_fix_cards_after_revert now delegates to the shared live re-collect
+    (refresh_dashboard_fix_cards) so the revert and pipeline paths never diverge."""
 
-    def test_rescans_nvidia_and_monitor(self):
-        runtime = {"preloaded_specs": {"NVIDIA": [{"GPU": "RTX 4080"}]}}
-        coord = _make_coordinator(runtime)
-        sentinel = {"status": "WARNING", "current": {}, "expected": {}}
-        with patch(
-            "src.agent_tools.nvidia_profile.analyze_nvidia_profile",
-            return_value=sentinel,
-        ) as mock_analyze, \
-             patch("src.gui.worker._MonitorRefreshWorker"), \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+    def test_delegates_to_dashboard_rescan(self):
+        coord = _make_coordinator({})
+        with patch.object(coord, "refresh_dashboard_fix_cards") as mock_refresh:
             coord.refresh_fix_cards_after_revert()
-        # NVIDIA card re-scanned with the fresh analysis of the cached specs.
-        mock_analyze.assert_called_once_with(runtime["preloaded_specs"])
-        coord._main._dashboard.set_nvidia_profile_findings.assert_called_once_with(sentinel)
-        # Monitor card re-probed live (refresh_monitor_card spawned its worker thread).
-        mock_thread_cls.return_value.start.assert_called_once()
+        # No captured scope -> full refresh (scope None).
+        mock_refresh.assert_called_once_with(None)
 
-    def test_rescans_power_plan_and_game_mode(self):
-        """T-034: the Power Plan / Game Mode cards take the same
-        pure-analyzer-over-cached-specs path as the NVIDIA card."""
-        runtime = {"preloaded_specs": {
-            "PowerPlan": {"guid": "g", "name": "Balanced"},
-            "GameMode": {"enabled": False},
-        }}
-        coord = _make_coordinator(runtime)
-        power_sentinel = {"status": "WARNING", "check": "power_plan"}
-        game_sentinel = {"status": "WARNING", "check": "game_mode"}
-        with patch(
-            "src.agent_tools.power_plan.analyze_power_plan",
-            return_value=power_sentinel,
-        ) as mock_power, \
-             patch(
-            "src.agent_tools.game_mode.analyze_game_mode",
-            return_value=game_sentinel,
-        ) as mock_game, \
-             patch("src.agent_tools.nvidia_profile.analyze_nvidia_profile",
-                   return_value={"status": "OK"}), \
-             patch("src.gui.worker._MonitorRefreshWorker"), \
-             patch("src.gui.startup_coordinator.QThread"):
+    def test_forwards_captured_revert_scope(self):
+        coord = _make_coordinator({"_revert_refresh_scope": {"PowerPlan"}})
+        with patch.object(coord, "refresh_dashboard_fix_cards") as mock_refresh:
             coord.refresh_fix_cards_after_revert()
-        mock_power.assert_called_once_with(runtime["preloaded_specs"])
-        mock_game.assert_called_once_with(runtime["preloaded_specs"])
-        coord._main._dashboard.set_power_plan_findings.assert_called_once_with(power_sentinel)
-        coord._main._dashboard.set_game_mode_findings.assert_called_once_with(game_sentinel)
+        mock_refresh.assert_called_once_with({"PowerPlan"})
+        # The captured scope is consumed (popped) so a later refresh doesn't reuse it.
+        assert "_revert_refresh_scope" not in coord._runtime
 
     def test_noop_when_pipeline_running(self):
-        runtime = {
-            "pipeline_thread": MagicMock(),
-            "preloaded_specs": {"NVIDIA": [{"GPU": "RTX 4080"}]},
-        }
+        runtime = {"pipeline_thread": MagicMock()}
         coord = _make_coordinator(runtime)
-        with patch(
-            "src.agent_tools.nvidia_profile.analyze_nvidia_profile",
-        ) as mock_analyze, \
-             patch("src.gui.worker._MonitorRefreshWorker") as mock_worker_cls, \
+        with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
              patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
             coord.refresh_fix_cards_after_revert()
-        mock_analyze.assert_not_called()
-        coord._main._dashboard.set_nvidia_profile_findings.assert_not_called()
-        coord._main._dashboard.set_power_plan_findings.assert_not_called()
-        coord._main._dashboard.set_game_mode_findings.assert_not_called()
         mock_worker_cls.assert_not_called()
         mock_thread_cls.assert_not_called()
+        assert "dashboard_rescan_thread" not in runtime
+
+
+class TestRefreshDashboardFixCards:
+    """refresh_dashboard_fix_cards re-collects the fix-relevant spec sections on a
+    worker thread (mirroring refresh_monitor_card) and repopulates every fix card
+    from the fresh data -- the shared post-apply path for pipeline + revert."""
+
+    def test_dispatches_worker_off_main_thread(self):
+        runtime: dict = {}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_dashboard_fix_cards()
+        # None scope = full re-collect; worker is constructed with sections=None.
+        mock_worker_cls.assert_called_once_with(sections=None)
+        mock_thread_cls.assert_called_once_with()
+        assert runtime.get("dashboard_rescan_thread") is mock_thread_cls.return_value
+        assert runtime.get("dashboard_rescan_worker") is mock_worker_cls.return_value
+        mock_thread_cls.return_value.started.connect.assert_called_with(
+            mock_worker_cls.return_value.run
+        )
+        mock_thread_cls.return_value.start.assert_called_once()
+
+    def test_suppressed_when_pipeline_thread_set(self):
+        runtime = {"pipeline_thread": MagicMock()}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_dashboard_fix_cards()
+        mock_worker_cls.assert_not_called()
+        mock_thread_cls.assert_not_called()
+        assert "dashboard_rescan_thread" not in runtime
+
+    def test_second_call_dropped_while_in_flight(self):
+        sentinel_thread = MagicMock()
+        runtime = {"dashboard_rescan_thread": sentinel_thread}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_dashboard_fix_cards()
+        mock_worker_cls.assert_not_called()
+        mock_thread_cls.assert_not_called()
+        assert runtime["dashboard_rescan_thread"] is sentinel_thread
+
+    def test_result_handler_updates_specs_and_repopulates_cards(self):
+        runtime = {"preloaded_specs": {"WMI": {"keep": True}}}
+        coord = _make_coordinator(runtime)
+        sections = {
+            "DisplayCapabilities": [{"device": r"\\.\DISPLAY1"}],
+            "NVIDIA": [{"GPU": "RTX 4090"}],
+            "NVIDIAProfile": {"available": True},
+            "PowerPlan": {"name": "High performance"},
+            "GameMode": {"enabled": True},
+        }
+        nv = {"status": "OK"}
+        pp = {"status": "OK", "check": "power_plan"}
+        gm = {"status": "OK", "check": "game_mode"}
+        with patch("src.agent_tools.nvidia_profile.analyze_nvidia_profile", return_value=nv) as m_nv, \
+             patch("src.agent_tools.power_plan.analyze_power_plan", return_value=pp) as m_pp, \
+             patch("src.agent_tools.game_mode.analyze_game_mode", return_value=gm) as m_gm:
+            coord._on_dashboard_rescan_result(sections)
+        # Fresh sections merged into preloaded_specs; pre-existing keys preserved.
+        assert runtime["preloaded_specs"]["WMI"] == {"keep": True}
+        assert runtime["preloaded_specs"]["GameMode"] == {"enabled": True}
+        d = coord._main._dashboard
+        d.set_monitor_data.assert_called_once_with(sections["DisplayCapabilities"])
+        d.set_nvidia_data.assert_called_once_with(sections["NVIDIA"])
+        d.set_nvidia_profile_findings.assert_called_once_with(nv)
+        d.set_power_plan_findings.assert_called_once_with(pp)
+        d.set_game_mode_findings.assert_called_once_with(gm)
+        m_nv.assert_called_once()
+        m_pp.assert_called_once()
+        m_gm.assert_called_once()
+
+    def test_failed_handler_logs_warning(self):
+        coord = _make_coordinator({})
+        coord._on_dashboard_rescan_failed("boom")
+        coord._log.warning.assert_called_once()
+
+    def test_thread_finished_clears_runtime_keys(self):
+        runtime = {"dashboard_rescan_thread": MagicMock(), "dashboard_rescan_worker": MagicMock()}
+        coord = _make_coordinator(runtime)
+        coord._on_dashboard_rescan_thread_finished()
+        assert "dashboard_rescan_thread" not in runtime
+        assert "dashboard_rescan_worker" not in runtime
+
+    def test_skips_entirely_when_scope_empty(self):
+        runtime: dict = {}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_dashboard_fix_cards(set())
+        mock_worker_cls.assert_not_called()
+        mock_thread_cls.assert_not_called()
+        assert "dashboard_rescan_thread" not in runtime
+
+    def test_scoped_call_passes_sections_to_worker(self):
+        runtime: dict = {}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread"):
+            coord.refresh_dashboard_fix_cards({"PowerPlan"})
+        mock_worker_cls.assert_called_once_with(sections={"PowerPlan"})
+
+    def test_result_repopulates_only_scoped_cards(self):
+        runtime = {"preloaded_specs": {}}
+        coord = _make_coordinator(runtime)
+        with patch("src.agent_tools.power_plan.analyze_power_plan", return_value={"status": "OK"}) as m_pp:
+            coord._on_dashboard_rescan_result({"PowerPlan": {"name": "High performance"}})
+        d = coord._main._dashboard
+        d.set_power_plan_findings.assert_called_once()
+        m_pp.assert_called_once()
+        # Cards for sections NOT in the scoped result are left untouched.
+        d.set_monitor_data.assert_not_called()
+        d.set_nvidia_data.assert_not_called()
+        d.set_game_mode_findings.assert_not_called()
+
+
+def test_dashboard_rescan_worker_emits_sections(qtbot):
+    from src.gui.worker import _DashboardRescanWorker
+    w = _DashboardRescanWorker()
+    received: list = []
+    w.finished.connect(received.append)
+    with patch("src.collectors.spec_dumper.collect_fix_sections",
+               return_value={"GameMode": {"enabled": True}}):
+        w.run()
+    assert received == [{"GameMode": {"enabled": True}}]
+
+
+def test_dashboard_rescan_worker_emits_failed_on_exception(qtbot):
+    from src.gui.worker import _DashboardRescanWorker
+    w = _DashboardRescanWorker()
+    errors: list = []
+    w.failed.connect(errors.append)
+    with patch("src.collectors.spec_dumper.collect_fix_sections",
+               side_effect=RuntimeError("boom")):
+        w.run()
+    assert errors and "boom" in errors[0]
+
+
+def test_sections_for_fixes_maps_known_keys():
+    from src.gui.startup_coordinator import _sections_for_fixes
+    assert _sections_for_fixes(["power_plan"]) == {"PowerPlan"}
+    assert _sections_for_fixes(["nvidia_profile"]) == {"NVIDIA", "NVIDIAProfile"}
+    assert _sections_for_fixes(["nvidia_dlss_preset"]) == {"NVIDIA", "NVIDIAProfile"}
+    assert _sections_for_fixes(["display", "game_mode"]) == {"DisplayCapabilities", "GameMode"}
+    # temp_folders has no card; unknown keys contribute nothing.
+    assert _sections_for_fixes(["temp_folders", "bogus"]) == set()
 
 
 class TestSettingFixFlow:
