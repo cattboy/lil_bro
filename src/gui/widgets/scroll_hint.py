@@ -1,10 +1,10 @@
 """Pulsing scroll-down hint floating over a QScrollArea viewport.
 
-A circular "▼" chip pinned bottom-center over the viewport of the scroll
-area it is parented to. Its drop-shadow glow pulses until the user's first
-interaction — a click on the chip or any scroll — after which it stays as
-a static click affordance whenever more content lies below, and hides
-entirely once the view reaches the bottom.
+A double-ringed "▼▼" chip pinned bottom-center over the viewport of the
+scroll area it is parented to. Its amber drop-shadow glow pulses to draw
+the eye, and the chip is dismissed for good on the user's first
+interaction — a click on it or any scroll — since by then its job
+(signalling that more cards lie below) is done.
 
 The pulse starts in ``showEvent`` (visibility-driven), never via timers
 scheduled during the splash's nested event loop — the bundled PyInstaller
@@ -21,17 +21,17 @@ from PySide6.QtCore import (
     QPropertyAnimation,
     Qt,
 )
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QGraphicsDropShadowEffect, QScrollArea, QToolButton
 
 
 class ScrollHintArrow(QToolButton):
-    """Bottom-center "▼" chip over *scroll_area*'s viewport."""
+    """Bottom-center double-ringed "▼▼" chip over *scroll_area*'s viewport."""
 
-    _CHIP = 32        # px — circular chip (border-radius 16 in the QSS)
+    _CHIP = 48        # px — circular chip (border-radius 16 in the QSS)
     _MARGIN = 10      # px gap above the viewport's bottom edge
     _PULSE_MS = 1400  # full glow cycle (8 → 22 → 8 blur); 700ms legs = DESIGN.md "long"
-    _SCROLL_MS = 300  # click-scroll animation = DESIGN.md "medium"
+    _SCROLL_MS = 600  # click-scroll animation = DESIGN.md "medium"
     _BLUR_REST = 8.0
     _BLUR_PEAK = 22.0
 
@@ -42,16 +42,18 @@ class ScrollHintArrow(QToolButton):
 
         self.setObjectName("scrollHintArrow")
         self.setAccessibleName("Scroll for more cards")
-        self.setText("▼")
+        self.setText("▼▼")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setFixedSize(self._CHIP, self._CHIP)
 
         # The pulse animates the drop-shadow blur: a widget takes a single
         # QGraphicsEffect, so the glow itself pulses (no opacity effect on
-        # top, and QSS has no box-shadow to animate).
+        # top, and QSS has no box-shadow to animate). Alpha is kept high so
+        # the amber halo's breathe reads clearly against the elevated chip —
+        # at low alpha the blur sweep is imperceptible (looks like no pulse).
         self._glow = QGraphicsDropShadowEffect(self)
-        self._glow.setColor(QColor(0, 229, 204, 77))  # accent_glow token
+        self._glow.setColor(QColor(255, 181, 71, 160))  # amber FFB547 glow
         self._glow.setOffset(0, 0)
         self._glow.setBlurRadius(self._BLUR_REST)
         self.setGraphicsEffect(self._glow)
@@ -77,7 +79,15 @@ class ScrollHintArrow(QToolButton):
     # ── Behavior ─────────────────────────────────────────────────────────
 
     def _sync(self, *_args) -> None:
-        """Show only while scrollable content lies below the viewport."""
+        """Show only before the first interaction, while content lies below.
+
+        Once the user scrolls or clicks the chip it is dismissed for good —
+        ``_interacted`` latches it hidden so range/value changes never bring
+        it back.
+        """
+        if self._interacted:
+            self.setVisible(False)
+            return
         vbar = self._area.verticalScrollBar()
         below = vbar.maximum() > 0 and vbar.value() < vbar.maximum()
         self.setVisible(below)
@@ -108,6 +118,7 @@ class ScrollHintArrow(QToolButton):
             return
         self._interacted = True
         self._stop_pulse()
+        self.hide()  # dismissed on first scroll/click — never returns
 
     def _stop_pulse(self) -> None:
         if self._pulse.state() == QPropertyAnimation.State.Running:
@@ -141,3 +152,17 @@ class ScrollHintArrow(QToolButton):
         # Don't burn animation ticks while invisible; showEvent restarts the
         # pulse if the user still hasn't interacted.
         self._stop_pulse()
+
+    def paintEvent(self, event) -> None:  # noqa: N802  Qt override
+        # QSS paints the surface, the outer ring (border) and the ▼▼ glyph;
+        # we add a second concentric ring just inside it so the chip reads as
+        # a double ring. The drop-shadow effect picks this up too, so the
+        # inner ring shares the amber glow pulse.
+        super().paintEvent(event)
+        gap = 4  # px inset from the outer QSS ring (border-radius 16)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QColor(255, 181, 71))  # amber FFB547 — matches outer ring
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        inner = self.rect().adjusted(gap, gap, -gap, -gap)
+        painter.drawRoundedRect(inner, 16 - gap, 16 - gap)

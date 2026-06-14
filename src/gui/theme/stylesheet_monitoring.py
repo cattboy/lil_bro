@@ -154,19 +154,19 @@ def _qss_dashboard_scroll(c: dict[str, str]) -> str:
         background-color: transparent;
     }}
 
-    /* Scroll-hint chip — circular, accent on elevated surface. The glow
+    /* Scroll-hint chip — circular, amber ring on elevated surface. The glow
      * pulse is a QGraphicsDropShadowEffect animation (ScrollHintArrow),
      * not QSS — Qt QSS has no box-shadow. */
     QToolButton#scrollHintArrow {{
         background-color: {c["elevated"]};
-        color: {c["accent"]};
-        border: 1px solid {c["border_accent"]};
+        color: {c["warning"]};
+        border: 1px solid {c["warning"]};
         border-radius: 16px;  /* half the 32px chip — fully round */
         font-size: 13px;
     }}
     QToolButton#scrollHintArrow:hover {{
         background-color: {c["hover"]};
-        border: 1px solid {c["accent"]};
+        border: 1px solid {c["warning"]};
     }}
 """
 

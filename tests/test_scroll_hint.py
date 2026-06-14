@@ -1,4 +1,4 @@
-"""ScrollHintArrow: visibility from scroll range, pulse lifecycle, click scroll."""
+"""ScrollHintArrow: visibility from scroll range, pulse lifecycle, dismissal."""
 
 from __future__ import annotations
 
@@ -37,31 +37,33 @@ def test_visible_and_pulsing_when_overflowing(qtbot):
     assert hint._pulse.state() == QPropertyAnimation.State.Running
 
 
-def test_first_scroll_stops_pulse_but_keeps_arrow(qtbot):
+def test_first_scroll_dismisses_arrow(qtbot):
     area, hint = _make_area(qtbot, content_height=1000)
     vbar = area.verticalScrollBar()
     vbar.setValue(10)  # a small user scroll — not to the bottom
     assert hint._interacted
     assert hint._pulse.state() != QPropertyAnimation.State.Running
-    # Still a click affordance while content remains below
-    assert hint.isVisibleTo(area)
+    # Dismissed for good on the first interaction — no lingering affordance
+    assert not hint.isVisibleTo(area)
 
 
-def test_hides_at_bottom_reappears_above_without_pulse(qtbot):
+def test_stays_dismissed_after_returning_to_top(qtbot):
     area, hint = _make_area(qtbot, content_height=1000)
     vbar = area.verticalScrollBar()
     vbar.setValue(vbar.maximum())
     assert not hint.isVisibleTo(area)
     vbar.setValue(0)
-    assert hint.isVisibleTo(area)
-    # The pulse stays off after the first interaction
+    # The first scroll dismissed it — it does not return even back at the top
+    assert not hint.isVisibleTo(area)
     assert hint._pulse.state() != QPropertyAnimation.State.Running
 
 
-def test_click_scrolls_down_a_page(qtbot):
+def test_click_scrolls_down_a_page_then_dismisses(qtbot):
     area, hint = _make_area(qtbot, content_height=2000)
     vbar = area.verticalScrollBar()
     assert vbar.value() == 0
     target = min(vbar.pageStep(), vbar.maximum())
     hint.click()
     qtbot.waitUntil(lambda: vbar.value() == target, timeout=2000)
+    # The click both scrolls a page and dismisses the chip
+    assert not hint.isVisibleTo(area)
