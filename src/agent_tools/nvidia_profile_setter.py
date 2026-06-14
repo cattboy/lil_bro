@@ -18,8 +18,10 @@ from ..utils.action_logger import action_logger
 from ..utils.dlss_presets import get_preset
 from ..utils.errors import SetterError
 from ..utils.nvidia_npi import (
+    POWER_MGMT_VALUE_BY_MODE,
     SETTING_IDS,
     TARGET_VALUES,
+    VSYNC_VALUE_BY_MODE,
     calculate_fps_cap,
     export_current_profile,
     find_npi_exe,
@@ -183,7 +185,7 @@ def fix_nvidia_profile(
             target[SETTING_IDS["gsync_global_feature"]] = 0
 
         # VSync
-        _VSYNC_RAW = {"force_on": 0x47814940, "off": 0}
+        _VSYNC_RAW = VSYNC_VALUE_BY_MODE
         if config.nvidia.profile.vsync == "force_on":
             for key in ["vsync", "vsync_tear_control", "vsync_smooth_afr"]:
                 target[SETTING_IDS[key]] = TARGET_VALUES[key]
@@ -212,7 +214,7 @@ def fix_nvidia_profile(
         # DLSS preset is intentionally omitted -- owned by fix_nvidia_dlss_preset.
 
         # Power management
-        _POWER_RAW = {"max_performance": 1, "adaptive": 0}
+        _POWER_RAW = POWER_MGMT_VALUE_BY_MODE
         target[SETTING_IDS["power_mgmt"]] = _POWER_RAW.get(config.nvidia.profile.power_mgmt, 1)
 
         modified_nip = build_optimized_nip(source_nip, target)

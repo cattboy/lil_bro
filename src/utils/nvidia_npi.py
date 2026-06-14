@@ -80,6 +80,12 @@ DLSS_LETTER_MAP: dict[int, str] = {
 # The GPU + priority -> letter policy lives in src/utils/dlss_presets.py.
 DLSS_VALUE_BY_LETTER: dict[str, int] = {letter: val for val, letter in DLSS_LETTER_MAP.items()}
 
+# Driver raw values keyed by config mode -- shared by the analyzer (OK-check) and
+# the setter (written value) so the two can't drift (see nvidia_profile.py /
+# nvidia_profile_setter.py).
+VSYNC_VALUE_BY_MODE: dict[str, int] = {"force_on": 0x47814940, "off": 0}
+POWER_MGMT_VALUE_BY_MODE: dict[str, int] = {"max_performance": 1, "adaptive": 0}
+
 
 def calculate_fps_cap(refresh_hz: int) -> int:
     """Blur Busters formula: cap = round(refresh_hz - refresh_hz^2 / 4096).

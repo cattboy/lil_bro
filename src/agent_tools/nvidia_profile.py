@@ -12,8 +12,10 @@ from ..config import config
 from ..utils.dlss_presets import classify, get_preset
 from ..utils.nvidia_npi import (
     DLSS_LETTER_MAP,
+    POWER_MGMT_VALUE_BY_MODE,
     SETTING_IDS,
     TARGET_VALUES,
+    VSYNC_VALUE_BY_MODE,
     calculate_fps_cap,
 )
 
@@ -75,7 +77,7 @@ def _check_gsync(npi: dict, raw: dict[int, int]) -> dict[str, Any]:
 
 def _check_vsync(npi: dict, raw: dict[int, int]) -> dict[str, Any]:
     """Check VSync mode against configured target."""
-    _VSYNC_RAW = {"force_on": 0x47814940, "off": 0}
+    _VSYNC_RAW = VSYNC_VALUE_BY_MODE
     target_vsync_raw = _VSYNC_RAW.get(config.nvidia.profile.vsync, 0x47814940)
     current_vsync = raw.get(SETTING_IDS["vsync"])
 
@@ -204,7 +206,7 @@ def _check_dlss(npi: dict, raw: dict[int, int], gpu_name: str) -> dict[str, Any]
 
 def _check_power_mgmt(npi: dict, raw: dict[int, int]) -> dict[str, Any]:
     """Check power management mode against configured target."""
-    _POWER_RAW = {"max_performance": 1, "adaptive": 0}
+    _POWER_RAW = POWER_MGMT_VALUE_BY_MODE
     target_raw = _POWER_RAW.get(config.nvidia.profile.power_mgmt, 1)
     current = raw.get(SETTING_IDS["power_mgmt"])
     if current == target_raw:
