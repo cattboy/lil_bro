@@ -89,16 +89,6 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
-### T-028 — DLSS V2 config overrides (target_mode / forced_letter)
-**Priority:** P3
-**Effort:** M human / S-M with CC
-**Why:** V1 ships one `nvidia.dlss.priority` knob (quality|fps). Power users may want per-resolution control (`target_mode`: dlaa/quality/balanced/performance/ultra_perf) and a hard `forced_letter` override that bypasses the capability resolver entirely.
-**Fix:** extend `NvidiaDlssConfig` (`src/config.py`) + `get_preset` (`src/utils/dlss_presets.py`) to honor `target_mode` and `forced_letter`; document in the config template. Pairs with the shipped GUI toggle.
-**Blocked by:** Nothing. Builds on the shipped V1 DLSS framework.
-**Added:** 2026-06-07 (deferred from /plan-eng-review on the DLSS framework)
-
----
-
 ### T-030 — DLSS Frame Generation guidance
 **Priority:** P2
 **Effort:** M human / S-M with CC
@@ -140,6 +130,24 @@ Format: Priority | Effort (human / CC) | Context
 ---
 
 ## Completed
+
+### T-028 — DLSS V2 config overrides (target_mode / forced_letter)
+**Priority:** P3 — **CLOSED (WONTFIX) 2026-06-15**
+Closed during /plan-ceo-review. Both proposed knobs are inherently power-user:
+`target_mode` requires knowing DLSS output modes; `forced_letter` requires an
+opinion on K vs L vs M. The NVIDIA App already serves this case natively
+(Graphics > DLSS Override - Model Presets → Recommended/Custom) and stays current
+as NVIDIA ships models, as do NPI and DLSS Swapper — our own
+`docs/dlss_4_5_presets_by_gpu.json` `how_to_set` documents that path. lil_bro's
+wedge is the zero-think auto-apply, which V1 (`get_preset` + the GUI quality/fps
+toggle + monitor-aware default) already delivers. A hardcoded per-mode override
+matrix would duplicate NVIDIA's UI and carry maintenance drift for no lil_bro user.
+Considered-but-rejected alternatives, available if ever revisited:
+(B) reframe to a smarter internal AUTO pick using the per-mode matrix + monitor
+context — overlaps the shipped E2 work, marginal gain; (C) a hidden JSON-only
+`forced_letter` escape hatch — ~10 lines, but still overlaps the NVIDIA App.
+
+---
 
 ### T-035 — Bump the version banner in the next release
 **Priority:** P2 — **COMPLETED 2026-06-15**

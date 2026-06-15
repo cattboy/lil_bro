@@ -146,3 +146,28 @@ def test_long_list_clamps_height_and_keeps_footer_visible(qtbot):
     assert dialog._apply_btn.isVisible()
     # The card body is wrapped in a scroll area that absorbs the overflow.
     assert dialog.findChild(QScrollArea) is not None
+
+
+def test_short_list_fits_without_scrolling(qtbot):
+    """A 1-2 card list must render in full -- no scrollbar, no compression.
+
+    Word-wrapped descriptions made the dialog open shorter than the cards needed
+    once laid out at the fixed two-column width, forcing a needless scrollbar and
+    squashing the cards. The dialog now sizes to the cards' true wrapped height,
+    so the body fits the viewport and the vertical scrollbar has no range.
+    """
+    proposals = [
+        {"finding": f"c{i}", "title": f"Title {i}",
+         "description": "A deliberately long explanation that wraps across "
+                        "several lines so the card needs real vertical space. " * 2,
+         "severity": "HIGH", "can_auto_fix": True}
+        for i in range(2)
+    ]
+    dialog = BatchSelectionDialog(proposals)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QTest.qWait(20)
+
+    # Cards fit: the body never overflows the viewport, so there is no scroll
+    # range (and the ScrollHintArrow stays hidden off the back of this).
+    assert dialog._scroll.verticalScrollBar().maximum() == 0
