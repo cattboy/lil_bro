@@ -85,7 +85,25 @@ def create_restore_point(description: str | None = None, *, assume_approved: boo
 
     print_step("Creating System Restore Point (this may take a minute)")
 
-    ps_command = f'Checkpoint-Computer -Description "{description}" -RestorePointType "MODIFY_SETTINGS"'
+    # Windows throttles Checkpoint-Computer to once per 24 hours via
+    # SystemRestorePointCreationFrequency (default 1440 min). Temporarily
+    # set it to 0 so back-to-back runs always create a real restore point,
+    # then restore the original value in a finally block.
+    checkpoint_cmd = f'Checkpoint-Computer -Description "{description}" -RestorePointType "MODIFY_SETTINGS"'
+    ps_command = (
+        "$regPath = 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SystemRestore'; "
+        "$regKey = 'SystemRestorePointCreationFrequency'; "
+        "$origVal = (Get-ItemProperty -Path $regPath -Name $regKey -ErrorAction SilentlyContinue).$regKey; "
+        "try { "
+        "Set-ItemProperty -Path $regPath -Name $regKey -Value 0 -Type DWord -ErrorAction Stop; "
+        f"{checkpoint_cmd} "
+        "} finally { "
+        "if ($null -eq $origVal) { "
+        "Remove-ItemProperty -Path $regPath -Name $regKey -ErrorAction SilentlyContinue "
+        "} else { "
+        "Set-ItemProperty -Path $regPath -Name $regKey -Value $origVal -Type DWord "
+        "} }"
+    )
 
     try:
         result = subprocess.run(
@@ -102,7 +120,7 @@ def create_restore_point(description: str | None = None, *, assume_approved: boo
             print_success(f"Restore point '{description}' created successfully.")
             print_success("If anything goes wrong, click Start -> Type 'Create a Restore Point -> Click 'System Restore' -> 'Next' 'Next' Select the restore'")
             print_success(f"OR boot into Windows Recovery Environment and restore this snapshot '{description}'.")
-            action_logger.log_action("System Restore", f"Created Restore Point: {description}", f"Execution: {ps_command}")
+            action_logger.log_action("System Restore", f"Created Restore Point: {description}", f"Execution: {checkpoint_cmd}")
             return True
         else:
             print_step_done(success=False)
