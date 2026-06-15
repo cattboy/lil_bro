@@ -53,7 +53,7 @@ class BaselineBenchPhase:
         if status == "success":
             print_success("Baseline Benchmark Complete!")
             print_info(f"Scores: {ctx.baseline_result.get('scores', {})}")
-        elif ctx.approved_proposals:
+        elif ctx.approved_proposals and status != "skipped":
             n = len(ctx.approved_proposals)
             reason = "was cancelled" if status == "aborted" else "failed"
             if prompt_approval(f"Benchmark {reason}. Apply the {n} approved fix(es) anyway?"):

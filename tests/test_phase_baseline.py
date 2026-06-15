@@ -128,3 +128,21 @@ class TestBaselineBenchPhaseApprovalFlow:
              patch("src.pipeline.phase_baseline.prompt_approval") as mock_prompt:
             BaselineBenchPhase().run(ctx)
         mock_prompt.assert_not_called()
+
+    def test_skipped_status_no_prompt_applies_silently(self):
+        """Declined benchmark dialog (status=skipped) must not call prompt_approval."""
+        mock_runner = MagicMock()
+        mock_runner.has_cinebench = True
+        mock_runner.run_benchmark.return_value = {"status": "skipped"}
+        ctx = _make_ctx(approved_proposals=[MagicMock()])
+        ctx.thermal.get_peak_temps.return_value = {}
+        ctx.thermal.get_cpu_peak.return_value = None
+        ctx.thermal.get_gpu_peak.return_value = None
+        with patch("src.pipeline.phase_baseline.run_thermal_guard", return_value=False), \
+             patch("src.pipeline.phase_baseline.BenchmarkRunner", return_value=mock_runner), \
+             patch("src.pipeline.phase_baseline.prompt_approval") as mock_prompt:
+            result = BaselineBenchPhase().run(ctx)
+        mock_prompt.assert_not_called()
+        assert ctx.skip_apply is False
+        assert ctx.cancel_override is False
+        assert result.status == "completed"
