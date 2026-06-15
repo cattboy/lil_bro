@@ -194,12 +194,8 @@ template (error dialog → `#FF6B6B` accent, not amber).
 ---
 
 ### T-035 — Bump the version banner in the next release
-**Priority:** P2
-**Effort:** XS human / XS with CC
-**Why:** `src/_version.py` (`__version__`) has read `0.9.1` since 2026-04-06, so the `SESSION START  |  lil_bro vX.Y.Z` banner logged at every run gives no signal of which build is actually running. This directly enabled the power-plan-card-not-updating bug: the shipped exe was built ~100s before its fix commit (`3c19356`), and the unchanged banner hid the staleness — the fix's source was present but never compiled in. See the new CLAUDE.md **Release Versioning** rule and `docs/debugging/bug-power-plan-card-not-updating/`.
-**Fix:** Bump `__version__` in `src/_version.py` as part of the next release (`document-release` / `/ship`) and rebuild `dist/lil_bro.exe` from that source so the banner matches the released build. Keep it in sync with `VERSION` / `pyproject.toml` versioning.
-**Blocked by:** Nothing. Do it at the next release.
-**Added:** 2026-06-15 (from /investigate of the power-plan card stale-exe bug)
+**Priority:** P2 — **COMPLETED 2026-06-15**
+`src/_version.py` bumped to `"0.5.0.0"` (matching `VERSION` file); `pyproject.toml` converted from static `version = "0.5.0"` to `dynamic = ["version"]` with `[tool.setuptools.dynamic] version = {attr = "_version.__version__"}` — single source of truth, no more three-way drift. `dist/lil_bro.exe` rebuilt from the corrected source. `SESSION START | lil_bro v0.5.0.0` banner now matches the release.
 
 ---
 
