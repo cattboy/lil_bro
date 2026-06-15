@@ -70,7 +70,6 @@ When a fix can be triggered from a Dashboard card button (outside the pipeline `
 ### Release Versioning
 - **`src/_version.py` (`__version__`) MUST be bumped as part of `document-release` and before any `/ship` completes.** The value is logged at every session start (`SESSION START  |  lil_bro vX.Y.Z` in `lil_bro_debug.log`), so it is the first signal of which build is actually running.
 - **Rebuild `dist/lil_bro.exe` from the same source whose version is being shipped** (`python -m PyInstaller lil_bro.spec --noconfirm`) so the logged banner matches the released source.
-- Why: a stale exe once shipped because it was built ~100s before its fix commit, and the unchanged version banner hid the staleness — the fix's source was present but never compiled in. A mandatory bump makes that obvious from the first log line.
 
 ---
 
