@@ -129,6 +129,16 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
+### T-036 — Extract a shared `_FixCard` base class for the five dashboard fix cards
+**Priority:** P3
+**Effort:** M human / S-M with CC
+**Why:** `NvidiaProfileCard`, `NvidiaDlssCard`, `PowerPlanCard`, `GameModeCard`, and `MonitorRefreshCard` all duplicate the same `monitorCard` shell, the `pollLabel`/`pollStatus` VBox, a 140px `primary` button, the `apply_requested`/`_on_apply_clicked` wiring, and (after the "Applying…" feedback work) a `set_applying`/`set_action_available` shape. Five copies of the same scaffold drift and make every cross-card tweak a five-file edit.
+**Fix:** introduce `_FixCard(QFrame)` holding the shared scaffold, button, `apply_requested`, `set_applying` (via the `set_apply_busy` helper), and `set_action_available`; have the five cards subclass it and keep only their card-specific bits (DLSS toggle, monitor multi-device). Update each card's tests + `scripts/mock_gui.py` accordingly.
+**Blocked by:** Nothing. Best done after the "Applying…" feedback PR lands (which adds `set_apply_busy` + `set_applying` to all five cards — the natural seam to pull up). Its own PR; touches all five cards + tests + mock_gui.
+**Added:** 2026-06-16 (deferred from /plan-eng-review D6 on the in-card "Applying…" feedback design)
+
+---
+
 ## Completed
 
 ### T-028 — DLSS V2 config overrides (target_mode / forced_letter)

@@ -462,6 +462,52 @@ def test_sections_for_fixes_maps_known_keys():
     assert _sections_for_fixes(["temp_folders", "bogus"]) == set()
 
 
+# ── In-card "Applying…" busy cue wiring (bug-hunt-v0.5.0.0) ──────────────────
+
+
+def test_nvidia_fix_finished_resets_busy_cue():
+    runtime = {"card_fix_in_progress": True}
+    coord = _make_coordinator(runtime)
+    coord._nvidia_fix_check_name = "nvidia_profile"
+    coord._on_nvidia_fix_thread_finished()
+    coord._main._dashboard.set_fix_card_applying.assert_called_once_with("nvidia_profile", False)
+    coord._main.status_bar_widget.set_state.assert_called_once_with("ok", "Idle")
+
+
+def test_setting_fix_finished_resets_busy_cue():
+    coord = _make_coordinator({})
+    coord._setting_fix_check_name = "power_plan"
+    coord._on_setting_fix_thread_finished()
+    coord._main._dashboard.set_fix_card_applying.assert_called_once_with("power_plan", False)
+    coord._main.status_bar_widget.set_state.assert_called_once_with("ok", "Idle")
+
+
+def test_monitor_fix_finished_resets_busy_cue_by_device():
+    coord = _make_coordinator({})
+    coord._monitor_fix_device = r"\\.\DISPLAY1"
+    coord._on_monitor_fix_thread_finished()
+    coord._main._dashboard.set_fix_card_applying.assert_called_once_with(
+        "display", False, r"\\.\DISPLAY1"
+    )
+    coord._main.status_bar_widget.set_state.assert_called_once_with("ok", "Idle")
+
+
+def test_nvidia_fix_requested_sets_busy_cue_before_start():
+    runtime = {"preloaded_specs": {"NVIDIA": [{"GPU": "RTX 4090"}]}}
+    coord = _make_coordinator(runtime)
+    with (
+        patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog") as mock_dlg,
+        patch.object(coord, "_ensure_restore_point_choice", return_value=False),
+        patch("src.gui.worker._CardFixWorker"),
+        patch("src.gui.startup_coordinator.QThread"),
+    ):
+        mock_dlg.return_value.exec.return_value = True
+        mock_dlg.return_value.selected_indices.return_value = [0]
+        coord.on_nvidia_fix_requested("nvidia_profile")
+    coord._main._dashboard.set_fix_card_applying.assert_called_once_with("nvidia_profile", True)
+    assert coord._main.status_bar_widget.set_state.call_args[0][0] == "run"
+
+
 class TestSettingFixFlow:
     """Power Plan / Game Mode card fixes (T-034).
 

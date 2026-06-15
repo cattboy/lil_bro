@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from src.gui.theme import repolish
+from src.gui.theme import repolish, set_apply_busy
 from src.gui.theme.tokens import COLORS, FONTS
 
 _CHECK_NAME = "nvidia_dlss_preset"
@@ -141,6 +141,12 @@ class _ClickableLabel(QLabel):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802  Qt override
+        # Honour the disabled state: a plain QLabel does not suppress its own
+        # mouse handling when disabled, so without this guard a click would
+        # still fire ``clicked`` mid-apply (when set_applying has disabled it).
+        if not self.isEnabled():
+            super().mousePressEvent(event)
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mousePressEvent(event)
@@ -231,3 +237,12 @@ class NvidiaDlssCard(QFrame):
 
     def _on_apply_clicked(self) -> None:
         self.apply_requested.emit(_CHECK_NAME)
+
+    def set_applying(self, applying: bool) -> None:
+        """Reflect an in-flight fix: lock the Apply button AND the Quality/FPS
+        control. The toggle makes no system change on its own, but locking it
+        avoids a confusing mid-apply flip (and a stale priority write)."""
+        set_apply_busy(self._apply_btn, applying)
+        self._toggle.setEnabled(not applying)
+        self._quality_lbl.setEnabled(not applying)
+        self._fps_lbl.setEnabled(not applying)

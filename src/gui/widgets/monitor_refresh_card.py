@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 
-from src.gui.theme import repolish
+from src.gui.theme import repolish, set_apply_busy
 from src.llm.action_proposer import propose_for_check
 
 
@@ -136,6 +136,17 @@ class MonitorRefreshCard(QFrame):
     def _on_fix_clicked(self) -> None:
         if self._device:
             self.fix_requested.emit(self._device)
+
+    def set_applying(self, applying: bool) -> None:
+        """Reflect an in-flight display fix on the Fix Now button (busy <-> idle)."""
+        set_apply_busy(self._fix_btn, applying)
+
+    @property
+    def device(self) -> str | None:
+        """Raw device id from the last ``set_display`` -- the dashboard uses it to
+        route a per-monitor 'applying' state to the right card. ``None`` before
+        the card has been populated."""
+        return getattr(self, "_device", None)
 
 
 

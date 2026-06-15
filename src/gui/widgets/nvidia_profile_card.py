@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from src.gui.theme import repolish
+from src.gui.theme import repolish, set_apply_busy
 
 
 class NvidiaProfileCard(QFrame):
@@ -78,3 +78,19 @@ class NvidiaProfileCard(QFrame):
 
     def _on_apply_clicked(self) -> None:
         self.apply_requested.emit(self._check_name)
+
+    def set_applying(self, applying: bool) -> None:
+        """Reflect an in-flight fix on the Apply button (busy <-> idle).
+
+        Busy state lives on the button only -- never the status label, which the
+        findings/refresh path owns (see ``set_apply_busy``)."""
+        set_apply_busy(self._apply_btn, applying)
+
+    def set_action_available(self, available: bool) -> None:
+        """Show/hide the Apply button.
+
+        Hidden when the profile is already optimal (``set_nvidia_profile_findings``
+        OK), shown on WARNING -- mirrors ``PowerPlanCard``'s in-``set_findings``
+        button toggle across the dashboard/card boundary. A revert re-runs the
+        analysis (WARNING) and re-shows the button via this method."""
+        self._apply_btn.setVisible(available)

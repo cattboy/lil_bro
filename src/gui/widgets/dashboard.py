@@ -522,7 +522,14 @@ class Dashboard(QWidget):
             self._log.warning("Dashboard: geometry-log[%s] failed: %s", tag, exc)
 
     def set_nvidia_profile_findings(self, result: dict) -> None:
-        """Update the NVCP profile card with per-setting before/after values."""
+        """Update the NVCP profile card with per-setting before/after values.
+
+        Also drives the Optimize button's visibility (mirrors PowerPlanCard):
+        hidden when the profile is already optimal (status OK), shown when it
+        needs work (WARNING). Every entry point routes through here -- initial
+        scan, post-fix, and the post-revert rescan -- so a revert that returns
+        the profile to a non-optimal state re-shows the button automatically.
+        """
         status = result.get("status")
         gpu = _html.escape(self._nvidia_gpu_name or "")
         if status == "OK":
@@ -533,6 +540,7 @@ class Dashboard(QWidget):
             else:
                 text = f"<span style='color:{_NPI_GREEN}'>✓ All settings optimal</span>"
             self._nvidia_full_card.set_gpu(gpu, text, "", sev="low")
+            self._nvidia_full_card.set_action_available(False)
         elif status == "WARNING":
             self._nvidia_last_expected = result.get("expected", {})
             text, sev = self._nvidia_delta_text(result["current"], result["expected"])
@@ -542,6 +550,31 @@ class Dashboard(QWidget):
                 result.get("message", ""),
                 sev=sev,
             )
+            self._nvidia_full_card.set_action_available(True)
+
+    def set_fix_card_applying(self, check_name: str, applying: bool, device: str | None = None) -> None:
+        """Route an in-flight ``set_applying`` to the card that owns ``check_name``.
+
+        Called by StartupCoordinator on card-fix start (True) and on the worker
+        thread's finished slot (False). The per-monitor ``display`` fix selects
+        its card by ``device``; every other check maps to its single card. A
+        missing card (e.g. card hidden / no match) is a silent no-op so the
+        coordinator never has to special-case which cards are visible.
+        """
+        if check_name == "display":
+            for card in (self._monitor_card_slot, *self._monitor_cards):
+                if card.device == device:
+                    card.set_applying(applying)
+                    return
+            return
+        card = {
+            "nvidia_dlss_preset": self._nvidia_dlss_card,
+            "nvidia_profile": self._nvidia_full_card,
+            "power_plan": self._power_plan_card,
+            "game_mode": self._game_mode_card,
+        }.get(check_name)
+        if card is not None:
+            card.set_applying(applying)
 
     # ── Power Plan / Game Mode fix cards (T-034) ───────────────────────
 

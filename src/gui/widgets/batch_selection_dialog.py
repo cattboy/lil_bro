@@ -54,11 +54,18 @@ class _FitContentScrollArea(QScrollArea):
         hint = w.sizeHint()
         lay = w.layout()
         if lay is not None and lay.hasHeightForWidth():
-            # Before the dialog is shown the viewport has no width yet; fall back
-            # to the fixed content width (== dialog width, the top layout has 0
-            # margins). QLayout.heightForWidth subtracts its own margins.
-            width = self.viewport().width() or self._content_width
-            h = lay.heightForWidth(width)
+            # Always measure at the dialog's fixed content width, never the live
+            # viewport width. The dialog is ``setFixedWidth()``, so the content
+            # width is constant and known, whereas the viewport width is
+            # unreliable here: before the dialog is shown it reports a wide
+            # default (~640px, not 0, so a ``viewport().width() or ...`` fallback
+            # never fires), and once a vertical scrollbar appears it shrinks by
+            # the scrollbar extent. Measuring at either makes the word-wrapped
+            # height wrong -- too wide a width wraps to fewer lines, under-reports
+            # the height, opens the dialog too short, and forces a needless
+            # scrollbar at the real width. ``QLayout.heightForWidth`` subtracts
+            # its own margins, so pass the full content width.
+            h = lay.heightForWidth(self._content_width)
             if h > 0:
                 hint.setHeight(h)
         return hint
