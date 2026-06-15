@@ -47,11 +47,15 @@ def _read_power_plan() -> str:
     """Active Windows power plan name via ``powercfg /getactivescheme``."""
     import re
     import subprocess
+
+    from ..utils.subprocess_utils import CREATE_NO_WINDOW
+
     completed = subprocess.run(
         ["powercfg", "/getactivescheme"],
         capture_output=True,
         text=True,
         timeout=2,
+        creationflags=CREATE_NO_WINDOW,
     )
     match = re.search(r"\((.+?)\)", completed.stdout)
     return match.group(1) if match else _DASH

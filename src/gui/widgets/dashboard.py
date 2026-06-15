@@ -13,22 +13,33 @@ optimization pipeline.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QThread, QTimer, Signal
+import html as _html
+
+from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
+from src.gui.widgets.game_mode_card import GameModeCard
 from src.gui.widgets.monitor_refresh_card import MonitorEmptyCard, MonitorRefreshCard
 from src.gui.widgets.mouse_poll_card import MousePollCard
+from src.gui.widgets.nvidia_dlss_card import NvidiaDlssCard
+from src.gui.widgets.nvidia_profile_card import NvidiaProfileCard
+from src.gui.widgets.power_plan_card import PowerPlanCard
+from src.gui.widgets.scroll_hint import ScrollHintArrow
 from src.gui.widgets.stat_card import STAT_CARDS, StatCard
 from src.utils.debug_logger import get_debug_logger
 
+
+_NPI_RED = "#FF6B6B"
+_NPI_GREEN = "#4ADE80"
 
 class Dashboard(QWidget):
     """V2 dashboard: 4-col stat grid + temperature chart + USB polling widget."""
@@ -42,13 +53,33 @@ class Dashboard(QWidget):
 
     thermal_retry_requested = Signal()  # Retry button -> StartupCoordinator relaunch
 
+    # Apply-button request from either NVIDIA card; carries the fix check name
+    # ("nvidia_dlss_preset" or "nvidia_profile"). Bubbled to StartupCoordinator.
+    nvidia_fix_requested = Signal(str)
+
+    # Fix-button requests from the Power Plan / Game Mode cards (one card per
+    # fix -- the dashboard is the pick-and-choose path). Bubbled to
+    # StartupCoordinator.on_power_plan_fix_requested / on_game_mode_fix_requested.
+    power_plan_fix_requested = Signal()
+    game_mode_fix_requested = Signal()
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setAccessibleName("Dashboard view")
 
         from src.gui.widgets.thermal_chart import ThermalChart
 
-        outer = QVBoxLayout(self)
+        # Scrollable card column. Every card lives on `content`, which sits
+        # inside a QScrollArea so the column keeps its natural height and
+        # scrolls when more cards are visible than the viewport fits.
+        # Previously the column was Dashboard's own layout: once NVIDIA +
+        # multi-monitor + power/game cards all showed, Qt compressed the
+        # monitor cards to fit (squashed 36px Hz labels — see
+        # docs/debugging/bug-monitor-refresh-cards-squished/).
+        content = QWidget()
+        self._content = content
+
+        outer = QVBoxLayout(content)
         outer.setContentsMargins(20, 16, 20, 20)
         outer.setSpacing(12)
 
@@ -113,8 +144,26 @@ class Dashboard(QWidget):
         outer.addWidget(chart_wrap)
 
         # ── Mouse polling card ──────────────────────────────────────────
-        self._mouse_poll_card = MousePollCard(parent=self)
+        self._mouse_poll_card = MousePollCard(parent=content)
         outer.addWidget(self._mouse_poll_card)
+
+        # ── NVIDIA driver-profile cards (DLSS preset + full profile) ─────
+        # Pre-allocated here (like the monitor slots below) because dynamic
+        # creation during the splash's nested event loop fails to parent in the
+        # bundled PyInstaller exe. Hidden until set_nvidia_data shows them when
+        # nvidia-smi detects a GPU and NPI.exe is available.
+        self._nvidia_dlss_card = NvidiaDlssCard("DLSS Preset", "Apply Preset", parent=content)
+        self._nvidia_dlss_card.apply_requested.connect(self.nvidia_fix_requested)
+        self._nvidia_dlss_card.priority_changed.connect(self._on_dlss_priority_changed)
+        self._nvidia_dlss_card.hide()
+        outer.addWidget(self._nvidia_dlss_card)
+
+        self._nvidia_full_card = NvidiaProfileCard(
+            "nvidia_profile", "NVIDIA Driver Profile", "Optimize", parent=content
+        )
+        self._nvidia_full_card.apply_requested.connect(self.nvidia_fix_requested)
+        self._nvidia_full_card.hide()
+        outer.addWidget(self._nvidia_full_card)
 
         # ── Monitor refresh PRE-ALLOCATED slots ───────────────────────
         # Created here during Dashboard.__init__ alongside the stat tiles
@@ -124,15 +173,30 @@ class Dashboard(QWidget):
         # exe (3 rounds of evidence). Slots are hidden initially; one is
         # shown by set_monitor_data based on whether displays were
         # detected. Extras for displays 2..N go through dynamic creation.
-        self._monitor_card_slot = MonitorRefreshCard(parent=self)
+        self._monitor_card_slot = MonitorRefreshCard(parent=content)
         self._monitor_card_slot.fix_requested.connect(self.monitor_fix_requested)
         self._monitor_card_slot.hide()
         outer.addWidget(self._monitor_card_slot)
 
-        self._monitor_empty_slot = MonitorEmptyCard(parent=self)
+        self._monitor_empty_slot = MonitorEmptyCard(parent=content)
         self._monitor_empty_slot.refresh_requested.connect(self.monitor_refresh_requested)
         self._monitor_empty_slot.hide()
         outer.addWidget(self._monitor_empty_slot)
+
+        # ── Power Plan / Game Mode fix cards (T-034) ─────────────────────
+        # Pre-allocated like the slots above (dynamic creation during the
+        # splash's nested event loop fails to parent in the bundled
+        # PyInstaller exe). Hidden until set_power_plan_data /
+        # set_game_mode_data show them when their spec entry was collected.
+        self._power_plan_card = PowerPlanCard(parent=content)
+        self._power_plan_card.apply_requested.connect(self.power_plan_fix_requested)
+        self._power_plan_card.hide()
+        outer.addWidget(self._power_plan_card)
+
+        self._game_mode_card = GameModeCard(parent=content)
+        self._game_mode_card.apply_requested.connect(self.game_mode_fix_requested)
+        self._game_mode_card.hide()
+        outer.addWidget(self._game_mode_card)
 
         # Extras list (slots are separate). Uses indexOf(slot) at insert
         # time rather than a cached index, so it's robust to layout
@@ -141,6 +205,25 @@ class Dashboard(QWidget):
         self._monitor_cards: list = []
 
         outer.addStretch(1)
+
+        # ── Scroll shell ─────────────────────────────────────────────────
+        self._scroll = QScrollArea()
+        self._scroll.setObjectName("dashboardScroll")
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._scroll.setWidget(content)
+
+        shell = QVBoxLayout(self)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
+        shell.addWidget(self._scroll)
+
+        # Pulsing "more cards below" affordance floating over the viewport's
+        # bottom edge. Manages its own visibility from the scrollbar range.
+        self._scroll_hint = ScrollHintArrow(self._scroll)
 
         self._worker_thread: QThread | None = None
         self._worker = None  # SystemStatsWorker — lazily created in start_polling()
@@ -222,6 +305,121 @@ class Dashboard(QWidget):
         """Feed a pipeline-measured poll result to the mouse poll card."""
         self._mouse_poll_card.apply_pipeline_result(result)
 
+    def set_nvidia_data(self, nvidia) -> None:
+        """Show/populate the NVIDIA fix cards based on nvidia-smi detection.
+
+        Shows the full-profile card whenever an NVIDIA GPU is detected and NPI is
+        available; shows the DLSS-preset card only when the GPU resolves to a
+        supported preset (``dlss_presets.get_preset``). The recommendation reflects
+        GPU 0 + ``config.nvidia.dlss.priority`` (NPI applies the profile globally,
+        not per-GPU).
+        """
+        from src.config import config
+        from src.llm.action_proposer import propose_for_check
+        from src.utils.dlss_presets import get_preset
+        from src.utils.nvidia_npi import find_npi_exe
+
+        # Detection: a non-empty list means nvidia-smi returned GPU(s); a dict
+        # ({"error": ...}) or empty list means not detected. NPI must also be
+        # present or the fix can neither run nor be reverted -- don't offer it.
+        if not isinstance(nvidia, list) or not nvidia or find_npi_exe() is None:
+            self._nvidia_dlss_card.hide()
+            self._nvidia_full_card.hide()
+            self._nvidia_gpu_name = None
+            self._nvidia_last_expected = {}
+            self._log.info("Dashboard.set_nvidia_data: hidden (no NVIDIA GPU or NPI absent)")
+            return
+
+        gpu_name = str(nvidia[0].get("GPU") or "NVIDIA GPU")
+        self._nvidia_gpu_name = gpu_name
+        self._nvidia_last_expected = {}
+
+        # Full-profile card: valid for any detected NVIDIA GPU. DLSS is owned by
+        # the separate DLSS card, so it is not listed here.
+        full_prop = propose_for_check("nvidia_profile") or {}
+        self._nvidia_full_card.set_gpu(
+            gpu_name,
+            "Optimize: G-Sync · VSync · FPS cap · ReBar · Power",
+            full_prop.get("explanation", ""),
+        )
+        self._nvidia_full_card.show()
+
+        # DLSS card: only when the GPU resolves to a supported preset. classify()
+        # rejects GTX / workstation (RTX A / Ada Generation / Quadro / Titan) and
+        # unmapped generations, so get_preset() returns None -> card hidden.
+        preset = get_preset(gpu_name)
+        if preset is not None:
+            self._nvidia_dlss_card.set_priority(config.nvidia.dlss.priority)
+            self._nvidia_dlss_card.set_gpu(
+                gpu_name,
+                f"Recommended: DLSS Preset {preset.letter}",
+                self._dlss_tooltip(preset),
+            )
+            self._nvidia_dlss_card.show()
+            self._log.info("Dashboard.set_nvidia_data: DLSS card shown (%s -> Preset %s, %s)",
+                           preset.tier, preset.letter, preset.priority)
+        else:
+            self._nvidia_dlss_card.hide()
+            self._log.info("Dashboard.set_nvidia_data: DLSS card hidden (%s unsupported)", gpu_name)
+
+    def _dlss_tooltip(self, preset) -> str:
+        """E1: explain the recommended preset (model + quality/FPS lean + RT caveat)."""
+        return (
+            f"{preset.model_name}\n"
+            f"Lean: {preset.priority} "
+            "(Quality=M / FPS=L on RTX 40/50; K on RTX 20/30).\n"
+            "Note: in some ray-traced games Preset K (DLSS 4) can look better than "
+            "M/L if the game's denoiser interacts poorly -- override per-game if needed."
+        )
+
+    def _on_dlss_priority_changed(self, priority: str) -> None:
+        """DLSS card quality/FPS toggle: update live config, persist, re-render."""
+        if priority not in ("quality", "fps"):
+            return
+        from src.config import config
+        from src.utils.dlss_presets import get_preset
+
+        config.nvidia.dlss.priority = priority
+        try:
+            from PySide6.QtCore import QSettings
+            QSettings("lil_bro", "GUI").setValue("dlss/priority", priority)
+        except Exception:
+            self._log.warning("DLSS priority QSettings write failed", exc_info=True)
+
+        gpu_name = getattr(self, "_nvidia_gpu_name", None)
+        if not gpu_name:
+            return
+        preset = get_preset(gpu_name, priority)
+        if preset is not None:
+            self._nvidia_dlss_card.set_gpu(
+                gpu_name,
+                f"Recommended: DLSS Preset {preset.letter}",
+                self._dlss_tooltip(preset),
+            )
+        self._log.info("DLSS priority -> %s (preset %s)", priority,
+                       preset.letter if preset else "none")
+
+    def seed_dlss_priority(self, specs: dict) -> None:
+        """E2: seed config.nvidia.dlss.priority at startup, before set_nvidia_data.
+
+        Precedence: manual QSettings toggle > monitor-aware (primary display) >
+        lil_bro_config.json > "quality". A stored manual choice always wins.
+        """
+        from src.config import config
+        from src.utils.dlss_presets import resolve_startup_priority
+
+        manual = None
+        try:
+            from PySide6.QtCore import QSettings
+            stored = QSettings("lil_bro", "GUI").value("dlss/priority", None)
+            if stored in ("quality", "fps"):
+                manual = stored
+        except Exception:
+            self._log.warning("DLSS priority QSettings read failed", exc_info=True)
+
+        config.nvidia.dlss.priority = resolve_startup_priority(specs, manual)
+        self._log.info("DLSS priority seeded -> %s", config.nvidia.dlss.priority)
+
     def set_monitor_data(self, displays: list[dict]) -> None:
         """Show/hide pre-allocated slots; dynamically build extras for 2+ monitors.
 
@@ -234,18 +432,18 @@ class Dashboard(QWidget):
 
         # Diagnostic: confirm dashboard widget state at call time
         self._log.info(
-            "Dashboard: self.parent()=%s self.parentWidget()=%s layout_is_outer=%s",
+            "Dashboard: self.parent()=%s self.parentWidget()=%s content_layout_is_outer=%s",
             type(self.parent()).__name__ if self.parent() else "None",
             type(self.parentWidget()).__name__ if self.parentWidget() else "None",
-            self.layout() is self._outer_layout,
+            self._content.layout() is self._outer_layout,
         )
 
         self._rebuild_monitor_cards(displays)
 
         # Force layout + style recompute (belt-and-suspenders)
         self.updateGeometry()
-        if self.layout() is not None:
-            self.layout().activate()
+        if self._content.layout() is not None:
+            self._content.layout().activate()
         self._monitor_card_slot.ensurePolished()
         self._monitor_empty_slot.ensurePolished()
 
@@ -283,14 +481,17 @@ class Dashboard(QWidget):
 
         # Extras (displays 2..N) — dynamic. Use indexOf(slot) so we're
         # position-independent even if other widgets shift around.
+        # Cards belong to the scroll content widget, not the Dashboard
+        # itself — the parent guard must target self._content or it would
+        # rip the card back out of the content layout.
         base_idx = self._outer_layout.indexOf(self._monitor_card_slot)
         for offset, d in enumerate(displays[1:], start=1):
-            card = MonitorRefreshCard(parent=self)
+            card = MonitorRefreshCard(parent=self._content)
             card.set_display(d)
             card.fix_requested.connect(self.monitor_fix_requested)
             self._outer_layout.insertWidget(base_idx + offset, card)
-            if card.parentWidget() is not self:
-                card.setParent(self)
+            if card.parentWidget() is not self._content:
+                card.setParent(self._content)
             self._monitor_cards.append(card)
             self._log.info("Dashboard: extra card[%d] %s parent=%s",
                      offset, d.get("device"),
@@ -319,3 +520,128 @@ class Dashboard(QWidget):
                 )
         except Exception as exc:
             self._log.warning("Dashboard: geometry-log[%s] failed: %s", tag, exc)
+
+    def set_nvidia_profile_findings(self, result: dict) -> None:
+        """Update the NVCP profile card with per-setting before/after values."""
+        status = result.get("status")
+        gpu = _html.escape(self._nvidia_gpu_name or "")
+        if status == "OK":
+            current = result.get("current") or self._nvidia_last_expected
+            expected = result.get("expected") or self._nvidia_last_expected
+            if current and expected:
+                text = self._nvidia_ok_text(current, expected)
+            else:
+                text = f"<span style='color:{_NPI_GREEN}'>✓ All settings optimal</span>"
+            self._nvidia_full_card.set_gpu(gpu, text, "", sev="low")
+        elif status == "WARNING":
+            self._nvidia_last_expected = result.get("expected", {})
+            text, sev = self._nvidia_delta_text(result["current"], result["expected"])
+            self._nvidia_full_card.set_gpu(
+                gpu,
+                text,
+                result.get("message", ""),
+                sev=sev,
+            )
+
+    # ── Power Plan / Game Mode fix cards (T-034) ───────────────────────
+
+    def set_power_plan_data(self, plan) -> None:
+        """Show/hide the Power Plan card based on the ``PowerPlan`` spec entry.
+
+        Hidden when the entry is missing or carries an ``"error"`` key
+        (collection failed) -- a fix applied without a before-state would
+        record as non-revertible in the session manifest.
+        """
+        visible = isinstance(plan, dict) and bool(plan) and "error" not in plan
+        self._log.info("Dashboard.set_power_plan_data: visible=%s", visible)
+        self._power_plan_card.setVisible(visible)
+
+    def set_game_mode_data(self, gm) -> None:
+        """Show/hide the Game Mode card based on the ``GameMode`` spec entry.
+
+        Same gate as set_power_plan_data: hidden on missing entry or
+        collection error (no before-state -> non-revertible fix).
+        """
+        visible = isinstance(gm, dict) and bool(gm) and "error" not in gm
+        self._log.info("Dashboard.set_game_mode_data: visible=%s", visible)
+        self._game_mode_card.setVisible(visible)
+
+    def set_power_plan_findings(self, result: dict) -> None:
+        """Feed an ``analyze_power_plan`` finding to the Power Plan card."""
+        self._power_plan_card.set_findings(result or {})
+
+    def set_game_mode_findings(self, result: dict) -> None:
+        """Feed an ``analyze_game_mode`` finding to the Game Mode card."""
+        self._game_mode_card.set_findings(result or {})
+
+    def _nvidia_delta_text(self, current: dict, expected: dict) -> tuple[str, str]:
+        """Build per-setting text from analysis dicts for the WARNING state.
+
+        Already-correct settings get a green checkmark; settings that need
+        fixing show current (red) → expected (green). Skips dlss_preset and
+        settings with no expected value.
+        """
+        _BOOL = {True: "ON", False: "OFF"}
+        _VSYNC = {"force_on": "Force On", "adaptive": "Adaptive", "off": "OFF"}
+        _POWER = {"max_performance": "Max Perf", "max_perf": "Max Perf", "adaptive": "Adaptive"}
+
+        def _fmt_fps(v):
+            return "None" if v is None else f"{v} fps"
+
+        _fields = [
+            ("gsync",        "G-Sync",   lambda v: _BOOL.get(v, str(v))),
+            ("vsync",        "VSync",    lambda v: _VSYNC.get(v, str(v))),
+            ("fps_cap",      "FPS Cap",  _fmt_fps),
+            ("rebar_driver", "ReBar",    lambda v: _BOOL.get(v, str(v))),
+            ("power_mgmt",   "Power",    lambda v: _POWER.get(v, str(v))),
+        ]
+        items = []
+        for key, label, fmt in _fields:
+            cur = current.get(key)
+            exp = expected.get(key)
+            if exp is None:
+                continue
+            if cur == exp:
+                items.append(
+                    f"{label}: <span style='color:{_NPI_GREEN}'>{fmt(exp)} ✓</span>"
+                )
+            else:
+                items.append(
+                    f"{label}: <span style='color:{_NPI_RED}'>{fmt(cur)}</span>"
+                    f"→<span style='color:{_NPI_GREEN}'>{fmt(exp)}</span>"
+                )
+        if not items:
+            return (f"<span style='color:{_NPI_GREEN}'>✓ All settings optimal</span>", "low")
+        return (" · ".join(items), "medium")
+
+    def _nvidia_ok_text(self, current: dict, expected: dict) -> str:
+        """Build per-setting checkmark list for the all-optimal case.
+
+        Shows each expected value with a green checkmark.
+        Skips dlss_preset (DLSS card owns it) and settings with no expected value.
+        """
+        _BOOL = {True: "ON", False: "OFF"}
+        _VSYNC = {"force_on": "Force On", "adaptive": "Adaptive", "off": "OFF"}
+        _POWER = {"max_performance": "Max Perf", "max_perf": "Max Perf", "adaptive": "Adaptive"}
+
+        def _fmt_fps(v):
+            return "None" if v is None else f"{v} fps"
+
+        _fields = [
+            ("gsync",        "G-Sync",   lambda v: _BOOL.get(v, str(v))),
+            ("vsync",        "VSync",    lambda v: _VSYNC.get(v, str(v))),
+            ("fps_cap",      "FPS Cap",  _fmt_fps),
+            ("rebar_driver", "ReBar",    lambda v: _BOOL.get(v, str(v))),
+            ("power_mgmt",   "Power",    lambda v: _POWER.get(v, str(v))),
+        ]
+        items = []
+        for key, label, fmt in _fields:
+            exp = expected.get(key)
+            if exp is None:
+                continue
+            items.append(
+                f"{label}: <span style='color:{_NPI_GREEN}'>{fmt(exp)} ✓</span>"
+            )
+        if not items:
+            return f"<span style='color:{_NPI_GREEN}'>✓ All settings optimal</span>"
+        return " · ".join(items)

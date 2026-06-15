@@ -94,6 +94,29 @@ class PipelineWorker(QObject):
 
 
 
+def _apply_card_fix(check_name: str, specs: dict, create_rp: bool) -> bool:
+    """Shared apply-path for dashboard card fixes (runs on a worker thread).
+
+    Stages the session manifest, optionally creates a System Restore Point
+    (approval already obtained on the GUI thread; ``assume_approved=True`` avoids
+    the ``prompt_approval`` deadlock in this event-loop-less worker), then runs
+    the fix via ``execute_fix``. Returns the fix result bool.
+    """
+    from src.pipeline.fix_dispatch import execute_fix
+    from src.utils.revert import mark_restore_point_created, start_session_manifest
+
+    start_session_manifest(restore_point_created=False)
+    if create_rp:
+        try:
+            from src.bootstrapper import create_restore_point
+            if create_restore_point(assume_approved=True):
+                mark_restore_point_created()
+        except Exception:
+            from src.utils.debug_logger import get_debug_logger
+            get_debug_logger().error("Card-fix restore point creation failed", exc_info=True)
+    return execute_fix(check_name, specs)
+
+
 class _MonitorFixWorker(QObject):
     """Runs ``execute_fix('display', specs)`` off the GUI thread.
 
@@ -113,23 +136,61 @@ class _MonitorFixWorker(QObject):
     ``thread.exec()``), so the queued slot would sit forever and the worker
     would deadlock. Route interactive fixes through the pipeline approval
     flow (``ApplyPhase`` + ``execute_approved_fixes``) instead.
+
+    ``create_rp`` (when True) makes the shared ``_apply_card_fix`` create a
+    System Restore Point first via the non-interactive
+    ``create_restore_point(assume_approved=True)`` -- the GUI-thread
+    confirmation dialog already collected approval, so no ``prompt_approval``
+    runs here.
     """
 
     finished = Signal()
+    result = Signal(bool)
 
-    def __init__(self, specs: dict) -> None:
+    def __init__(self, specs: dict, create_rp: bool = False) -> None:
         super().__init__()
         self._specs = specs
+        self._create_rp = create_rp
 
     def run(self) -> None:
+        success = False
         try:
-            from src.pipeline.fix_dispatch import execute_fix
-            from src.utils.revert import start_session_manifest
-            start_session_manifest(restore_point_created=False)
-            execute_fix("display", self._specs)
+            success = _apply_card_fix("display", self._specs, self._create_rp)
         except Exception:
             from src.utils.debug_logger import get_debug_logger
             get_debug_logger().error("MonitorFixWorker uncaught exception", exc_info=True)
+        self.result.emit(success)
+        self.finished.emit()
+
+
+class _CardFixWorker(QObject):
+    """Runs a dashboard card fix off the GUI thread via ``_apply_card_fix``.
+
+    ``check_name`` is the ``@register_fix`` key for the fix to run (e.g.
+    ``"nvidia_dlss_preset"``, ``"nvidia_profile"``, ``"power_plan"``,
+    ``"game_mode"``). Like ``_MonitorFixWorker`` this runs synchronously with
+    no thread event loop, so the fix handler must not call ``prompt_approval``
+    -- approval (including the restore-point prompt) is gated on the GUI
+    thread before this worker spawns.
+    """
+
+    finished = Signal()
+    result = Signal(bool)
+
+    def __init__(self, check_name: str, specs: dict, create_rp: bool = False) -> None:
+        super().__init__()
+        self._check_name = check_name
+        self._specs = specs
+        self._create_rp = create_rp
+
+    def run(self) -> None:
+        success = False
+        try:
+            success = _apply_card_fix(self._check_name, self._specs, self._create_rp)
+        except Exception:
+            from src.utils.debug_logger import get_debug_logger
+            get_debug_logger().error("Card-fix worker uncaught exception", exc_info=True)
+        self.result.emit(success)
         self.finished.emit()
 
 
@@ -198,6 +259,37 @@ class _MonitorRefreshWorker(QObject):
             self.failed.emit(str(exc))
             return
         self.finished.emit(displays)
+
+
+class _DashboardRescanWorker(QObject):
+    """Re-collects the dashboard fix-relevant spec sections off the GUI thread.
+
+    Generalizes ``_MonitorRefreshWorker`` to every fix card: after the pipeline
+    (or a revert) mutates the system, the cards must be rebuilt from fresh data.
+    ``collect_fix_sections()`` re-runs the same collectors ``spec_dumper`` uses
+    for DisplayCapabilities / NVIDIA(+Profile) / PowerPlan / GameMode; the NVIDIA
+    profile export can block for a second or two, so it runs here, not on the GUI
+    thread. ``sections`` scopes the re-collect to only what changed this session
+    (``None`` = everything). Result is delivered via ``finished(dict)`` for the
+    main-thread caller to merge into ``preloaded_specs`` and repopulate the cards.
+    """
+
+    finished = Signal(dict)
+    failed = Signal(str)
+
+    def __init__(self, sections: set[str] | None = None) -> None:
+        super().__init__()
+        self._sections = sections
+
+    def run(self) -> None:
+        try:
+            from src.collectors.spec_dumper import collect_fix_sections
+            sections = collect_fix_sections(self._sections)
+        except Exception as exc:
+            get_debug_logger().error("DashboardRescanWorker uncaught exception", exc_info=True)
+            self.failed.emit(str(exc))
+            return
+        self.finished.emit(sections)
 
 
 class _MousePollWorker(QObject):

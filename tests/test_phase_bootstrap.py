@@ -16,6 +16,15 @@ def _make_ctx(**kwargs) -> PipelineContext:
     return PipelineContext(**defaults)
 
 
+@pytest.fixture(autouse=True)
+def _default_no_session_manifest():
+    """BootstrapPhase.run now consults load_manifest() first; default it to None
+    so the create-restore-point path runs for the existing tests. The reuse test
+    overrides this with its own patch."""
+    with patch("src.utils.revert.load_manifest", return_value=None):
+        yield
+
+
 class TestBootstrapPhase:
     def test_happy_path_sets_restore_point_created(self):
         """create_restore_point() succeeds → restore_point_created=True, returns completed."""
@@ -67,3 +76,20 @@ class TestBootstrapPhase:
         assert isinstance(result, PhaseResult)
         assert result.status == "completed"
         assert result.error is not None
+
+
+    def test_skips_creation_when_restore_point_already_exists(self):
+        """A card fix earlier this session already created a restore point:
+        BootstrapPhase reuses it (no second create_restore_point, so no duplicate
+        identically-labelled 'lil_bro' entry in rstrui.exe)."""
+        ctx = _make_ctx(restore_point_created=False)
+        with patch("src.utils.revert.load_manifest", return_value={"restore_point_created": True}), \
+             patch("src.pipeline.phase_bootstrap.create_restore_point") as mock_create, \
+             patch("src.pipeline.phase_bootstrap.print_header"), \
+             patch("src.pipeline.phase_bootstrap.print_step"), \
+             patch("src.pipeline.phase_bootstrap.get_debug_logger"):
+            result = BootstrapPhase().run(ctx)
+        mock_create.assert_not_called()
+        assert ctx.restore_point_created is True
+        assert result.status == "completed"
+        assert "Reused existing restore point" in result.message

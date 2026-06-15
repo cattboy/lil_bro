@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from typing import Any
 
 from ...utils.paths import get_temp_dir
+from ...utils.subprocess_utils import CREATE_NO_WINDOW
 
 def get_dxdiag() -> dict[str, Any]:
     """
@@ -22,7 +23,7 @@ def get_dxdiag() -> dict[str, Any]:
     with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as temp_dir:
         output_path = os.path.join(temp_dir, "dxdiag.xml")
         
-        subprocess.run(["dxdiag", "/x", output_path], check=False)
+        subprocess.run(["dxdiag", "/x", output_path], check=False, creationflags=CREATE_NO_WINDOW)
         
         # dxdiag forks and writes asynchronously; polling is mandatory.
         # Max wait: 15 seconds (30 iterations of 0.5s) to reduce blocking duration.

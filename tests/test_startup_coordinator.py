@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from PySide6.QtCore import QObject, QThread
+
 from src.gui.startup_coordinator import StartupCoordinator
 
 
@@ -57,10 +59,9 @@ class TestMonitorFixGuards:
         assert "pipeline" in msg.lower()
 
     def test_suppressed_when_monitor_fix_thread_set(self):
-        """CR-2: a second click while monitor_fix_thread is set must be dropped."""
-        sentinel_thread = MagicMock()
+        """CR-2: a second fix request while card_fix_in_progress is set must be dropped."""
         runtime = {
-            "monitor_fix_thread": sentinel_thread,
+            "card_fix_in_progress": True,
             "preloaded_specs": {
                 "DisplayCapabilities": [{"device": r"\\.\DISPLAY1"}]
             },
@@ -73,8 +74,8 @@ class TestMonitorFixGuards:
         mock_worker.assert_not_called()
         mock_thread.assert_not_called()
         mock_dialog.assert_not_called()
-        # Pre-existing sentinel must not be touched.
-        assert runtime["monitor_fix_thread"] is sentinel_thread
+        # Gate must not be cleared by a suppressed request.
+        assert runtime["card_fix_in_progress"] is True
         coord._log.warning.assert_called_once()
         msg = coord._log.warning.call_args[0][0]
         assert "already in progress" in msg.lower()
@@ -169,6 +170,76 @@ class TestRefreshMonitorCard:
         coord._log.warning.assert_called_once()
 
 
+class TestQObjectThreadAnchoring:
+    """Regression for the dashboard-lock + dirty-exit bug.
+
+    The card-fix worker QThreads emit ``finished``/``result`` from the worker
+    thread, so their cleanup slots must be delivered on the GUI thread. That
+    needs (1) the coordinator to be a ``QObject`` (anchors its bound-method
+    slots to the main thread) and (2) the cleanup to be a bound method, not a
+    bare lambda (which PySide6 cannot anchor cross-thread). Before the fix the
+    ``card_fix_in_progress`` guard was stranded ``True`` and the dashboard
+    locked; the mocked-``QThread`` tests above never exercised real delivery.
+    """
+
+    def test_coordinator_is_a_qobject(self):
+        # Without a QObject receiver PySide6 falls back to DirectConnection on
+        # the emitting (worker) thread -- the root cause of the stranded guard.
+        assert issubclass(StartupCoordinator, QObject)
+
+    def test_thread_finished_cleanups_are_bound_methods(self):
+        coord = _make_coordinator({})
+        for name in (
+            "_on_monitor_fix_thread_finished",
+            "_on_nvidia_fix_thread_finished",
+            "_on_setting_fix_thread_finished",
+            "_on_refresh_thread_finished",
+            "_on_thermal_retry_thread_finished",
+        ):
+            slot = getattr(coord, name)
+            # A bound method has __self__ == the coordinator; a lambda does not.
+            # Locks in the "no bare lambda" contract the anchoring relies on.
+            assert getattr(slot, "__self__", None) is coord
+
+    def test_monitor_fix_cleanup_clears_all_runtime_keys(self):
+        runtime = {
+            "card_fix_in_progress": True,
+            "restore_point_in_progress": True,
+            "monitor_fix_thread": MagicMock(),
+            "monitor_fix_worker": MagicMock(),
+        }
+        coord = _make_coordinator(runtime)
+        coord._on_monitor_fix_thread_finished()
+        for key in (
+            "card_fix_in_progress",
+            "restore_point_in_progress",
+            "monitor_fix_thread",
+            "monitor_fix_worker",
+        ):
+            assert key not in runtime
+
+    def test_cleanup_delivered_across_real_worker_thread(self, qtbot):
+        """End-to-end: wire the real cleanup slot to a real ``QThread.finished``
+        (emitted from the worker thread) exactly as ``on_monitor_fix_requested``
+        does, and confirm the guard clears once the queued slot is delivered on
+        the GUI thread. Red on the pre-fix code (non-QObject + bare lambda);
+        green after."""
+        runtime = {"card_fix_in_progress": True}
+        coord = _make_coordinator(runtime)
+
+        thread = QThread()
+        thread.finished.connect(coord._on_monitor_fix_thread_finished)
+        thread.started.connect(thread.quit)  # default run()==exec(); quit emits finished
+
+        with qtbot.waitSignal(thread.finished, timeout=3000):
+            thread.start()
+        # The cleanup is a queued event delivered AFTER finished; pump until it runs.
+        qtbot.waitUntil(lambda: "card_fix_in_progress" not in runtime, timeout=3000)
+        thread.wait()
+
+        assert "card_fix_in_progress" not in runtime
+
+
 class TestManifestSignatureGuard:
     """The Applied Fixes watcher (T-016) now watches the busy CWD root, so
     _on_backups_changed reloads only when the manifest's (mtime_ns, size)
@@ -210,3 +281,321 @@ class TestManifestSignatureGuard:
             coord._on_backups_changed("/cwd")
         coord._last_run_debounce.start.assert_called_once()
         assert coord._last_manifest_sig == (333, 444)
+
+
+class TestRefreshFixCardsAfterRevert:
+    """After a revert the fix cards must reflect the just-reverted system state.
+    refresh_fix_cards_after_revert now delegates to the shared live re-collect
+    (refresh_dashboard_fix_cards) so the revert and pipeline paths never diverge."""
+
+    def test_delegates_to_dashboard_rescan(self):
+        coord = _make_coordinator({})
+        with patch.object(coord, "refresh_dashboard_fix_cards") as mock_refresh:
+            coord.refresh_fix_cards_after_revert()
+        # No captured scope -> full refresh (scope None).
+        mock_refresh.assert_called_once_with(None)
+
+    def test_forwards_captured_revert_scope(self):
+        coord = _make_coordinator({"_revert_refresh_scope": {"PowerPlan"}})
+        with patch.object(coord, "refresh_dashboard_fix_cards") as mock_refresh:
+            coord.refresh_fix_cards_after_revert()
+        mock_refresh.assert_called_once_with({"PowerPlan"})
+        # The captured scope is consumed (popped) so a later refresh doesn't reuse it.
+        assert "_revert_refresh_scope" not in coord._runtime
+
+    def test_noop_when_pipeline_running(self):
+        runtime = {"pipeline_thread": MagicMock()}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_fix_cards_after_revert()
+        mock_worker_cls.assert_not_called()
+        mock_thread_cls.assert_not_called()
+        assert "dashboard_rescan_thread" not in runtime
+
+
+class TestRefreshDashboardFixCards:
+    """refresh_dashboard_fix_cards re-collects the fix-relevant spec sections on a
+    worker thread (mirroring refresh_monitor_card) and repopulates every fix card
+    from the fresh data -- the shared post-apply path for pipeline + revert."""
+
+    def test_dispatches_worker_off_main_thread(self):
+        runtime: dict = {}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_dashboard_fix_cards()
+        # None scope = full re-collect; worker is constructed with sections=None.
+        mock_worker_cls.assert_called_once_with(sections=None)
+        mock_thread_cls.assert_called_once_with()
+        assert runtime.get("dashboard_rescan_thread") is mock_thread_cls.return_value
+        assert runtime.get("dashboard_rescan_worker") is mock_worker_cls.return_value
+        mock_thread_cls.return_value.started.connect.assert_called_with(
+            mock_worker_cls.return_value.run
+        )
+        mock_thread_cls.return_value.start.assert_called_once()
+
+    def test_suppressed_when_pipeline_thread_set(self):
+        runtime = {"pipeline_thread": MagicMock()}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_dashboard_fix_cards()
+        mock_worker_cls.assert_not_called()
+        mock_thread_cls.assert_not_called()
+        assert "dashboard_rescan_thread" not in runtime
+
+    def test_second_call_dropped_while_in_flight(self):
+        sentinel_thread = MagicMock()
+        runtime = {"dashboard_rescan_thread": sentinel_thread}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_dashboard_fix_cards()
+        mock_worker_cls.assert_not_called()
+        mock_thread_cls.assert_not_called()
+        assert runtime["dashboard_rescan_thread"] is sentinel_thread
+
+    def test_result_handler_updates_specs_and_repopulates_cards(self):
+        runtime = {"preloaded_specs": {"WMI": {"keep": True}}}
+        coord = _make_coordinator(runtime)
+        sections = {
+            "DisplayCapabilities": [{"device": r"\\.\DISPLAY1"}],
+            "NVIDIA": [{"GPU": "RTX 4090"}],
+            "NVIDIAProfile": {"available": True},
+            "PowerPlan": {"name": "High performance"},
+            "GameMode": {"enabled": True},
+        }
+        nv = {"status": "OK"}
+        pp = {"status": "OK", "check": "power_plan"}
+        gm = {"status": "OK", "check": "game_mode"}
+        with patch("src.agent_tools.nvidia_profile.analyze_nvidia_profile", return_value=nv) as m_nv, \
+             patch("src.agent_tools.power_plan.analyze_power_plan", return_value=pp) as m_pp, \
+             patch("src.agent_tools.game_mode.analyze_game_mode", return_value=gm) as m_gm:
+            coord._on_dashboard_rescan_result(sections)
+        # Fresh sections merged into preloaded_specs; pre-existing keys preserved.
+        assert runtime["preloaded_specs"]["WMI"] == {"keep": True}
+        assert runtime["preloaded_specs"]["GameMode"] == {"enabled": True}
+        d = coord._main._dashboard
+        d.set_monitor_data.assert_called_once_with(sections["DisplayCapabilities"])
+        d.set_nvidia_data.assert_called_once_with(sections["NVIDIA"])
+        d.set_nvidia_profile_findings.assert_called_once_with(nv)
+        d.set_power_plan_findings.assert_called_once_with(pp)
+        d.set_game_mode_findings.assert_called_once_with(gm)
+        m_nv.assert_called_once()
+        m_pp.assert_called_once()
+        m_gm.assert_called_once()
+
+    def test_failed_handler_logs_warning(self):
+        coord = _make_coordinator({})
+        coord._on_dashboard_rescan_failed("boom")
+        coord._log.warning.assert_called_once()
+
+    def test_thread_finished_clears_runtime_keys(self):
+        runtime = {"dashboard_rescan_thread": MagicMock(), "dashboard_rescan_worker": MagicMock()}
+        coord = _make_coordinator(runtime)
+        coord._on_dashboard_rescan_thread_finished()
+        assert "dashboard_rescan_thread" not in runtime
+        assert "dashboard_rescan_worker" not in runtime
+
+    def test_skips_entirely_when_scope_empty(self):
+        runtime: dict = {}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.refresh_dashboard_fix_cards(set())
+        mock_worker_cls.assert_not_called()
+        mock_thread_cls.assert_not_called()
+        assert "dashboard_rescan_thread" not in runtime
+
+    def test_scoped_call_passes_sections_to_worker(self):
+        runtime: dict = {}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread"):
+            coord.refresh_dashboard_fix_cards({"PowerPlan"})
+        mock_worker_cls.assert_called_once_with(sections={"PowerPlan"})
+
+    def test_result_repopulates_only_scoped_cards(self):
+        runtime = {"preloaded_specs": {}}
+        coord = _make_coordinator(runtime)
+        with patch("src.agent_tools.power_plan.analyze_power_plan", return_value={"status": "OK"}) as m_pp:
+            coord._on_dashboard_rescan_result({"PowerPlan": {"name": "High performance"}})
+        d = coord._main._dashboard
+        d.set_power_plan_findings.assert_called_once()
+        m_pp.assert_called_once()
+        # Cards for sections NOT in the scoped result are left untouched.
+        d.set_monitor_data.assert_not_called()
+        d.set_nvidia_data.assert_not_called()
+        d.set_game_mode_findings.assert_not_called()
+
+
+def test_dashboard_rescan_worker_emits_sections(qtbot):
+    from src.gui.worker import _DashboardRescanWorker
+    w = _DashboardRescanWorker()
+    received: list = []
+    w.finished.connect(received.append)
+    with patch("src.collectors.spec_dumper.collect_fix_sections",
+               return_value={"GameMode": {"enabled": True}}):
+        w.run()
+    assert received == [{"GameMode": {"enabled": True}}]
+
+
+def test_dashboard_rescan_worker_emits_failed_on_exception(qtbot):
+    from src.gui.worker import _DashboardRescanWorker
+    w = _DashboardRescanWorker()
+    errors: list = []
+    w.failed.connect(errors.append)
+    with patch("src.collectors.spec_dumper.collect_fix_sections",
+               side_effect=RuntimeError("boom")):
+        w.run()
+    assert errors and "boom" in errors[0]
+
+
+def test_sections_for_fixes_maps_known_keys():
+    from src.gui.startup_coordinator import _sections_for_fixes
+    assert _sections_for_fixes(["power_plan"]) == {"PowerPlan"}
+    assert _sections_for_fixes(["nvidia_profile"]) == {"NVIDIA", "NVIDIAProfile"}
+    assert _sections_for_fixes(["nvidia_dlss_preset"]) == {"NVIDIA", "NVIDIAProfile"}
+    assert _sections_for_fixes(["display", "game_mode"]) == {"DisplayCapabilities", "GameMode"}
+    # temp_folders has no card; unknown keys contribute nothing.
+    assert _sections_for_fixes(["temp_folders", "bogus"]) == set()
+
+
+class TestSettingFixFlow:
+    """Power Plan / Game Mode card fixes (T-034).
+
+    The shared _start_setting_fix mirrors the CR-1/CR-2 guards, adds a spec
+    gate (an entry that is missing/empty/errored has no before-state, so the
+    fix would record as non-revertible -- never offer it), and the happy path
+    spawns _CardFixWorker with specs narrowed to the single targeted key.
+    """
+
+    _POWER_SPECS = {"PowerPlan": {"guid": "381b4222-f694-41f0-9685-ff5bb260df2e",
+                                  "name": "Balanced"}}
+    _GAME_SPECS = {"GameMode": {"enabled": False}}
+
+    def test_suppressed_when_pipeline_thread_set(self):
+        runtime = {"pipeline_thread": MagicMock(), "preloaded_specs": dict(self._POWER_SPECS)}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._CardFixWorker") as mock_worker, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread, \
+             patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog") as mock_dialog:
+            coord.on_power_plan_fix_requested()
+        mock_worker.assert_not_called()
+        mock_thread.assert_not_called()
+        mock_dialog.assert_not_called()
+        assert "setting_fix_thread" not in runtime
+        coord._log.warning.assert_called_once()
+        assert "pipeline" in coord._log.warning.call_args[0][0].lower()
+
+    def test_suppressed_when_card_fix_in_progress(self):
+        runtime = {"card_fix_in_progress": True, "preloaded_specs": dict(self._GAME_SPECS)}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._CardFixWorker") as mock_worker, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread, \
+             patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog") as mock_dialog:
+            coord.on_game_mode_fix_requested()
+        mock_worker.assert_not_called()
+        mock_thread.assert_not_called()
+        mock_dialog.assert_not_called()
+        # Gate must not be cleared by a suppressed request.
+        assert runtime["card_fix_in_progress"] is True
+        coord._log.warning.assert_called_once()
+        assert "already in progress" in coord._log.warning.call_args[0][0].lower()
+
+    def test_missing_or_errored_spec_entry_returns_early(self):
+        for specs in ({}, {"PowerPlan": {}}, {"PowerPlan": {"error": "powercfg not found"}}):
+            runtime = {"preloaded_specs": specs}
+            coord = _make_coordinator(runtime)
+            with patch("src.gui.worker._CardFixWorker") as mock_worker, \
+                 patch("src.gui.startup_coordinator.QThread") as mock_thread, \
+                 patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog") as mock_dialog:
+                coord.on_power_plan_fix_requested()
+            mock_worker.assert_not_called()
+            mock_thread.assert_not_called()
+            # The gate fires before any approval UI.
+            mock_dialog.assert_not_called()
+            coord._log.warning.assert_called_once()
+
+    def test_happy_path_spawns_worker_with_narrowed_specs(self):
+        runtime = {"preloaded_specs": {**self._POWER_SPECS, "GameMode": {"enabled": True}}}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._CardFixWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls, \
+             patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog"), \
+             patch.object(coord, "_ensure_restore_point_choice", return_value=False):
+            coord.on_power_plan_fix_requested()
+        # Narrowed: the handler must only ever see its own spec key.
+        mock_worker_cls.assert_called_once_with(
+            "power_plan", {"PowerPlan": self._POWER_SPECS["PowerPlan"]}, False
+        )
+        assert runtime["setting_fix_thread"] is mock_thread_cls.return_value
+        assert runtime["setting_fix_worker"] is mock_worker_cls.return_value
+        assert runtime["card_fix_in_progress"] is True
+        assert coord._setting_fix_check_name == "power_plan"
+        mock_thread_cls.return_value.start.assert_called_once()
+
+    def test_game_mode_happy_path_uses_game_mode_key(self):
+        runtime = {"preloaded_specs": dict(self._GAME_SPECS)}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._CardFixWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread"), \
+             patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog"), \
+             patch.object(coord, "_ensure_restore_point_choice", return_value=False):
+            coord.on_game_mode_fix_requested()
+        mock_worker_cls.assert_called_once_with(
+            "game_mode", {"GameMode": {"enabled": False}}, False
+        )
+        assert coord._setting_fix_check_name == "game_mode"
+
+    def test_rejected_dialog_spawns_nothing(self):
+        runtime = {"preloaded_specs": dict(self._POWER_SPECS)}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._CardFixWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls, \
+             patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog") as mock_dialog_cls:
+            mock_dialog_cls.return_value.exec.return_value = False
+            coord.on_power_plan_fix_requested()
+        mock_worker_cls.assert_not_called()
+        mock_thread_cls.assert_not_called()
+        assert "setting_fix_thread" not in runtime
+
+    def test_result_true_marks_power_plan_applied(self):
+        coord = _make_coordinator({})
+        coord._setting_fix_check_name = "power_plan"
+        coord._on_setting_fix_result(True)
+        coord._main._dashboard.set_power_plan_findings.assert_called_once_with({"status": "OK"})
+        coord._main._dashboard.set_game_mode_findings.assert_not_called()
+
+    def test_result_true_marks_game_mode_applied(self):
+        coord = _make_coordinator({})
+        coord._setting_fix_check_name = "game_mode"
+        coord._on_setting_fix_result(True)
+        coord._main._dashboard.set_game_mode_findings.assert_called_once_with({"status": "OK"})
+        coord._main._dashboard.set_power_plan_findings.assert_not_called()
+
+    def test_result_false_shows_error_dialog_and_keeps_card(self):
+        coord = _make_coordinator({})
+        coord._setting_fix_check_name = "power_plan"
+        with patch("src.gui.widgets.dialogs.CardDialog") as mock_dialog:
+            coord._on_setting_fix_result(False)
+        mock_dialog.assert_called_once()
+        coord._main._dashboard.set_power_plan_findings.assert_not_called()
+
+    def test_setting_fix_cleanup_clears_all_runtime_keys(self):
+        runtime = {
+            "card_fix_in_progress": True,
+            "restore_point_in_progress": True,
+            "setting_fix_thread": MagicMock(),
+            "setting_fix_worker": MagicMock(),
+        }
+        coord = _make_coordinator(runtime)
+        coord._on_setting_fix_thread_finished()
+        for key in (
+            "card_fix_in_progress",
+            "restore_point_in_progress",
+            "setting_fix_thread",
+            "setting_fix_worker",
+        ):
+            assert key not in runtime

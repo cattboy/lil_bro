@@ -14,34 +14,41 @@ cannot reliably route a queued connection to a bare callable, so the slot lives 
 
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, Qt, Slot
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtCore import QObject, Slot
+
+from src.gui.widgets.dialogs import CardDialog
 
 
 class CapNotifier(QObject):
-    """Shows a one-shot NON-MODAL critical popup when the action log hits its cap.
+    """Shows a one-shot NON-MODAL error card when the action log hits its cap.
 
-    Lives on the main thread (parented to the main window); driven by a queued signal so
-    the worker thread that detects the cap never touches a widget. The dialog is shown
+    Lives on the main thread (parented to the main window); driven by a queued signal
+    so the worker thread that detects the cap never touches a widget. The card is shown
     non-modally (``.show()``, not ``.exec()``) so a cap event during a running pipeline
-    does not freeze the UI.
+    does not freeze the UI; ``raise_()`` + ``activateWindow()`` surface it above the main
+    window to compensate for the OS "Critical" alert sound that ``QMessageBox`` used to
+    provide.
     """
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
-        self._box: QMessageBox | None = None  # kept alive while shown; also the once-guard
+        self._dialog: CardDialog | None = None  # kept alive while shown; also the once-guard
 
     @Slot()
     def show_cap_reached(self) -> None:
-        if self._box is not None:
+        if self._dialog is not None:
             return  # already shown this session
-        box = QMessageBox(self.parent())
-        box.setIcon(QMessageBox.Icon.Critical)
-        box.setWindowTitle("lil_bro — action log full")
-        box.setText(
-            "lil_bro_actions.log has exceeded the 100 MB cap and logging has stopped.\n\n"
-            "Please remove the file and restart lil_bro."
+        dialog = CardDialog(
+            "Action log full",
+            "lil_bro_actions.log has exceeded the 100 MB cap and logging has "
+            "stopped.\n\nPlease remove the file and restart lil_bro.",
+            tone="error",
+            modal=False,
+            glow=False,
+            parent=self.parent(),
         )
-        box.setWindowModality(Qt.WindowModality.NonModal)
-        self._box = box  # hold a reference so it isn't garbage-collected on return
-        box.show()  # non-blocking; does not freeze the pipeline
+        dialog.setWindowTitle("lil_bro — action log full")
+        self._dialog = dialog  # hold a reference so it isn't garbage-collected on return
+        dialog.show()  # non-blocking; does not freeze the pipeline
+        dialog.raise_()
+        dialog.activateWindow()

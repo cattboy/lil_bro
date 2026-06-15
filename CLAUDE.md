@@ -38,6 +38,12 @@
 - Always implement multi-method fallbacks — never hard-fail when a tool (nvidia-smi, dxdiag, etc.) is missing. Fall back to WMI or registry alternatives.
 - GUI via PySide6 (default). CLI mode preserved via `--terminal`. New visual work uses PySide6; do not introduce PyQt.
 
+### Dialogs
+- All dialogs MUST be built from `CardDialog` in `src/gui/widgets/dialogs.py` — never a raw `QMessageBox` or a hand-rolled `QDialog`. The template owns the DESIGN.md card styling (surface card, tone-coloured icon, JetBrains-Mono title, accent-glow primary button, WASD `(W)`/`(S)` buttons, Esc handling) via the object-name-driven `_qss_card_dialog`.
+- `tone="accent|warning|error|info|success"` drives the icon tint via the `cardTone` property — distinct from the `sev=low|medium|high` severity property and from `statTone`; do not conflate them. Pass `secondary_label` only for a two-button confirm (Esc rejects); omit it for a single-button acknowledgement (Esc accepts). Secondary buttons auto-get `setAutoDefault(False)` (the WASD popout rule).
+- `icon` is caller-supplied and defaults to deriving a glyph from `tone`; pass `icon=None` for no icon (e.g. the `accent_bar=True` variant). The default glyphs are an interim stand-in — `tokens.py` blacklists emoji as design elements, so a QIcon migration is tracked in TODOS (T-027); do not enshrine specific glyphs as a design rule.
+- Specialized dialogs (`BatchSelectionDialog`, `AISetupDialog`, `SplashDialog`) are the only exemptions. Every new `src/gui/widgets/` module still needs a `lil_bro.spec` hiddenimports entry.
+
 ### Dashboard Fix Pattern
 When a fix can be triggered from a Dashboard card button (outside the pipeline `ApplyPhase`), follow this pattern — see `_MonitorFixWorker` in `src/gui/worker.py` as the reference implementation:
 
@@ -47,6 +53,11 @@ When a fix can be triggered from a Dashboard card button (outside the pipeline `
 4. **Pass a filtered `specs` dict** narrowed to only the targeted item so the handler doesn't act on everything.
 5. Wire the button signal → `StartupCoordinator` method → `QThread` + worker, mirroring `on_monitor_fix_requested` in `src/gui/startup_coordinator.py`.
 
+### Mock GUI (dashboard card preview)
+- `scripts/mock_gui.py` is the dev-only layout viewer: the real `MainWindow` + Dashboard fed entirely by `scripts/mock_fixtures.py`, with a floating state-switcher panel. It is NOT bundled — no `lil_bro.spec` entry, no production imports of it.
+- **Every new dashboard card MUST also be wired into the mock GUI**: add per-state fixture data to `scripts/mock_fixtures.py` (reuse production constants so fixtures can't drift), a combo + `apply_*` method in `scripts/mock_gui.py` (`MockDriver`/`MockControls`) routing through the card's real public population API, and an entry in each `SCENARIOS` preset.
+- Verify with `python scripts/mock_gui.py --smoke` (offscreen auto-cycle of all scenarios + multi-monitor) and extend `_smoke_report` with the new card's visibility/state.
+
 ### Subprocess & Temp Files
 - **All subprocess temp files must be stored in CWD, not `%TEMP%`.** Use `get_temp_dir()` from `src/utils/paths.py` as the `dir=` argument for `tempfile.TemporaryDirectory()` and `tempfile.mkstemp()`. This ensures all runtime artifacts live under `./lil_bro/` and get cleaned up on exit via `post_run_cleanup.py`.
 - Any new code spawning subprocesses that produce temp files must use `dir=str(get_temp_dir())` — never rely on the system default temp directory.
@@ -55,6 +66,11 @@ When a fix can be triggered from a Dashboard card button (outside the pipeline `
 ### Bundling (PyInstaller)
 - **Every new module under `src/gui/widgets/` MUST be added to `hiddenimports` in `lil_bro.spec`** (alphabetical with the existing widget list around line 81-91). PyInstaller's static analyzer can miss lazy imports inside method bodies, and the `try/except` in `app.py._on_finished` will swallow the resulting `ImportError` silently — the widget appears fine in dev mode but never renders in the bundled exe.
 - After updating the spec, rebuild with `python -m PyInstaller lil_bro.spec --noconfirm`.
+
+### Release Versioning
+- **`src/_version.py` (`__version__`) MUST be bumped as part of `document-release` and before any `/ship` completes.** The value is logged at every session start (`SESSION START  |  lil_bro vX.Y.Z` in `lil_bro_debug.log`), so it is the first signal of which build is actually running.
+- **Rebuild `dist/lil_bro.exe` from the same source whose version is being shipped** (`python -m PyInstaller lil_bro.spec --noconfirm`) so the logged banner matches the released source.
+- Why: a stale exe once shipped because it was built ~100s before its fix commit, and the unchanged version banner hid the staleness — the fix's source was present but never compiled in. A mandatory bump makes that obvious from the first log line.
 
 ---
 
@@ -129,7 +145,7 @@ In QA mode, flag any code that doesn't match DESIGN.md.
 
 ## Development Roadmap
 
-See [`docs/ROADMAP.md`](docs/ROADMAP.md). Current test count: 785.
+See [`docs/ROADMAP.md`](docs/ROADMAP.md). Current test count: 1071.
 
 ---
 

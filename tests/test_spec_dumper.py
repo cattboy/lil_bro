@@ -156,3 +156,52 @@ def test_dump_system_specs_warns_on_large_file(
         dump_system_specs(output_file)
     warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
     assert any("unexpectedly large" in c for c in warning_calls)
+
+
+class TestCollectFixSections:
+    """collect_fix_sections re-collects only the dashboard fix-relevant sections
+    (the shared source for the live card refresh), skipping the slow NVIDIA
+    profile export unless an NVIDIA GPU is present."""
+
+    def test_includes_nvidia_profile_when_gpu_present(self):
+        from src.collectors import spec_dumper
+        with patch.object(spec_dumper, "get_monitor_refresh_capabilities", return_value=[{"device": "D1"}]), \
+             patch.object(spec_dumper, "get_nvidia_smi", return_value=[{"GPU": "RTX 4090"}]), \
+             patch.object(spec_dumper, "get_active_power_plan", return_value=("guid", "High")), \
+             patch.object(spec_dumper, "get_game_mode_status", return_value=True), \
+             patch.object(spec_dumper, "get_nvidia_profile", return_value={"available": True}) as m_prof:
+            sections = spec_dumper.collect_fix_sections()
+        assert set(sections) == {
+            "DisplayCapabilities", "NVIDIA", "PowerPlan", "GameMode", "NVIDIAProfile",
+        }
+        assert sections["PowerPlan"] == {"guid": "guid", "name": "High"}
+        assert sections["GameMode"] == {"enabled": True}
+        m_prof.assert_called_once()
+
+    def test_skips_nvidia_profile_when_no_gpu(self):
+        from src.collectors import spec_dumper
+        with patch.object(spec_dumper, "get_monitor_refresh_capabilities", return_value=[]), \
+             patch.object(spec_dumper, "get_nvidia_smi", return_value=[]), \
+             patch.object(spec_dumper, "get_active_power_plan", return_value=("g", "Balanced")), \
+             patch.object(spec_dumper, "get_game_mode_status", return_value=False), \
+             patch.object(spec_dumper, "get_nvidia_profile") as m_prof:
+            sections = spec_dumper.collect_fix_sections()
+        assert "NVIDIAProfile" not in sections
+        assert sections["NVIDIA"] == []
+        m_prof.assert_not_called()
+
+    def test_scoped_collects_only_requested_section(self):
+        from src.collectors import spec_dumper
+        with patch.object(spec_dumper, "get_active_power_plan", return_value=("g", "High")) as m_pp, \
+             patch.object(spec_dumper, "get_monitor_refresh_capabilities") as m_mon, \
+             patch.object(spec_dumper, "get_nvidia_smi") as m_nv, \
+             patch.object(spec_dumper, "get_nvidia_profile") as m_prof, \
+             patch.object(spec_dumper, "get_game_mode_status") as m_gm:
+            sections = spec_dumper.collect_fix_sections({"PowerPlan"})
+        assert set(sections) == {"PowerPlan"}
+        m_pp.assert_called_once()
+        # Out-of-scope collectors are not run -- the whole point of scoping.
+        m_mon.assert_not_called()
+        m_nv.assert_not_called()
+        m_prof.assert_not_called()
+        m_gm.assert_not_called()

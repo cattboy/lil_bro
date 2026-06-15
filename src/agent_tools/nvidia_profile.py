@@ -6,24 +6,24 @@ DLSS preset, power management) against gaming best practices. Returns a single
 finding dict -- all settings are fixed atomically via one .nip import.
 """
 
-import re
 from typing import Any
 
+from ..config import config
+from ..utils.dlss_presets import classify, get_preset
 from ..utils.nvidia_npi import (
     DLSS_LETTER_MAP,
-    DLSS_PRESETS,
+    POWER_MGMT_VALUE_BY_MODE,
     SETTING_IDS,
     TARGET_VALUES,
+    VSYNC_VALUE_BY_MODE,
     calculate_fps_cap,
 )
 
 
 def _get_gpu_generation(gpu_name: str) -> str | None:
-    """Extract RTX generation from GPU name (e.g. 'NVIDIA GeForce RTX 4090' -> '40')."""
-    m = re.search(r"RTX\s*(\d)0", gpu_name, re.IGNORECASE)
-    if m:
-        return m.group(1) + "0"
-    return None
+    """Extract RTX generation from a GPU name. Canonical impl: src/utils/dlss_presets.py."""
+    from ..utils.dlss_presets import _get_gpu_generation as _impl
+    return _impl(gpu_name)
 
 
 def _get_primary_refresh_hz(specs: dict) -> int | None:
@@ -40,7 +40,18 @@ def _get_primary_refresh_hz(specs: dict) -> int | None:
 
 
 def _check_gsync(npi: dict, raw: dict[int, int]) -> dict[str, Any]:
-    """Check all 7 G-Sync settings."""
+    """Check G-Sync settings against configured target."""
+    if not config.nvidia.profile.gsync:
+        val = raw.get(SETTING_IDS["gsync_global_feature"])
+        if val == 0:
+            return {"name": "G-Sync", "ok": True, "message": "G-Sync disabled (per config)"}
+        return {
+            "name": "G-Sync",
+            "ok": False,
+            "message": "G-Sync is enabled in driver; config target is disabled",
+            "mismatches": ["gsync_global_feature"],
+        }
+
     gsync_keys = [
         "gsync_global_feature", "gsync_global_mode", "gsync_app_mode",
         "gsync_app_state", "gsync_app_requested",
@@ -65,50 +76,68 @@ def _check_gsync(npi: dict, raw: dict[int, int]) -> dict[str, Any]:
 
 
 def _check_vsync(npi: dict, raw: dict[int, int]) -> dict[str, Any]:
-    """Check VSync force-on + tear control + smooth AFR."""
-    vsync_keys = ["vsync", "vsync_tear_control", "vsync_smooth_afr"]
-    mismatches = []
-    for key in vsync_keys:
-        sid = SETTING_IDS[key]
-        current = raw.get(sid)
-        expected = TARGET_VALUES[key]
-        if current != expected:
-            mismatches.append(key)
+    """Check VSync mode against configured target."""
+    _VSYNC_RAW = VSYNC_VALUE_BY_MODE
+    target_vsync_raw = _VSYNC_RAW.get(config.nvidia.profile.vsync, 0x47814940)
+    current_vsync = raw.get(SETTING_IDS["vsync"])
 
-    if not mismatches:
-        return {"name": "VSync", "ok": True, "message": "VSync correctly forced on"}
+    if config.nvidia.profile.vsync == "force_on":
+        vsync_keys = ["vsync", "vsync_tear_control", "vsync_smooth_afr"]
+        mismatches = []
+        for key in vsync_keys:
+            sid = SETTING_IDS[key]
+            if raw.get(sid) != TARGET_VALUES[key]:
+                mismatches.append(key)
+        if not mismatches:
+            return {"name": "VSync", "ok": True, "message": "VSync correctly forced on"}
+        return {
+            "name": "VSync",
+            "ok": False,
+            "message": f"VSync not configured for Blur Busters optimal ({len(mismatches)} settings)",
+            "mismatches": mismatches,
+        }
+
+    # "off" or other: check only the main vsync setting
+    if current_vsync == target_vsync_raw:
+        return {"name": "VSync", "ok": True, "message": f"VSync set to '{config.nvidia.profile.vsync}' (per config)"}
     return {
         "name": "VSync",
         "ok": False,
-        "message": f"VSync not configured for Blur Busters optimal ({len(mismatches)} settings)",
-        "mismatches": mismatches,
+        "message": f"VSync does not match config target '{config.nvidia.profile.vsync}'",
+        "mismatches": ["vsync"],
     }
 
 
 def _check_fps_cap(npi: dict, raw: dict[int, int], refresh_hz: int | None) -> dict[str, Any]:
-    """Check frame rate limiter against formula-calculated cap."""
-    if refresh_hz is None:
+    """Check frame rate limiter against configured cap (override or formula)."""
+    override = config.nvidia.profile.fps_cap_override
+    if override is not None:
+        expected_cap = override
+    elif refresh_hz is None:
         return {
             "name": "FPS Cap",
             "ok": True,
             "message": "Could not determine monitor refresh rate -- FPS cap not checked",
             "skipped": True,
         }
+    else:
+        expected_cap = calculate_fps_cap(refresh_hz)
 
-    expected_cap = calculate_fps_cap(refresh_hz)
     current_cap = raw.get(SETTING_IDS["fps_limiter_v3"])
 
     if current_cap == expected_cap:
+        source = f"override={override}" if override is not None else f"{refresh_hz}Hz monitor"
         return {
             "name": "FPS Cap",
             "ok": True,
-            "message": f"FPS cap correctly set to {expected_cap} for {refresh_hz}Hz monitor",
+            "message": f"FPS cap correctly set to {expected_cap} ({source})",
         }
     current_str = str(current_cap) if current_cap is not None else "not set"
+    source = f"override={override}" if override is not None else f"{refresh_hz}Hz monitor"
     return {
         "name": "FPS Cap",
         "ok": False,
-        "message": f"FPS cap is {current_str}, should be {expected_cap} for {refresh_hz}Hz monitor",
+        "message": f"FPS cap is {current_str}, should be {expected_cap} ({source})",
         "current": current_cap,
         "expected": expected_cap,
     }
@@ -137,66 +166,70 @@ def _check_rebar_driver(npi: dict, raw: dict[int, int], bios_rebar: bool | None)
 
 
 def _check_dlss(npi: dict, raw: dict[int, int], gpu_name: str) -> dict[str, Any]:
-    """Check DLSS preset against GPU generation recommendation."""
-    gen = _get_gpu_generation(gpu_name)
-    if gen is None:
+    """Check DLSS preset against the GPU's capability tier + configured priority."""
+    tier = classify(gpu_name)
+    if tier == "unsupported":
         return {
             "name": "DLSS Preset",
             "ok": True,
-            "message": "Could not detect RTX generation -- DLSS preset not checked",
+            "message": f"DLSS not supported on {gpu_name} (no Tensor cores)",
             "skipped": True,
         }
 
-    preset_info = DLSS_PRESETS.get(gen)
-    if preset_info is None:
+    preset = get_preset(gpu_name)
+    if preset is None:
         return {
             "name": "DLSS Preset",
             "ok": True,
-            "message": f"No DLSS preset recommendation for generation {gen}",
+            "message": "Could not detect a supported RTX generation -- DLSS preset not checked",
             "skipped": True,
         }
-
-    expected_letter, expected_hex = preset_info
 
     profile_val = raw.get(SETTING_IDS["dlss_preset_profile"])
     letter_val = raw.get(SETTING_IDS["dlss_preset_letter"])
     current_letter = DLSS_LETTER_MAP.get(letter_val, "unknown") if letter_val is not None else "not set"
 
-    if profile_val == 2 and letter_val == expected_hex:
+    if profile_val == 2 and letter_val == preset.value:
         return {
             "name": "DLSS Preset",
             "ok": True,
-            "message": f"DLSS Preset {expected_letter} correctly set for RTX {gen}-series",
+            "message": f"DLSS Preset {preset.letter} correctly set ({preset.priority})",
         }
     return {
         "name": "DLSS Preset",
         "ok": False,
-        "message": f"DLSS preset is '{current_letter}', recommended Preset {expected_letter} for RTX {gen}-series",
+        "message": f"DLSS preset is '{current_letter}', recommended Preset {preset.letter} ({preset.priority})",
         "current_letter": current_letter,
-        "expected_letter": expected_letter,
+        "expected_letter": preset.letter,
     }
 
 
 def _check_power_mgmt(npi: dict, raw: dict[int, int]) -> dict[str, Any]:
-    """Check power management mode."""
+    """Check power management mode against configured target."""
+    _POWER_RAW = POWER_MGMT_VALUE_BY_MODE
+    target_raw = _POWER_RAW.get(config.nvidia.profile.power_mgmt, 1)
     current = raw.get(SETTING_IDS["power_mgmt"])
-    if current == TARGET_VALUES["power_mgmt"]:
-        return {"name": "Power Management", "ok": True, "message": "Prefer Maximum Performance is set"}
+    if current == target_raw:
+        label = "Prefer Maximum Performance" if target_raw == 1 else "Adaptive"
+        return {"name": "Power Management", "ok": True, "message": f"{label} is set"}
     current_str = npi.get("power_mgmt") or ("not set" if current is None else f"value {current}")
     return {
         "name": "Power Management",
         "ok": False,
-        "message": f"Power management is '{current_str}', should be 'Prefer Maximum Performance'",
+        "message": f"Power management is '{current_str}', config target is '{config.nvidia.profile.power_mgmt}'",
         "current": current,
-        "expected": TARGET_VALUES["power_mgmt"],
+        "expected": target_raw,
     }
 
 
 def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
     """Analyze NVIDIA driver profile settings against gaming best practices.
 
-    Returns a single finding dict. All sub-checks are bundled because they're
-    fixed atomically via one .nip import operation.
+    Returns a single finding dict. The remaining sub-checks are bundled because
+    they're fixed atomically via one .nip import. DLSS is intentionally NOT
+    checked here -- it is owned by ``analyze_nvidia_dlss_preset`` / the
+    ``nvidia_dlss_preset`` fix so the two surface as independent options (the
+    Dashboard cards and the pipeline batch dialog).
     """
     nvidia = specs.get("NVIDIA", "")
 
@@ -252,12 +285,33 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
         _check_vsync(npi, raw_settings),
         _check_fps_cap(npi, raw_settings, refresh_hz),
         _check_rebar_driver(npi, raw_settings, bios_rebar),
-        _check_dlss(npi, raw_settings, gpu_name),
         _check_power_mgmt(npi, raw_settings),
     ]
 
     failed = [s for s in sub_findings if not s["ok"]]
     all_ok = len(failed) == 0
+
+    override = config.nvidia.profile.fps_cap_override
+    expected_fps = (
+        override if override is not None
+        else (calculate_fps_cap(refresh_hz) if refresh_hz else None)
+    )
+
+    current = {
+        "gpu_model": gpu_name,
+        "gsync": npi.get("gsync_enabled"),
+        "vsync": npi.get("vsync_mode"),
+        "fps_cap": npi.get("fps_cap"),
+        "rebar_driver": npi.get("rebar_driver"),
+        "power_mgmt": npi.get("power_mgmt"),
+    }
+    expected = {
+        "gsync": config.nvidia.profile.gsync,
+        "vsync": config.nvidia.profile.vsync,
+        "fps_cap": expected_fps,
+        "rebar_driver": True if bios_rebar else None,
+        "power_mgmt": config.nvidia.profile.power_mgmt,
+    }
 
     if all_ok:
         return {
@@ -266,36 +320,94 @@ def analyze_nvidia_profile(specs: dict) -> dict[str, Any]:
             "message": "NVIDIA driver profile is fully optimized.",
             "can_auto_fix": False,
             "sub_findings": sub_findings,
+            "current": current,
+            "expected": expected,
         }
 
     names = [f["name"] for f in failed]
     summary = ", ".join(names)
 
-    expected_fps = calculate_fps_cap(refresh_hz) if refresh_hz else None
-    gpu_gen = _get_gpu_generation(gpu_name)
-    dlss_info = DLSS_PRESETS.get(gpu_gen) if gpu_gen else None
-
     return {
         "check": "nvidia_profile",
         "status": "WARNING",
-        "current": {
-            "gpu_model": gpu_name,
-            "gsync": npi.get("gsync_enabled"),
-            "vsync": npi.get("vsync_mode"),
-            "fps_cap": npi.get("fps_cap"),
-            "rebar_driver": npi.get("rebar_driver"),
-            "dlss_preset": npi.get("dlss_preset"),
-            "power_mgmt": npi.get("power_mgmt"),
-        },
-        "expected": {
-            "gsync": True,
-            "vsync": "force_on",
-            "fps_cap": expected_fps,
-            "rebar_driver": True if bios_rebar else None,
-            "dlss_preset": dlss_info[0] if dlss_info else None,
-            "power_mgmt": "max_performance",
-        },
+        "current": current,
+        "expected": expected,
         "message": f"NVIDIA driver profile not optimized: {summary}",
         "can_auto_fix": True,
         "sub_findings": sub_findings,
+    }
+
+
+def analyze_nvidia_dlss_preset(specs: dict) -> dict[str, Any]:
+    """Analyze ONLY the DLSS preset against the GPU's capability tier + priority.
+
+    Split out from ``analyze_nvidia_profile`` so the DLSS preset surfaces as its
+    own selectable fix (``nvidia_dlss_preset``) in both the Dashboard card and
+    the full pipeline's batch dialog, independent of the rest of the driver
+    profile. Reuses ``_check_dlss`` and the same NVIDIA/NPI gating.
+
+    Returns a finding dict keyed ``nvidia_dlss_preset``:
+      * SKIPPED  -- no NVIDIA GPU / AMD GPU / NPI unavailable / GPU not DLSS-capable.
+      * OK       -- the recommended preset is already set (``can_auto_fix`` False).
+      * WARNING  -- the preset is missing or wrong (``can_auto_fix`` True).
+    """
+    nvidia = specs.get("NVIDIA", "")
+    if not (isinstance(nvidia, list) and nvidia):
+        return {
+            "check": "nvidia_dlss_preset",
+            "status": "SKIPPED",
+            "message": "No NVIDIA GPU detected -- DLSS preset requires an NVIDIA GPU.",
+            "can_auto_fix": False,
+        }
+
+    gpu_name = nvidia[0].get("GPU", "Unknown GPU")
+
+    npi = specs.get("NVIDIAProfile", {})
+    if not npi.get("available") or "error" in npi:
+        reason = npi.get("reason") or npi.get("error") or "unknown"
+        return {
+            "check": "nvidia_dlss_preset",
+            "status": "SKIPPED",
+            "message": f"NVIDIA Profile Inspector unavailable: {reason}",
+            "can_auto_fix": False,
+        }
+
+    try:
+        raw_settings = {int(k): v for k, v in npi.get("raw_settings", {}).items()}
+    except (ValueError, TypeError):
+        raw_settings = {}
+
+    dlss = _check_dlss(npi, raw_settings, gpu_name)
+
+    # GPU not DLSS-capable / undetectable RTX generation -> nothing to offer.
+    if dlss.get("skipped"):
+        return {
+            "check": "nvidia_dlss_preset",
+            "status": "SKIPPED",
+            "message": dlss["message"],
+            "can_auto_fix": False,
+        }
+
+    current = {"gpu_model": gpu_name, "dlss_preset": dlss.get("current_letter")}
+    expected = {"dlss_preset": dlss.get("expected_letter")}
+
+    if dlss["ok"]:
+        return {
+            "check": "nvidia_dlss_preset",
+            "status": "OK",
+            "message": dlss["message"],
+            "can_auto_fix": False,
+            "current": current,
+            "expected": expected,
+        }
+
+    return {
+        "check": "nvidia_dlss_preset",
+        "status": "WARNING",
+        "message": dlss["message"],
+        "can_auto_fix": True,
+        "current_letter": dlss.get("current_letter"),
+        "expected_letter": dlss.get("expected_letter"),
+        "current": current,
+        "expected": expected,
     }

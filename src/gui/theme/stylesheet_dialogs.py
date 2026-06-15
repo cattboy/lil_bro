@@ -1,4 +1,4 @@
-"""Dialog QSS: approval dialog, confirm dialog, mouse-ready dialog, splash, output header."""
+"""Dialog QSS: shared card dialog, batch approval dialog, splash, output header."""
 
 from __future__ import annotations
 
@@ -32,6 +32,15 @@ def _qss_batch_dialog(c: dict[str, str]) -> str:
         background-color: {c["surface"]};
         border: 1px solid {c["border_default"]};
         border-radius: 12px;
+    }}
+    /* Scrollable card body: transparent shell so the dialog surface shows
+     * through; the scrollbar itself is themed by the global QScrollBar rules. */
+    QScrollArea#dialogScroll {{
+        background-color: transparent;
+        border: none;
+    }}
+    QScrollArea#dialogScroll > QWidget > QWidget {{
+        background-color: transparent;
     }}
     QLabel#dlgTitle {{
         font-family: "{FONTS["mono"]}";
@@ -132,91 +141,50 @@ def _qss_batch_dialog(c: dict[str, str]) -> str:
 """
 
 
-def _qss_confirm_dialog(c: dict[str, str]) -> str:
-    """Confirm dialog: elevated card, icon, title, description, prominent W button."""
+def _qss_card_dialog(c: dict[str, str]) -> str:
+    """Shared card dialog (confirm / admin / mouse-ready / notice): card surface,
+    tone-coloured icon, title, description, accent bar, and prominent primary button."""
     return f"""
-    /* --- Confirm dialog visual update -------------------------------- */
-    QDialog#confirmDialog {{
+    /* --- Card dialog (shared notice/confirm scaffold) ---------------- */
+    QDialog#cardDialog {{
         background-color: {c["surface"]};
         border: 1px solid {c["border_default"]};
         border-radius: 12px;
     }}
-    QLabel#confirmIcon {{
+    QLabel#cardIcon {{
         font-size: 28px;
         color: {c["accent"]};
     }}
-    QLabel#confirmTitle {{
+    QLabel#cardIcon[cardTone="warning"] {{
+        color: {c["warning"]};
+    }}
+    QLabel#cardIcon[cardTone="error"] {{
+        color: {c["error"]};
+    }}
+    QLabel#cardIcon[cardTone="info"] {{
+        color: {c["info"]};
+    }}
+    QLabel#cardIcon[cardTone="success"] {{
+        color: {c["success"]};
+    }}
+    QLabel#cardTitle {{
         font-family: "{FONTS["mono"]}";
         font-size: 14px;
         font-weight: 600;
         color: {c["text_primary"]};
     }}
-    QLabel#confirmDesc {{
+    QLabel#cardDesc {{
         font-size: 12px;
         color: {c["text_muted"]};
         line-height: 1.5;
     }}
-    /* Make the W/accept button the clear focal point: accent fill (from the
-       global #primary rule) plus extra weight and breathing room so it reads
-       as the primary action against the secondary (S) button. */
-    QDialog#confirmDialog QPushButton#primary {{
-        padding: 10px 22px;
-        font-size: 14px;
-        font-weight: 700;
-        min-height: 18px;
-    }}
-"""
-
-
-def _qss_mouse_ready_dialog(c: dict[str, str]) -> str:
-    """Mouse polling ready dialog: accent bar, title, description."""
-    return f"""
-    /* --- Mouse ready dialog ------------------------------------------ */
-    QFrame#mouseReadyAccent {{
+    QFrame#cardAccentBar {{
         background-color: {c["accent"]};
         border-radius: 1px;
         min-height: 2px;
         max-height: 2px;
     }}
-    QLabel#mouseReadyTitle {{
-        font-family: "{FONTS["mono"]}";
-        font-size: 14px;
-        font-weight: 700;
-        color: {c["text_primary"]};
-    }}
-    QLabel#mouseReadyDesc {{
-        font-size: 12px;
-        color: {c["text_secondary"]};
-        line-height: 1.5;
-    }}
-"""
-
-
-def _qss_admin_dialog(c: dict[str, str]) -> str:
-    """Admin (not-elevated) warning dialog: warning icon, title, description, OK button."""
-    return f"""
-    /* --- Admin warning dialog ---------------------------------------- */
-    QDialog#adminDialog {{
-        background-color: {c["surface"]};
-        border: 1px solid {c["border_default"]};
-        border-radius: 12px;
-    }}
-    QLabel#adminIcon {{
-        font-size: 28px;
-        color: {c["warning"]};
-    }}
-    QLabel#adminTitle {{
-        font-family: "{FONTS["mono"]}";
-        font-size: 14px;
-        font-weight: 600;
-        color: {c["text_primary"]};
-    }}
-    QLabel#adminDesc {{
-        font-size: 12px;
-        color: {c["text_muted"]};
-        line-height: 1.5;
-    }}
-    QDialog#adminDialog QPushButton#primary {{
+    QDialog#cardDialog QPushButton#primary {{
         padding: 10px 22px;
         font-size: 14px;
         font-weight: 700;

@@ -29,7 +29,28 @@ class StartupCompleter(QObject):
         self._on_done(startup_lhm)
 
 
-class StartupCoordinator:
+# Maps a fix-dispatch check name (the @register_fix key in fix_dispatch.py) to the
+# spec sections its card reads. Used to scope the post-apply dashboard re-collect to
+# only what changed this session. Any NEW dashboard fix card must extend this map.
+_FIX_TO_SECTIONS: dict[str, set[str]] = {
+    "display": {"DisplayCapabilities"},
+    "nvidia_profile": {"NVIDIA", "NVIDIAProfile"},
+    "nvidia_dlss_preset": {"NVIDIA", "NVIDIAProfile"},
+    "power_plan": {"PowerPlan"},
+    "game_mode": {"GameMode"},
+    # temp_folders has no dashboard card -> no section to refresh.
+}
+
+
+def _sections_for_fixes(fix_keys) -> set[str]:
+    """Union the fix->section map over an iterable of fix-dispatch check names."""
+    out: set[str] = set()
+    for key in fix_keys:
+        out |= _FIX_TO_SECTIONS.get(key, set())
+    return out
+
+
+class StartupCoordinator(QObject):
     """Owns the StartupOrchestrator + monitor-refresh-card signal handlers.
 
     Constructed once by ``app.run()``; the shared ``runtime`` dict is stored
@@ -37,12 +58,26 @@ class StartupCoordinator:
     re-enables the flow controls through it once startup completes.
     """
 
-    def __init__(self, main, runtime: dict, log, orchestrator, pipeline) -> None:
+    def __init__(self, main, runtime: dict, log, orchestrator, pipeline, parent=None) -> None:
+        # QObject base anchors this coordinator's slots to the thread it is built
+        # on (the main/GUI thread). Without it, the card-fix worker QThreads'
+        # cross-thread signals (fix_thread.finished, worker.result) fall back to
+        # DirectConnection and run on the dying worker thread -- stranding the
+        # card_fix_in_progress cleanup (dashboard locks) and mutating widgets
+        # off-thread (parent=None). See StartupCompleter for the same rationale.
+        super().__init__(parent)
         self._main = main
         self._runtime = runtime
         self._log = log
         self._orchestrator = orchestrator
         self._pipeline = pipeline
+        # NVIDIA card-fix check_name, captured at request time so the queued
+        # result slot reads it without a fragile self.sender() lookup on a
+        # possibly-deleted worker.
+        self._nvidia_fix_check_name: str | None = None
+        # Power Plan / Game Mode card-fix check_name -- same capture-at-request
+        # rationale as _nvidia_fix_check_name.
+        self._setting_fix_check_name: str | None = None
         # Applied Fixes card (T-016): a QFileSystemWatcher refreshes it live; a
         # single-shot QTimer debounces the double directoryChanged per write.
         self._last_run_watcher = None
@@ -133,6 +168,28 @@ class StartupCoordinator:
         except Exception as exc:
             self._log.warning("Applied Fixes refresh failed: %s", exc, exc_info=True)
 
+    @Slot()
+    def refresh_fix_cards_after_revert(self) -> None:
+        """Re-scan the Dashboard fix cards after a revert.
+
+        A revert restores the pre-apply settings, but the cards may be showing
+        the optimistic "applied" state (card fixes) or the post-run state (the
+        cached ``preloaded_specs`` is refreshed after a pipeline run). Delegates
+        to the shared live re-collect so the cards reflect the real, just-reverted
+        system state -- the same path used after the optimization pipeline, so the
+        two surfaces never diverge.
+
+        ``start_revert`` captured the reverted fixes' sections in
+        ``_revert_refresh_scope`` before the manifest was deleted, so only those
+        cards are re-collected; falls back to a full refresh when unset.
+
+        Wired to RevertWorker.revert_finished from PipelineController.start_revert.
+        This coordinator is a QObject on the GUI thread, so the cross-thread
+        signal delivers here as a QueuedConnection -- safe to spawn the worker.
+        """
+        scope = self._runtime.pop("_revert_refresh_scope", None)
+        self.refresh_dashboard_fix_cards(scope)
+
     # ── Orchestrator step / completion ─────────────────────────────────
 
     def on_step(self, name: str, status: str) -> None:
@@ -213,19 +270,35 @@ class StartupCoordinator:
         except Exception as exc:
             log.error("on_finished EXC: %s: %r", type(exc).__name__, exc, exc_info=True)
 
-        # Late-fire monitor wiring: if main.show() already ran before this slot
-        # fired (slow-path on iGPU machines), wire here. The post-splash block
-        # in run() wires on the fast-path. _monitor_wired prevents double-wire.
+        # Late-fire monitor + NVIDIA card wiring: if main.show() already ran
+        # before this slot fired (slow-path on iGPU machines), wire here. The
+        # post-splash block in run() wires on the fast-path. _monitor_wired
+        # prevents double-wire (both monitor and NVIDIA cards wire together).
         if main.isVisible() and not runtime.get("_monitor_wired", False):
             try:
                 _specs = runtime.get("preloaded_specs", {}) or {}
                 main._dashboard.set_monitor_data(_specs.get("DisplayCapabilities", []))
                 main._dashboard.monitor_fix_requested.connect(self.on_monitor_fix_requested)
                 main._dashboard.monitor_refresh_requested.connect(self.refresh_monitor_card)
+                main._dashboard.seed_dlss_priority(_specs)
+                main._dashboard.set_nvidia_data(_specs.get("NVIDIA", []))
+                # Findings parity with the fast path (app.py run()) -- without
+                # this, slow-path machines never got the NVIDIA WARNING/OK text.
+                from src.agent_tools.nvidia_profile import analyze_nvidia_profile
+                main._dashboard.set_nvidia_profile_findings(analyze_nvidia_profile(_specs))
+                main._dashboard.nvidia_fix_requested.connect(self.on_nvidia_fix_requested)
+                from src.agent_tools.game_mode import analyze_game_mode
+                from src.agent_tools.power_plan import analyze_power_plan
+                main._dashboard.set_power_plan_data(_specs.get("PowerPlan"))
+                main._dashboard.set_game_mode_data(_specs.get("GameMode"))
+                main._dashboard.set_power_plan_findings(analyze_power_plan(_specs))
+                main._dashboard.set_game_mode_findings(analyze_game_mode(_specs))
+                main._dashboard.power_plan_fix_requested.connect(self.on_power_plan_fix_requested)
+                main._dashboard.game_mode_fix_requested.connect(self.on_game_mode_fix_requested)
                 runtime["_monitor_wired"] = True
-                log.info("GUI Startup: monitor card wired (late-fire path)")
+                log.info("GUI Startup: monitor + NVIDIA + power/game cards wired (late-fire path)")
             except Exception as exc:
-                log.warning("Could not wire monitor card (late path): %s", exc, exc_info=True)
+                log.warning("Could not wire monitor/NVIDIA cards (late path): %s", exc, exc_info=True)
 
         # Seed the Applied Fixes card (T-016). on_finished fires exactly once per
         # session on both the fast and slow startup paths, so seeding here covers
@@ -233,8 +306,6 @@ class StartupCoordinator:
         # RevertView.__init__; the QFileSystemWatcher keeps it fresh thereafter.
         # Reuses _reload_last_run -- the same load_manifest + set_last_run path.
         self._reload_last_run()
-
-        log.info("GUI Startup: on_finished exit")
 
     def on_lhm_ready(self, lhm) -> None:
         """Start dashboard polling the moment LHM is ready (orchestrator Step 1).
@@ -285,11 +356,119 @@ class StartupCoordinator:
         refresh_worker.failed.connect(refresh_thread.quit)
         refresh_thread.finished.connect(refresh_worker.deleteLater)
         refresh_thread.finished.connect(refresh_thread.deleteLater)
-        refresh_thread.finished.connect(lambda: runtime.pop("monitor_refresh_thread", None))
-        refresh_thread.finished.connect(lambda: runtime.pop("monitor_refresh_worker", None))
+        refresh_thread.finished.connect(self._on_refresh_thread_finished)
         runtime["monitor_refresh_thread"] = refresh_thread
         runtime["monitor_refresh_worker"] = refresh_worker
         refresh_thread.start()
+
+
+    def refresh_dashboard_fix_cards(self, scope: set[str] | None = None) -> None:
+        """Re-collect the fix-relevant spec sections on a worker thread and
+        repopulate the affected Dashboard fix cards.
+
+        Generalizes the monitor card's post-fix live re-probe
+        (``refresh_monitor_card``) to all fix cards. The cards are built once at
+        startup from the cached ``preloaded_specs`` snapshot; after the pipeline
+        (or a revert) mutates the system that snapshot is stale and the cards
+        keep showing old data / offering already-applied fixes.
+
+        ``scope`` is the set of spec-section keys to re-collect (derived from the
+        session's applied fixes via ``_sections_for_fixes``):
+          * ``None``      -> re-collect every fix section (full refresh / fallback).
+          * a non-empty set -> re-collect only those sections (and repaint only
+            their cards) -- e.g. skip the slow NVIDIA export when no NVIDIA fix ran.
+          * an empty set  -> nothing changed this session; do nothing.
+
+        Re-collection runs through the same ``collect_fix_sections`` collectors and
+        the same analyzers the startup wiring uses -- one source of truth shared by
+        the Dashboard and the optimization flow.
+        """
+        runtime = self._runtime
+        if scope is not None and not scope:
+            self._log.info("Dashboard rescan skipped: no fix sections changed this session")
+            return
+        # Revert and pipeline are mutually exclusive; this fires from
+        # pipeline-finished (after the thread is cleared) and revert-finished.
+        if runtime.get("pipeline_thread") is not None:
+            self._log.warning("Dashboard rescan suppressed: pipeline is running")
+            return
+        if runtime.get("dashboard_rescan_thread") is not None:
+            return  # already in-flight; the existing worker will deliver the result
+        from src.gui.worker import _DashboardRescanWorker
+        rescan_thread = QThread()
+        rescan_worker = _DashboardRescanWorker(sections=scope)
+        rescan_worker.moveToThread(rescan_thread)
+        rescan_thread.started.connect(rescan_worker.run)
+        rescan_worker.finished.connect(self._on_dashboard_rescan_result)
+        rescan_worker.failed.connect(self._on_dashboard_rescan_failed)
+        rescan_worker.finished.connect(rescan_thread.quit)
+        rescan_worker.failed.connect(rescan_thread.quit)
+        rescan_thread.finished.connect(rescan_worker.deleteLater)
+        rescan_thread.finished.connect(rescan_thread.deleteLater)
+        rescan_thread.finished.connect(self._on_dashboard_rescan_thread_finished)
+        runtime["dashboard_rescan_thread"] = rescan_thread
+        runtime["dashboard_rescan_worker"] = rescan_worker
+        rescan_thread.start()
+
+    @Slot(dict)
+    def _on_dashboard_rescan_result(self, sections: dict) -> None:
+        """Merge fresh fix sections into preloaded_specs and repopulate the cards
+        for the sections that were actually re-collected.
+
+        Mirrors ``_on_refresh_result`` (monitor) for every fix card, using the
+        same ``set_*`` / ``analyze_*`` calls the startup wiring in app.py uses, so
+        the Dashboard and the optimization flow always derive from one source.
+        Only cards whose section key is present in ``sections`` are touched -- a
+        scoped re-collect leaves the other cards alone, and a failed/empty
+        collector for an unscoped section can't clobber a good card. Each card is
+        guarded independently so one failure can't strand the rest.
+        """
+        main = self._main
+        runtime = self._runtime
+        specs = runtime.get("preloaded_specs", {}) or {}
+        specs.update(sections)
+        runtime["preloaded_specs"] = specs
+
+        # Monitor (display) card.
+        if "DisplayCapabilities" in sections:
+            try:
+                main._dashboard.set_monitor_data(specs.get("DisplayCapabilities", []) or [])
+            except Exception as exc:
+                self._log.warning("Monitor card rescan failed: %s", exc, exc_info=True)
+        # NVIDIA: re-show/hide cards + DLSS recommendation, then per-setting findings.
+        if "NVIDIA" in sections:
+            try:
+                from src.agent_tools.nvidia_profile import analyze_nvidia_profile
+                main._dashboard.set_nvidia_data(specs.get("NVIDIA", []))
+                main._dashboard.set_nvidia_profile_findings(analyze_nvidia_profile(specs))
+            except Exception as exc:
+                self._log.warning("NVIDIA card rescan failed: %s", exc, exc_info=True)
+        # Power Plan card.
+        if "PowerPlan" in sections:
+            try:
+                from src.agent_tools.power_plan import analyze_power_plan
+                main._dashboard.set_power_plan_data(specs.get("PowerPlan"))
+                main._dashboard.set_power_plan_findings(analyze_power_plan(specs))
+            except Exception as exc:
+                self._log.warning("Power Plan card rescan failed: %s", exc, exc_info=True)
+        # Game Mode card.
+        if "GameMode" in sections:
+            try:
+                from src.agent_tools.game_mode import analyze_game_mode
+                main._dashboard.set_game_mode_data(specs.get("GameMode"))
+                main._dashboard.set_game_mode_findings(analyze_game_mode(specs))
+            except Exception as exc:
+                self._log.warning("Game Mode card rescan failed: %s", exc, exc_info=True)
+
+    @Slot(str)
+    def _on_dashboard_rescan_failed(self, exc_str: str) -> None:
+        self._log.warning("Could not rescan dashboard fix cards: %s", exc_str)
+
+    @Slot()
+    def _on_dashboard_rescan_thread_finished(self) -> None:
+        runtime = self._runtime
+        runtime.pop("dashboard_rescan_thread", None)
+        runtime.pop("dashboard_rescan_worker", None)
 
     def _on_refresh_result(self, displays: list) -> None:
         main = self._main
@@ -308,15 +487,14 @@ class StartupCoordinator:
         log = self._log
         # Guard: dashboard fix during a pipeline run races ApplyPhase's
         # _fix_display -- concurrent ChangeDisplaySettingsExW + concurrent
-        # manifest appends would record the wrong "before" state and break
-        # revert.
+        # manifest appends would record the wrong "before" state and break revert.
         if runtime.get("pipeline_thread") is not None:
             log.warning("Monitor fix suppressed: pipeline is running")
             return
-        # Guard: rapid double-click would spawn two _MonitorFixWorker threads;
-        # the second's manifest "before" entry would be the first's after.
-        if runtime.get("monitor_fix_thread") is not None:
-            log.warning("Monitor fix already in progress -- ignoring")
+        # Guard: only one card fix at a time. Prevents concurrent NPI imports,
+        # double restore-point creation, and manifest-write races.
+        if runtime.get("card_fix_in_progress"):
+            log.warning("Monitor fix suppressed: a card fix is already in progress")
             return
         specs = runtime.get("preloaded_specs", {}) or {}
         displays = specs.get("DisplayCapabilities", []) or []
@@ -341,21 +519,313 @@ class StartupCoordinator:
         dialog = BatchSelectionDialog([proposal], parent=main)
         if not dialog.exec() or not dialog.selected_indices():
             return
+        # Restore-point gate (shared across all dashboard card fixes). Approval
+        # collected here on the GUI thread; the worker creates it non-interactively.
+        create_rp = self._ensure_restore_point_choice(main)
         # Filter so _fix_display targets ONLY this device
         filtered_specs = {**specs, "DisplayCapabilities": [target]}
         from src.gui.worker import _MonitorFixWorker
         fix_thread = QThread()
-        fix_worker = _MonitorFixWorker(filtered_specs)
+        fix_worker = _MonitorFixWorker(filtered_specs, create_rp)
         fix_worker.moveToThread(fix_thread)
         fix_thread.started.connect(fix_worker.run)
         fix_worker.finished.connect(fix_thread.quit)
         fix_thread.finished.connect(self.refresh_monitor_card)
         fix_thread.finished.connect(fix_worker.deleteLater)
         fix_thread.finished.connect(fix_thread.deleteLater)
+        fix_worker.result.connect(self._on_monitor_fix_result)
         runtime["monitor_fix_thread"] = fix_thread
         runtime["monitor_fix_worker"] = fix_worker
-        fix_thread.finished.connect(lambda: runtime.pop("monitor_fix_thread", None))
-        fix_thread.finished.connect(lambda: runtime.pop("monitor_fix_worker", None))
+        runtime["card_fix_in_progress"] = True
+        if create_rp:
+            runtime["restore_point_in_progress"] = True
+        fix_thread.finished.connect(self._on_monitor_fix_thread_finished)
+        fix_thread.start()
+
+
+    def _ensure_restore_point_choice(self, parent) -> bool:
+        """GUI-thread gate: decide whether the worker should create a restore point.
+
+        Returns True only when no restore point exists yet this session (per the
+        session manifest) AND the user accepts the prompt. The actual creation
+        runs non-interactively in the fix worker via
+        ``create_restore_point(assume_approved=True)`` -- collecting approval
+        here (not in the worker) avoids the ``prompt_approval`` deadlock in the
+        event-loop-less worker thread. The pipeline's BootstrapPhase consults the
+        same manifest flag, so a card-created restore point isn't asked for twice.
+        """
+        from src.utils.revert import load_manifest
+        manifest = load_manifest()
+        if manifest is not None and manifest.get("restore_point_created"):
+            return False  # already created this session; pipeline + cards reuse it
+        from src.gui.widgets.confirm_dialog import ConfirmDialog
+        dlg = ConfirmDialog(
+            "Create a System Restore Point?",
+            "Recommended before changing system settings — it lets you roll back if "
+            "anything goes wrong. Created once per session (this may take a minute).",
+            parent=parent,
+            yes_label="Create Restore Point",
+            no_label="Skip",
+        )
+        return bool(dlg.exec())
+
+    def _on_card_fix_result(self, check_name: str, ok: bool) -> None:
+        """Show an error dialog if a dashboard card fix failed."""
+        if not ok:
+            from src.gui.widgets.dialogs import CardDialog
+            CardDialog(
+                "Fix failed",
+                f"The {check_name} fix did not complete. Check the debug log for details.",
+                tone="error",
+                parent=self._main,
+            ).exec()
+
+    # ── Card-fix worker-thread cleanup (queued to the GUI thread) ───────
+    # These run as their OWN queued events on the main thread (this coordinator
+    # is a QObject). Each clears card_fix_in_progress FIRST/unconditionally so a
+    # later exception in any sibling slot on the same QThread.finished signal
+    # (e.g. refresh_monitor_card) can never strand the guard and lock the
+    # dashboard. Replacing bare-lambda connections also fixes the off-main-thread
+    # set_monitor_data / leaked refresh QThread that prevented a clean exit.
+
+    @Slot()
+    def _on_monitor_fix_thread_finished(self) -> None:
+        runtime = self._runtime
+        runtime.pop("card_fix_in_progress", None)
+        runtime.pop("restore_point_in_progress", None)
+        runtime.pop("monitor_fix_thread", None)
+        runtime.pop("monitor_fix_worker", None)
+
+    @Slot()
+    def _on_nvidia_fix_thread_finished(self) -> None:
+        runtime = self._runtime
+        runtime.pop("card_fix_in_progress", None)
+        runtime.pop("restore_point_in_progress", None)
+        runtime.pop("nvidia_fix_thread", None)
+        runtime.pop("nvidia_fix_worker", None)
+
+    @Slot()
+    def _on_setting_fix_thread_finished(self) -> None:
+        runtime = self._runtime
+        runtime.pop("card_fix_in_progress", None)
+        runtime.pop("restore_point_in_progress", None)
+        runtime.pop("setting_fix_thread", None)
+        runtime.pop("setting_fix_worker", None)
+
+    @Slot()
+    def _on_refresh_thread_finished(self) -> None:
+        runtime = self._runtime
+        runtime.pop("monitor_refresh_thread", None)
+        runtime.pop("monitor_refresh_worker", None)
+
+    @Slot()
+    def _on_thermal_retry_thread_finished(self) -> None:
+        # Pops only thermal_retry_thread; _on_thermal_retry_finished owns the
+        # thermal_retry_worker pop (it reads the worker's result first).
+        self._runtime.pop("thermal_retry_thread", None)
+
+    @Slot(bool)
+    def _on_monitor_fix_result(self, ok: bool) -> None:
+        """Queued (main-thread) wrapper for the monitor card-fix result."""
+        self._on_card_fix_result("display", ok)
+
+    @Slot(bool)
+    def _on_nvidia_fix_result(self, ok: bool) -> None:
+        """Queued (main-thread) wrapper for the NVIDIA card-fix result.
+
+        Reads the check_name captured in on_nvidia_fix_requested rather than
+        self.sender() -- the latter is unreliable for queued connections and
+        risks dereferencing a deleteLater-d worker.
+        """
+        check_name = self._nvidia_fix_check_name or "nvidia_profile"
+        self._on_card_fix_result(check_name, ok)
+        if ok and check_name == "nvidia_profile":
+            self._main._dashboard.set_nvidia_profile_findings({"status": "OK"})
+
+    @Slot(bool)
+    def _on_setting_fix_result(self, ok: bool) -> None:
+        """Queued (main-thread) wrapper for the Power Plan / Game Mode result.
+
+        Reads the check_name captured in _start_setting_fix rather than
+        self.sender() -- the latter is unreliable for queued connections and
+        risks dereferencing a deleteLater-d worker.
+        """
+        check_name = self._setting_fix_check_name or "power_plan"
+        self._on_card_fix_result(check_name, ok)
+        if ok:
+            # Optimistic applied state; a revert re-scans via
+            # refresh_fix_cards_after_revert.
+            if check_name == "game_mode":
+                self._main._dashboard.set_game_mode_findings({"status": "OK"})
+            else:
+                self._main._dashboard.set_power_plan_findings({"status": "OK"})
+
+    def on_nvidia_fix_requested(self, check_name: str) -> None:
+        runtime = self._runtime
+        main = self._main
+        log = self._log
+        # Guard: a dashboard NVIDIA fix during a pipeline run races ApplyPhase's
+        # nvidia_profile fix -- concurrent NPI imports + manifest appends.
+        if runtime.get("pipeline_thread") is not None:
+            log.warning("NVIDIA fix suppressed: pipeline is running")
+            return
+        # Guard: only one card fix at a time. Prevents concurrent NPI imports,
+        # double restore-point creation, and manifest-write races.
+        if runtime.get("card_fix_in_progress"):
+            log.warning("NVIDIA fix suppressed: a card fix is already in progress")
+            return
+        specs = runtime.get("preloaded_specs", {}) or {}
+        nvidia = specs.get("NVIDIA", [])
+        if not isinstance(nvidia, list) or not nvidia:
+            log.warning("NVIDIA fix requested but no NVIDIA GPU in specs")
+            return
+
+        gpu_name = str(nvidia[0].get("GPU") or "your NVIDIA GPU")
+        if check_name == "nvidia_dlss_preset":
+            from src.utils.dlss_presets import get_preset
+            preset = get_preset(gpu_name)
+            letter = preset.letter if preset is not None else "?"
+            title = f"Set DLSS Preset {letter}"
+            desc = (
+                f"{gpu_name}: force DLSS Preset {letter} (the recommended AI upscaling "
+                f"model for your GPU). Changes ONLY the DLSS preset — "
+                f"All changes revertable and backed up, lil_bro has your back"
+            )
+            tag = "NVIDIA DLSS"
+        else:  # nvidia_profile (full)
+            title = "Optimize NVIDIA Driver Profile"
+            desc = (
+                f"{gpu_name}: apply the Nvidia Profile Inspector gaming profile (MORE FPS) — "
+                f"enables G-Sync, VSync, FPS cap, ReBar, "
+                f"and Maximum Performance power mode. All changes revertable and backed up "
+                f"with lil_bro looking out"
+            )
+            tag = "NVIDIA"
+
+        proposal = {
+            "finding": check_name,
+            "title": title,
+            "sev": "medium",
+            "desc": desc,
+            "can_auto_fix": True,
+            "mode": "AUTO",
+            "tag": tag,
+        }
+        from src.gui.widgets.batch_selection_dialog import BatchSelectionDialog
+        dialog = BatchSelectionDialog([proposal], parent=main)
+        if not dialog.exec() or not dialog.selected_indices():
+            return
+
+        # Restore-point gate (shared with the monitor fix). Approval collected
+        # here on the GUI thread; the worker creates it non-interactively.
+        create_rp = self._ensure_restore_point_choice(main)
+
+        # Filter so the handler only sees the NVIDIA payload.
+        filtered_specs = {**specs, "NVIDIA": nvidia}
+        self._nvidia_fix_check_name = check_name
+        from src.gui.worker import _CardFixWorker
+        fix_thread = QThread()
+        fix_worker = _CardFixWorker(check_name, filtered_specs, create_rp)
+        fix_worker.moveToThread(fix_thread)
+        fix_thread.started.connect(fix_worker.run)
+        fix_worker.finished.connect(fix_thread.quit)
+        fix_thread.finished.connect(fix_worker.deleteLater)
+        fix_thread.finished.connect(fix_thread.deleteLater)
+        fix_worker.result.connect(self._on_nvidia_fix_result)
+        runtime["nvidia_fix_thread"] = fix_thread
+        runtime["nvidia_fix_worker"] = fix_worker
+        runtime["card_fix_in_progress"] = True
+        if create_rp:
+            runtime["restore_point_in_progress"] = True
+        fix_thread.finished.connect(self._on_nvidia_fix_thread_finished)
+        fix_thread.start()
+
+    # ── Power Plan / Game Mode card fixes (T-034) ───────────────────────
+    # One card per fix (the dashboard is the pick-and-choose path; the
+    # pipeline is apply-all); both route through the shared
+    # _start_setting_fix below.
+
+    def on_power_plan_fix_requested(self) -> None:
+        self._start_setting_fix("power_plan", "PowerPlan", "POWER PLAN")
+
+    def on_game_mode_fix_requested(self) -> None:
+        self._start_setting_fix("game_mode", "GameMode", "GAME MODE")
+
+    def _start_setting_fix(self, check_name: str, spec_key: str, tag: str) -> None:
+        """Shared approval + worker spawn for the Power Plan / Game Mode cards.
+
+        Mirrors on_nvidia_fix_requested: guards -> BatchSelectionDialog ->
+        restore-point gate -> _CardFixWorker on its own QThread. ``check_name``
+        must exactly match the @register_fix key in fix_dispatch.py.
+        """
+        runtime = self._runtime
+        main = self._main
+        log = self._log
+        # Guard: a dashboard fix during a pipeline run races ApplyPhase's
+        # handler for the same check -- concurrent system writes + manifest
+        # appends.
+        if runtime.get("pipeline_thread") is not None:
+            log.warning("%s fix suppressed: pipeline is running", check_name)
+            return
+        # Guard: only one card fix at a time. Prevents double restore-point
+        # creation and manifest-write races.
+        if runtime.get("card_fix_in_progress"):
+            log.warning("%s fix suppressed: a card fix is already in progress", check_name)
+            return
+        specs = runtime.get("preloaded_specs", {}) or {}
+        entry = specs.get(spec_key)
+        # Same gate as Dashboard.set_*_data: no before-state means the fix
+        # would record as non-revertible -- never offer that path.
+        if not isinstance(entry, dict) or not entry or "error" in entry:
+            log.warning("%s fix requested but no usable %s entry in specs", check_name, spec_key)
+            return
+
+        # Canonical title/explanation from FALLBACK_PROPOSALS -- single source
+        # of truth shared with the pipeline approval flow (no hardcoded copy).
+        from src.llm.action_proposer import propose_for_check
+        prop = propose_for_check(check_name) or {}
+        sev = {"HIGH": "high", "MEDIUM": "medium"}.get(str(prop.get("severity", "")), "medium")
+        proposal = {
+            "finding": check_name,
+            "title": str(prop.get("proposed_action", check_name)),
+            "sev": sev,
+            "desc": (
+                f"{prop.get('explanation', '')} "
+                f"All changes revertable and backed up, lil_bro has your back"
+            ),
+            "can_auto_fix": True,
+            "mode": "AUTO",
+            "tag": tag,
+        }
+        from src.gui.widgets.batch_selection_dialog import BatchSelectionDialog
+        dialog = BatchSelectionDialog([proposal], parent=main)
+        if not dialog.exec() or not dialog.selected_indices():
+            return
+
+        # Restore-point gate (shared with the monitor/NVIDIA fixes). Approval
+        # collected here on the GUI thread; the worker creates it
+        # non-interactively.
+        create_rp = self._ensure_restore_point_choice(main)
+
+        # Strictly narrowed: _fix_power_plan/_fix_game_mode read only their
+        # own spec key.
+        filtered_specs = {spec_key: dict(entry)}
+        self._setting_fix_check_name = check_name
+        from src.gui.worker import _CardFixWorker
+        fix_thread = QThread()
+        fix_worker = _CardFixWorker(check_name, filtered_specs, create_rp)
+        fix_worker.moveToThread(fix_thread)
+        fix_thread.started.connect(fix_worker.run)
+        fix_worker.finished.connect(fix_thread.quit)
+        fix_thread.finished.connect(fix_worker.deleteLater)
+        fix_thread.finished.connect(fix_thread.deleteLater)
+        fix_worker.result.connect(self._on_setting_fix_result)
+        runtime["setting_fix_thread"] = fix_thread
+        runtime["setting_fix_worker"] = fix_worker
+        runtime["card_fix_in_progress"] = True
+        if create_rp:
+            runtime["restore_point_in_progress"] = True
+        fix_thread.finished.connect(self._on_setting_fix_thread_finished)
         fix_thread.start()
 
 
@@ -388,7 +858,7 @@ class StartupCoordinator:
         thread.finished.connect(thread.deleteLater)
         runtime["thermal_retry_thread"] = thread
         runtime["thermal_retry_worker"] = worker
-        thread.finished.connect(lambda: runtime.pop("thermal_retry_thread", None))
+        thread.finished.connect(self._on_thermal_retry_thread_finished)
         thread.start()
 
     def _on_thermal_retry_finished(self) -> None:

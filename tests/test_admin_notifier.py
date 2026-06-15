@@ -1,7 +1,7 @@
 """Tests for AdminNotifier — the styled non-modal not-elevated warning dialog.
 
 Uses the offscreen Qt platform (set in conftest.py) + the qtbot fixture so a
-QApplication exists. The dialog is a real custom QDialog (no QMessageBox), so the
+QApplication exists. The dialog is a real CardDialog (no QMessageBox), so the
 tests inspect the live widget tree.
 """
 
@@ -29,7 +29,7 @@ def test_admin_warning_dialog_follows_popout_rule(qtbot):
     dialog = AdminWarningDialog()
     qtbot.addWidget(dialog)
 
-    assert dialog.objectName() == "adminDialog"  # drives the DESIGN.md card QSS
+    assert dialog.objectName() == "cardDialog"  # drives the DESIGN.md card QSS
     assert dialog.isModal() is False  # non-modal: never blocks startup
 
     # The popout rule (WASDInputFilter) clicks the surface's isDefault() button on W.

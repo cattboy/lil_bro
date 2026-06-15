@@ -193,6 +193,87 @@ class TestCleanupStaleMei:
         assert our_mei.exists(), "Must not delete current process _MEIPASS"
         assert not other_mei.exists(), "Must delete orphaned _MEI dirs"
 
+    def test_logs_fail_when_rmtree_locked(self, tmp_path, monkeypatch):
+        """A locked _MEI dir (OSError) must be logged, not silently swallowed."""
+        from src.pipeline.post_run_cleanup import _cleanup_stale_mei
+        orphan = tmp_path / "_MEI123456"
+        orphan.mkdir()
+        monkeypatch.chdir(tmp_path)
+        with patch("src.pipeline.post_run_cleanup.action_logger") as mock_logger, \
+             patch("shutil.rmtree", side_effect=OSError("tools locked by cmd")):
+            _cleanup_stale_mei()  # must not raise; loop continues past the failure
+        outcomes = [kw.get("outcome") for _, kw in mock_logger.log_action.call_args_list]
+        messages = [a[1] for a, _ in mock_logger.log_action.call_args_list]
+        assert "FAIL" in outcomes
+        assert any("Failed to remove stale PyInstaller dir" in m for m in messages)
+
+    def test_at_startup_logs_warn_before_removal(self, tmp_path, monkeypatch):
+        """At boot, a leftover _MEI must be logged WARN *before* it is removed."""
+        from src.pipeline.post_run_cleanup import _cleanup_stale_mei
+        orphan = tmp_path / "_MEI123456"
+        orphan.mkdir()
+        (orphan / "tools").mkdir()
+        monkeypatch.chdir(tmp_path)
+        with patch("src.pipeline.post_run_cleanup.action_logger") as mock_logger:
+            _cleanup_stale_mei(at_startup=True)
+        # The orphan is gone …
+        assert not orphan.exists()
+        # … and a WARN attributing it to the prior run's bootloader fired before
+        # the "Removed stale PyInstaller dir" entry.
+        messages = [a[1] for a, _ in mock_logger.log_action.call_args_list]
+        outcomes = [kw.get("outcome") for _, kw in mock_logger.log_action.call_args_list]
+        assert "WARN" in outcomes
+        warn_idx = next(
+            i for i, m in enumerate(messages) if "Previous run left a temp dir" in m
+        )
+        removed_idx = next(
+            i for i, m in enumerate(messages) if "Removed stale PyInstaller dir" in m
+        )
+        assert warn_idx < removed_idx, "WARN must be logged before removal"
+
+    def test_at_startup_no_mei_logs_no_warn(self, tmp_path, monkeypatch):
+        """At boot with no _MEI dirs, no WARN is logged and nothing raises."""
+        from src.pipeline.post_run_cleanup import _cleanup_stale_mei
+        (tmp_path / "somefile.txt").touch()
+        monkeypatch.chdir(tmp_path)
+        with patch("src.pipeline.post_run_cleanup.action_logger") as mock_logger:
+            _cleanup_stale_mei(at_startup=True)  # must not raise
+        messages = [a[1] for a, _ in mock_logger.log_action.call_args_list]
+        assert not any("Previous run left a temp dir" in m for m in messages)
+
+    def test_default_sweep_does_not_log_warn(self, tmp_path, monkeypatch):
+        """The exit-time sweep (at_startup=False) must not emit the boot WARN."""
+        from src.pipeline.post_run_cleanup import _cleanup_stale_mei
+        orphan = tmp_path / "_MEI222222"
+        orphan.mkdir()
+        monkeypatch.chdir(tmp_path)
+        with patch("src.pipeline.post_run_cleanup.action_logger") as mock_logger:
+            _cleanup_stale_mei()  # default at_startup=False
+        messages = [a[1] for a, _ in mock_logger.log_action.call_args_list]
+        assert not any("Previous run left a temp dir" in m for m in messages)
+
+    def test_orphaned_mei_at_startup_noop_when_empty(self, tmp_path, monkeypatch):
+        """Public wrapper is a no-op that never raises when CWD has no _MEI dirs."""
+        from src.pipeline.post_run_cleanup import cleanup_orphaned_mei_at_startup
+        monkeypatch.chdir(tmp_path)
+        cleanup_orphaned_mei_at_startup()  # must not raise
+
+    def test_orphaned_mei_at_startup_skips_current_meipass(self, tmp_path, monkeypatch):
+        """Public wrapper logs+removes orphans but never the current _MEIPASS."""
+        from src.pipeline.post_run_cleanup import cleanup_orphaned_mei_at_startup
+        our_mei = tmp_path / "_MEI999999"
+        our_mei.mkdir()
+        other_mei = tmp_path / "_MEI111111"
+        other_mei.mkdir()
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr("sys._MEIPASS", str(our_mei), raising=False)
+        with patch("src.pipeline.post_run_cleanup.action_logger") as mock_logger:
+            cleanup_orphaned_mei_at_startup()
+        assert our_mei.exists(), "Must not delete current process _MEIPASS"
+        assert not other_mei.exists(), "Must remove orphaned _MEI dirs"
+        messages = [a[1] for a, _ in mock_logger.log_action.call_args_list]
+        assert any("Previous run left a temp dir" in m for m in messages)
+
 
 # ---------------------------------------------------------------------------
 # _cleanup_cwd_tempdir
@@ -214,6 +295,20 @@ class TestCleanupCwdTempdir:
         from src.pipeline.post_run_cleanup import _cleanup_cwd_tempdir
         monkeypatch.chdir(tmp_path)
         _cleanup_cwd_tempdir()  # must not raise
+
+    def test_logs_fail_when_rmtree_locked(self, tmp_path, monkeypatch):
+        """A locked dir (OSError) must be logged, not silently swallowed."""
+        from src.pipeline.post_run_cleanup import _cleanup_cwd_tempdir
+        lil_bro_dir = tmp_path / "lil_bro"
+        lil_bro_dir.mkdir()
+        monkeypatch.chdir(tmp_path)
+        with patch("src.pipeline.post_run_cleanup.action_logger") as mock_logger, \
+             patch("shutil.rmtree", side_effect=OSError("dir locked")):
+            _cleanup_cwd_tempdir()  # must not raise
+        outcomes = [kw.get("outcome") for _, kw in mock_logger.log_action.call_args_list]
+        messages = [a[1] for a, _ in mock_logger.log_action.call_args_list]
+        assert "FAIL" in outcomes
+        assert any("Failed to remove runtime temp dir" in m for m in messages)
 
 
 # ---------------------------------------------------------------------------

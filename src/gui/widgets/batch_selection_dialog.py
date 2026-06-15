@@ -14,17 +14,35 @@ digit key (1-9) toggles that fix's selection.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QVBoxLayout,
     QWidget,
 )
 
 from src.gui.theme import repolish
+from src.gui.widgets.scroll_hint import ScrollHintArrow
+
+class _FitContentScrollArea(QScrollArea):
+    """Scroll area that advertises its *content's* sizeHint as its own.
+
+    A stock ``QScrollArea`` reports a small fixed sizeHint, which would make the
+    dialog ignore its cards and always show a scrollbar. Returning the inner
+    widget's hint lets the dialog size to its content for short lists; the
+    dialog's ``maximumHeight`` clamp is what forces scrolling for long ones.
+    """
+
+    def sizeHint(self):  # noqa: N802  Qt override
+        w = self.widget()
+        return w.sizeHint() if w is not None else super().sizeHint()
+
 
 class _FixItem(QFrame):
     """One clickable fix row: checkbox, sev badge, title/desc, AUTO/MANUAL tag."""
@@ -120,7 +138,10 @@ class BatchSelectionDialog(QDialog):
         self.setWindowTitle("Apply These Fixes?")
         self.setObjectName("batchDialog")
         self.setModal(True)
-        self.setFixedWidth(540)
+        # Two columns when there is more than one fix: halves the card stack's
+        # height so the footer (Apply/Skip) stays on screen for long lists. A
+        # lone fix keeps the narrower single-column width.
+        self.setFixedWidth(820 if len(proposals) > 1 else 540)
         self.setAccessibleName("Batch selection dialog")
 
         self._proposals = proposals
@@ -164,14 +185,40 @@ class BatchSelectionDialog(QDialog):
         subtitle.setWordWrap(True)
         body_layout.addWidget(subtitle)
 
+        # Fix cards in a grid, filled left-to-right then top-to-bottom. Two
+        # columns once there is more than one fix; a single fix stays in one
+        # column so it isn't stranded beside an empty cell.
+        cols = 2 if count > 1 else 1
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(8)
+
         self._fix_items: list[_FixItem] = []
         for i, proposal in enumerate(proposals):
             item = _FixItem(i, proposal, self)
             item.toggled.connect(lambda idx=i: self._on_item_toggled(idx))
             self._fix_items.append(item)
-            body_layout.addWidget(item)
+            grid.addWidget(item, i // cols, i % cols)
 
-        layout.addWidget(body)
+        for c in range(cols):
+            grid.setColumnStretch(c, 1)
+
+        body_layout.addLayout(grid)
+
+        # Scroll the card body so the footer (Apply/Skip) can never be pushed
+        # off-screen as future pipeline checks add more fixes. The header and
+        # footer sit outside the scroll area and stay pinned; the dialog's
+        # maximumHeight (clamped to the screen below) is what triggers scrolling.
+        self._scroll = _FitContentScrollArea()
+        self._scroll.setObjectName("dialogScroll")
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self._scroll.setWidget(body)
+        layout.addWidget(self._scroll, 1)
 
         # ── Footer ────────────────────────────────────────────────────
         foot = QFrame()
@@ -195,6 +242,20 @@ class BatchSelectionDialog(QDialog):
         foot_row.addWidget(self._apply_btn)
 
         layout.addWidget(foot)
+
+        # Pulsing "▼ more below" affordance over the scroll viewport; reused
+        # from the dashboard. Self-manages visibility from the scrollbar range
+        # (hidden when the list already fits without scrolling).
+        self._scroll_hint = ScrollHintArrow(self._scroll)
+
+        # Never let the dialog grow taller than the screen, so the footer stays
+        # visible no matter how many fixes are proposed. Prefer the parent
+        # window's screen (correct on multi-monitor); fall back to the primary.
+        ref = parent if parent is not None else self
+        screen = ref.screen() or QGuiApplication.primaryScreen()
+        if screen is not None:
+            avail = screen.availableGeometry().height()
+            self.setMaximumHeight(max(360, avail - 96))
 
     # ── State sync ─────────────────────────────────────────────────────
 

@@ -28,6 +28,9 @@ from src.gui.signals import PipelineSignals
 from src.gui.startup import StartupOrchestrator
 from src.gui.startup_coordinator import StartupCompleter, StartupCoordinator
 from src.gui.windows.main_window import MainWindow
+from src.agent_tools.game_mode import analyze_game_mode
+from src.agent_tools.nvidia_profile import analyze_nvidia_profile
+from src.agent_tools.power_plan import analyze_power_plan
 from src.utils.action_logger import action_logger
 
 
@@ -91,12 +94,23 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
     # atomic-write in revert._write_manifest survives a hard kill; this wait
     # still lets the worker land its append cleanly so the user's "Fix Now"
     # click is reflected in the next session's Revert.
+    # Restore-point creation (Checkpoint-Computer) can take up to 60s; use a
+    # longer wait when one is in progress so the manifest entry lands cleanly.
+    # Falls back to 5s when only a fast NPI import is in flight.
+    _rp_wait = 65_000 if runtime.get("restore_point_in_progress") else 5_000
     monitor_fix_thread = runtime.get("monitor_fix_thread")
     if monitor_fix_thread is not None:
         try:
-            monitor_fix_thread.wait(3000)
+            monitor_fix_thread.wait(_rp_wait)
         except Exception:
             pass  # safe: monitor-fix-on-quit best-effort
+
+    nvidia_fix_thread = runtime.get("nvidia_fix_thread")
+    if nvidia_fix_thread is not None:
+        try:
+            nvidia_fix_thread.wait(_rp_wait)
+        except Exception:
+            pass  # safe: nvidia-fix-on-quit best-effort
 
     # Wait for an in-flight monitor refresh (200-800 ms ctypes
     # EnumDisplayDevicesW probe) so we don't tear down Qt while the
@@ -108,6 +122,17 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
             monitor_refresh_thread.wait(2000)
         except Exception:
             pass  # safe: monitor-refresh-on-quit best-effort
+
+    # Wait for an in-flight dashboard fix-card rescan (the post-pipeline /
+    # post-revert live re-collect). It is read-only, but its NVIDIA profile
+    # export can take a second or two, so allow a slightly longer wait so the
+    # worker's QThread isn't destroyed mid-run.
+    dashboard_rescan_thread = runtime.get("dashboard_rescan_thread")
+    if dashboard_rescan_thread is not None:
+        try:
+            dashboard_rescan_thread.wait(3000)
+        except Exception:
+            pass  # safe: dashboard-rescan-on-quit best-effort
 
     try:
         main._dashboard.stop_polling()
@@ -124,7 +149,7 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
     try:
         settings.save_geometry(main)
     except Exception:
-        pass  # safe: QSettings write failure should not block window close  # safe: QSettings write failure should not block window close
+        pass  # safe: QSettings write failure should not block window close
 
 
 def run(debug: bool = False) -> int:
@@ -138,6 +163,13 @@ def run(debug: bool = False) -> int:
     enable_debug_logging(level=level)
     log = get_debug_logger()
     _install_exception_hooks(log)
+
+    # Sweep any _MEI* extraction dir a PRIOR run's bootloader could not remove
+    # (a locked file -> the at-exit "Failed to remove temporary directory" dialog,
+    # which is unloggable in-process). Record it now, on the next launch, then
+    # delete it. No-op in dev mode (no _MEI*).
+    from src.pipeline.post_run_cleanup import cleanup_orphaned_mei_at_startup
+    cleanup_orphaned_mei_at_startup()
 
     log.debug("GUI Startup: app.run() entry")
 
@@ -161,6 +193,18 @@ def run(debug: bool = False) -> int:
     QApplication.setOrganizationName("lil_bro")
     app = QApplication.instance() or QApplication(sys.argv)
 
+    # Explicit AppUserModelID so the Windows taskbar groups this process as
+    # "lil_bro" and shows our window icon instead of the host python.exe's
+    # (dev mode). Must run before any window — including the splash — is
+    # shown, or the splash-phase taskbar entry keeps the default icon.
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("lil_bro")
+    except Exception:
+        pass  # safe: non-Windows or shell32 unavailable; window icon still applies
+
+    app.setWindowIcon(theme.app_icon())
+
     theme.load_fonts()
     app.setStyleSheet(theme.build_stylesheet())
 
@@ -181,7 +225,11 @@ def run(debug: bool = False) -> int:
 
     # ── Splash dialog ──────────────────────────────────────────────────
     from src.gui.widgets.splash import SplashDialog
-    splash = SplashDialog(parent=main)
+    # parent=None on purpose: an owned (parented) dialog gets no taskbar
+    # button on Windows, and `main` isn't shown yet — the app would be
+    # invisible in the taskbar for the whole 3-9 s splash. Top-level +
+    # setModal(True) keeps it application-modal and taskbar-visible.
+    splash = SplashDialog(parent=None)
 
     bridge = GuiBridge(PipelineSignals(), parent=app)
     bridge.install()
@@ -237,6 +285,7 @@ def run(debug: bool = False) -> int:
     # Sidebar revert button navigates to the revert page (wired in _build_sidebar).
     # The in-page revert action button triggers the actual revert run.
     main._revert_view.revert_requested.connect(pipeline.start_revert)
+    main._revert_view.system_restore_requested.connect(pipeline.open_system_restore)
 
     app.aboutToQuit.connect(
         lambda: _run_app_cleanup(main, bridge, runtime, log, settings, pawnio_was_preinstalled)
@@ -308,6 +357,16 @@ def run(debug: bool = False) -> int:
             main._dashboard.set_monitor_data(_specs.get("DisplayCapabilities", []))
             main._dashboard.monitor_fix_requested.connect(startup.on_monitor_fix_requested)
             main._dashboard.monitor_refresh_requested.connect(startup.refresh_monitor_card)
+            main._dashboard.seed_dlss_priority(_specs)
+            main._dashboard.set_nvidia_data(_specs.get("NVIDIA", []))
+            main._dashboard.set_nvidia_profile_findings(analyze_nvidia_profile(_specs))
+            main._dashboard.nvidia_fix_requested.connect(startup.on_nvidia_fix_requested)
+            main._dashboard.set_power_plan_data(_specs.get("PowerPlan"))
+            main._dashboard.set_game_mode_data(_specs.get("GameMode"))
+            main._dashboard.set_power_plan_findings(analyze_power_plan(_specs))
+            main._dashboard.set_game_mode_findings(analyze_game_mode(_specs))
+            main._dashboard.power_plan_fix_requested.connect(startup.on_power_plan_fix_requested)
+            main._dashboard.game_mode_fix_requested.connect(startup.on_game_mode_fix_requested)
             runtime["_monitor_wired"] = True
         except Exception as exc:
             log.warning("Could not wire monitor card: %s", exc, exc_info=True)

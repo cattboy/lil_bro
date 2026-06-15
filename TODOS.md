@@ -85,7 +85,8 @@ Read-only `LastRunCard` (`src/gui/widgets/last_run_card.py`) mirrors the session
 ---
 
 ### T-023 — DESIGN.md-aligned styling pass for all QMessageBox dialogs
-**Priority:** P3
+**Priority:** P3 — **COMPLETED 2026-06-04**
+Introduced the shared `CardDialog` template (`src/gui/widgets/dialogs.py`) — one DESIGN.md card (surface, tone-coloured icon, JetBrains-Mono title, glow primary, WASD `(W)`/`(S)` buttons, Esc handling) driven by a `cardTone` property. The two stock `QMessageBox` dialogs (`cap_notifier`, `main_window._open_debug_log`) now render as on-brand cards; `ConfirmDialog` / `AdminWarningDialog` / `MouseReadyDialog` were refactored onto the base and the three duplicate `_qss_*` blocks collapsed into one `_qss_card_dialog`. Multi-agent plan review (sonnet review + opus devil's-advocate + opus orchestrator + sonnet final) caught a `sev` property-name collision (→ renamed `cardTone`) and a missed `test_admin_notifier.py` objectName assertion. Deferred: T-025 (dialog style variants, seeded with MouseReady's pre-unify look), T-027 (emoji→QIcon). Original scope/Why/Fix kept below as historical context.
 **Effort:** S human / S with CC
 **Why:** The app's `QMessageBox` dialogs (the cap warning in `src/gui/cap_notifier.py` and the
 debug-log notice at `src/gui/windows/main_window.py:279`) use stock OS chrome, which clashes with
@@ -93,7 +94,10 @@ the dark / JetBrains-Mono / coral (`#FF6B6B`) system defined in `DESIGN.md`. Sto
 acceptable for a rare error dialog but is off-brand.
 **Fix:** Give all `QMessageBox` dialogs one DESIGN.md-aligned pass — dark theme, JetBrains Mono,
 `#FF6B6B` error accent — via shared QSS or a thin styled-dialog helper. Audit for any other stock
-dialogs at the same time.
+dialogs at the same time. Reference implementation: `src/gui/admin_notifier.py` +
+`_qss_admin_dialog` in `src/gui/theme/stylesheet_dialogs.py` already did this for the not-elevated
+warning (object-name-driven QSS, `warning` amber accent). `cap_notifier.py` should follow the same
+template (error dialog → `#FF6B6B` accent, not amber).
 **Blocked by:** Nothing.
 **Added:** 2026-06-01 (from /plan-ceo-review D7 on T-022)
 
@@ -109,6 +113,26 @@ dialogs at the same time.
 
 ---
 
+### T-025 — Dialog style variants (unique per-dialog looks)
+**Priority:** P3/P4
+**Effort:** M human / S-M with CC
+**Why:** Full-unify (T-023) collapsed every card dialog onto one `CardDialog` / `_qss_card_dialog` standard, so a dialog can no longer have a distinct look. MouseReadyDialog lost its pre-unify styling in the process. A variant mechanism would let intentional dialogs diverge from the standard card.
+**Fix:** Add a `variant` dynamic property on `CardDialog` (+ gated QSS, e.g. `QDialog#cardDialog[variant="bar"] ...` or `:not([variant="bar"])` on the prominent `#primary` rule). **Seed spec = MouseReadyDialog's pre-unify look, banked so it isn't lost:** accent bar (no icon); title JetBrains Mono 14px **weight 700**; description colour **`text_secondary` (#9B9AA0)**; **no** card background/border (flat dialog bg); primary button at the **global** `#primary` size (padding 8px 16px, weight 600). Template for future "unique" dialogs.
+**Blocked by:** Nothing. Build when a dialog genuinely needs a distinct look.
+**Added:** 2026-06-04 (user decision during T-023 full-unify — preserve MouseReady's distinct look for later)
+
+---
+
+### T-027 — CardDialog icons: emoji glyphs → QIcon/text tokens
+**Priority:** P4
+**Effort:** S human / S with CC
+**Why:** `CardDialog._TONE_GLYPH` uses emoji glyphs (⚡/⚠/ⓘ/✓) as the default icons, but `src/gui/theme/tokens.py` (AI-slop guardrail #7) blacklists emoji as design elements. The glyphs are an interim stand-in introduced with T-023.
+**Fix:** Replace the `tone→glyph` emoji map with QIcon assets or text tokens; keep the `icon` parameter caller-overridable so the swap is transparent to call sites.
+**Blocked by:** Nothing. Cosmetic; pairs with any future icon-set work.
+**Added:** 2026-06-04 (deferred from T-023 full-unify)
+
+---
+
 ### T-026 — Standalone System Diagnostics panel (sharable)
 **Priority:** P3 — gated on real support volume
 **Effort:** M human / S-M with CC
@@ -119,7 +143,82 @@ dialogs at the same time.
 
 ---
 
+### T-028 — DLSS V2 config overrides (target_mode / forced_letter)
+**Priority:** P3
+**Effort:** M human / S-M with CC
+**Why:** V1 ships one `nvidia.dlss.priority` knob (quality|fps). Power users may want per-resolution control (`target_mode`: dlaa/quality/balanced/performance/ultra_perf) and a hard `forced_letter` override that bypasses the capability resolver entirely.
+**Fix:** extend `NvidiaDlssConfig` (`src/config.py`) + `get_preset` (`src/utils/dlss_presets.py`) to honor `target_mode` and `forced_letter`; document in the config template. Pairs with the shipped GUI toggle.
+**Blocked by:** Nothing. Builds on the shipped V1 DLSS framework.
+**Added:** 2026-06-07 (deferred from /plan-eng-review on the DLSS framework)
+
+---
+
+### T-030 — DLSS Frame Generation guidance
+**Priority:** P2
+**Effort:** M human / S-M with CC
+**Why:** Frame Generation is the real VRAM consumer (per `docs/dlss_4_5_presets_by_gpu.json`) and a distinct lever from the SR preset; 50-series adds 6X Multi-Frame-Gen. Surfacing FrameGen guidance/toggle would round out the DLSS setup story.
+**Fix:** new NPI setting surface + card guidance; 50-series MFG specifics; VRAM messaging. Separate from the SR-preset framework.
+**Blocked by:** Nothing. Own design pass (kept out of the V1 PR to stay coherent).
+**Added:** 2026-06-07 (deferred E3 from /plan-ceo-review on the DLSS framework)
+
+---
+
+### T-031 — Per-game DLSS profiles (NPI per-application)
+**Priority:** P3
+**Effort:** L human / M with CC
+**Why:** NPI supports per-application profiles, not just the global forced letter. The per-mode matrix in `docs/dlss_4_5_presets_by_gpu.json` only fully makes sense per-game (quality→K, performance→M, ultra-perf→L). This is the "correct" model the global-letter wedge approximates.
+**Fix:** extend the setter to write per-application NPI profiles; game detection; per-game UI. Reuses the capability engine (`classify`/`get_preset`).
+**Blocked by:** Nothing. Significant scope.
+**Added:** 2026-06-07 (deferred E4 from /plan-ceo-review on the DLSS framework)
+
+---
+
+### T-032 — DLSS DLL version swapping (DLSS-Swapper-style)
+**Priority:** P3
+**Effort:** XL human / L with CC
+**Why:** Updating `nvngx_dlss.dll` in game install dirs to the latest version can improve image quality independent of the preset. High value but high risk — touches game files, needs a game-library scan + version DB, off the driver-profile wedge.
+**Fix:** detect installed games, locate/back-up/replace the DLL, track versions. Strong revert + safety story required.
+**Blocked by:** Nothing, but warrants careful safety review before scoping.
+**Added:** 2026-06-07 (deferred E5 from /plan-ceo-review on the DLSS framework)
+
+---
+
+### T-033 — Extend capability engine to FSR / XeSS (AMD / Intel)
+**Priority:** P3
+**Effort:** L human / M with CC
+**Why:** The capability-tier + priority engine (`classify`/`get_preset`) generalizes beyond NVIDIA. AMD (FSR) and Intel (XeSS) users get nothing today. Broadening would make lil_bro a vendor-agnostic upscaler optimizer.
+**Fix:** new tier/policy tables + appliers for FSR/XeSS (no NPI; different mechanisms). Mirror the `dlss_presets` service shape.
+**Blocked by:** Nothing. Large scope; different driver tooling per vendor.
+**Added:** 2026-06-07 (deferred E6 from /plan-ceo-review on the DLSS framework)
+
+---
+
+### T-035 — Bump the version banner in the next release
+**Priority:** P2
+**Effort:** XS human / XS with CC
+**Why:** `src/_version.py` (`__version__`) has read `0.9.1` since 2026-04-06, so the `SESSION START  |  lil_bro vX.Y.Z` banner logged at every run gives no signal of which build is actually running. This directly enabled the power-plan-card-not-updating bug: the shipped exe was built ~100s before its fix commit (`3c19356`), and the unchanged banner hid the staleness — the fix's source was present but never compiled in. See the new CLAUDE.md **Release Versioning** rule and `docs/debugging/bug-power-plan-card-not-updating/`.
+**Fix:** Bump `__version__` in `src/_version.py` as part of the next release (`document-release` / `/ship`) and rebuild `dist/lil_bro.exe` from that source so the banner matches the released build. Keep it in sync with `VERSION` / `pyproject.toml` versioning.
+**Blocked by:** Nothing. Do it at the next release.
+**Added:** 2026-06-15 (from /investigate of the power-plan card stale-exe bug)
+
+---
+
 ## Completed
+
+### T-034 — Power Plan + Game Mode Dashboard fix cards (with post-revert refresh)
+**Priority:** P3 — **COMPLETED 2026-06-11**
+Two separate card widgets (user direction: one card per fix — the Dashboard is the à-la-carte pick-and-choose path; the pipeline is apply-all): `PowerPlanCard` (`src/gui/widgets/power_plan_card.py`) + `GameModeCard` (`src/gui/widgets/game_mode_card.py`), each owning its own rendering via `set_findings(result)` (MonitorRefreshCard style — WARNING = analyzer message + `FALLBACK_PROPOSALS` explanation tooltip + Fix Now; OK = `✓` text, button hidden; bare `{"status": "OK"}` = optimistic post-fix text). Cards hidden when the spec entry is missing/errored (no before-state ⇒ fix would record non-revertible). Coordinator: `on_power_plan_fix_requested`/`on_game_mode_fix_requested` → shared `_start_setting_fix` (guards, spec gate, proposal from `propose_for_check`, BatchSelectionDialog, restore-point gate, `_CardFixWorker` — renamed from `_NvidiaProfileFixWorker`, already fully generic — with bound-method cleanup). Post-revert refresh extends `refresh_fix_cards_after_revert` with both analyzers over cached `preloaded_specs`. Both wiring paths covered (app.py fast path + `on_finished` late path); drive-by: late path gained the previously fast-path-only `set_nvidia_profile_findings` call. Mock GUI: `POWER_PLANS` fixtures built from production `KNOWN_PLANS`, combos + scenario keys + smoke-report lines; smoke also surfaced and fixed a cp1252 `UnicodeEncodeError` printing `✓` (same `errors="replace"` guard as `src/main.py`). 17 new tests; suite 1035 green. Original scope kept below as historical context.
+**Effort:** M human / S-M with CC
+**Why:** power_plan and game_mode are the only revertible fixes with no one-click Dashboard card — they can be applied only through the full pipeline, unlike NVIDIA (`NvidiaProfileCard`) and display (`MonitorRefreshCard`). Both already have pure, GUI-safe analyzers (`analyze_power_plan` `src/agent_tools/power_plan.py:20`, `analyze_game_mode` `src/agent_tools/game_mode.py:9`), `@register_fix` handlers in `fix_dispatch.py`, and revert handlers (`_revert_power_plan`/`_revert_game_mode` in `src/utils/revert.py`). The only gap is the card UI + wiring.
+**Fix:**
+1. New card widget(s) modelled on `src/gui/widgets/nvidia_profile_card.py` — pre-allocate the slot in `Dashboard.__init__`, populate via a `set_*_data` method, reuse the `monitorCard`/`pollLabel`/`pollStatus`/`primary` QSS (no new theme rules); add each new module to `lil_bro.spec` hiddenimports (CLAUDE.md bundling rule).
+2. Wire through the CLAUDE.md **Dashboard Fix Pattern**: apply button → Dashboard signal → `StartupCoordinator.on_*_fix_requested` → `start_session_manifest(restore_point_created=False)` then `execute_fix(check, filtered_specs)` on a worker mirroring `_NvidiaProfileFixWorker`; `BatchSelectionDialog` + restore-point gate; guard on `pipeline_thread` + `card_fix_in_progress`.
+3. Findings: call `set_*_findings(analyze_*(specs))` at startup wiring (mirror `app.py:326`) and optimistically mark applied after a successful card fix (mirror `_on_nvidia_fix_result`).
+4. **Post-revert refresh (REQUIRED):** extend `StartupCoordinator.refresh_fix_cards_after_revert` to also re-run `analyze_power_plan`/`analyze_game_mode` over `preloaded_specs` and feed the new cards — same pure-analyzer-on-cached-specs path as the NVIDIA card. Omitting this reproduces the optimistic-"applied"-after-revert bug that introduced `refresh_fix_cards_after_revert`.
+**Blocked by:** the "refresh dashboard fix cards after revert" change (provides the `refresh_fix_cards_after_revert` hook these cards plug into) — shipped.
+**Added:** 2026-06-10 (user request during the revert-refresh fix)
+
+---
 
 ### T-013 — Convert `PipelineWorker._cancel_requested` bool to `threading.Event`
 **Completed:** 2026-05-29

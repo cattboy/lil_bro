@@ -60,7 +60,6 @@ ALLOWLIST: dict[str, str] = {
     "src.gui.theme.stylesheet_interactive": "QSS builder under theme.stylesheet; covered via test_theme",
     "src.gui.theme.stylesheet_monitoring": "QSS builder under theme.stylesheet; covered via test_theme",
     # Thin Qt signal-wiring / widget glue; no isolated test yet.
-    "src.gui.pipeline_controller": "Qt signal wiring glue; no dedicated test",
     "src.gui.widgets.mouse_ready_dialog": "simple dialog widget; no dedicated test",
     "src.gui.widgets.output_view": "simple view widget; no dedicated test",
     # Heavy/offline GGUF loader — hard to unit-test without a model on disk.

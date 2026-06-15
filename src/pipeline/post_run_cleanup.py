@@ -22,6 +22,7 @@ from src.utils.formatting import print_info, print_dim
 from src.utils.action_logger import action_logger
 from src.utils.debug_logger import get_debug_logger
 from src.utils.platform import is_admin
+from src.utils.subprocess_utils import CREATE_NO_WINDOW
 
 _PAWNIO_SERVICE = "PawnIO"
 
@@ -32,6 +33,7 @@ def _pawnio_service_exists() -> bool:
         result = subprocess.run(
             ["sc", "query", _PAWNIO_SERVICE],
             capture_output=True, timeout=10, text=True,
+            creationflags=CREATE_NO_WINDOW,
         )
         # rc=0: service found; rc=1060: service does not exist
         return result.returncode == 0
@@ -45,6 +47,7 @@ def _run_sc(*args: str) -> bool:
         result = subprocess.run(
             ["sc", *args],
             capture_output=True, timeout=10, text=True,
+            creationflags=CREATE_NO_WINDOW,
         )
         # 0    = success
         # 1060 = service does not exist
@@ -55,14 +58,21 @@ def _run_sc(*args: str) -> bool:
         return False
 
 
-def _wait_for_driver_stopped(timeout: float = 10.0) -> bool:
-    """Poll sc query until PawnIO reports STOPPED or disappears. Returns True when safe."""
+def _wait_for_driver_stopped(timeout: float = 5.0) -> bool:
+    """Poll sc query until PawnIO reports STOPPED or disappears. Returns True when safe.
+
+    Capped at 5 s with 0.25 s polls: a handle-free kernel driver stops
+    near-instantly after `sc stop`; if it hasn't stopped by 5 s the handle is
+    stuck and more waiting won't free it -- the caller proceeds to the
+    uninstaller either way.
+    """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
             result = subprocess.run(
                 ["sc", "query", _PAWNIO_SERVICE],
                 capture_output=True, timeout=5, text=True,
+                creationflags=CREATE_NO_WINDOW,
             )
             if result.returncode == 1060:  # service no longer exists
                 return True
@@ -70,7 +80,7 @@ def _wait_for_driver_stopped(timeout: float = 10.0) -> bool:
                 return True
         except Exception:
             return True
-        time.sleep(0.5)
+        time.sleep(0.25)
     return False
 
 
@@ -80,6 +90,7 @@ def _find_pawnio_oem_inf() -> "str | None":
         result = subprocess.run(
             ["pnputil", "/enum-drivers"],
             capture_output=True, timeout=15, text=True,
+            creationflags=CREATE_NO_WINDOW,
         )
         if result.returncode != 0:
             return None
@@ -102,6 +113,7 @@ def _run_pnputil(*args: str) -> bool:
         result = subprocess.run(
             ["pnputil", *args],
             capture_output=True, timeout=30, text=True,
+            creationflags=CREATE_NO_WINDOW,
         )
         return result.returncode == 0
     except Exception:
@@ -142,10 +154,15 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
         return
 
     pawnio_exists = _pawnio_service_exists()
-    oem_inf = _find_pawnio_oem_inf()
 
-    if not pawnio_exists and not oem_inf:
-        return  # nothing to clean
+    # pnputil /enum-drivers walks the whole Driver Store (seconds) -- defer it
+    # to the two paths that actually need an OEM INF: the orphaned-entry check
+    # below, and the pnputil fallback when pawnio_setup.exe fails or is absent.
+    oem_inf: "str | None" = None
+    if not pawnio_exists:
+        oem_inf = _find_pawnio_oem_inf()
+        if not oem_inf:
+            return  # nothing to clean
 
     print_step("Removing PawnIO kernel driver")
     action_logger.log_action("PawnIO", "Uninstalling kernel driver")
@@ -165,7 +182,7 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
             result = subprocess.run(
                 [setup_exe, "-uninstall", "-silent"],
                 capture_output=True, timeout=60, text=True,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                creationflags=CREATE_NO_WINDOW,
             )
             if result.returncode == 0:
                 action_logger.log_action("Cleanup", "PawnIO removed via pawnio_setup.exe -uninstall")
@@ -181,11 +198,14 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
             )
 
     # 3. Fallback: pnputil /delete-driver if pawnio_setup.exe unavailable or failed.
-    if not pawnio_setup_uninstalled and oem_inf:
-        if _run_pnputil("/delete-driver", oem_inf, "/uninstall"):
-            action_logger.log_action("Cleanup", f"PawnIO removed from Driver Store ({oem_inf})")
-        else:
-            action_logger.log_action("Cleanup", f"pnputil /delete-driver {oem_inf} failed")
+    if not pawnio_setup_uninstalled:
+        if oem_inf is None:
+            oem_inf = _find_pawnio_oem_inf()
+        if oem_inf:
+            if _run_pnputil("/delete-driver", oem_inf, "/uninstall"):
+                action_logger.log_action("Cleanup", f"PawnIO removed from Driver Store ({oem_inf})")
+            else:
+                action_logger.log_action("Cleanup", f"pnputil /delete-driver {oem_inf} failed")
 
     # 4. Explicit sc delete — guarantees the SCM entry is removed.  If a driver
     #    handle is still open (rare once the LHM sidecar has shut down
@@ -195,6 +215,7 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
         delete_result = subprocess.run(
             ["sc", "delete", _PAWNIO_SERVICE],
             capture_output=True, timeout=10, text=True,
+            creationflags=CREATE_NO_WINDOW,
         )
         if delete_result.returncode == 0:
             action_logger.log_action("Cleanup", "PawnIO service entry removed (sc delete)")
@@ -224,16 +245,29 @@ def _cleanup_cwd_tempdir() -> None:
     try:
         shutil.rmtree(lil_bro_dir)
         action_logger.log_action("Cleanup", "Removed runtime temp dir", str(lil_bro_dir))
-    except OSError:
-        pass
+    except OSError as e:
+        # Locked by a leftover handle (e.g. a subprocess still holding a temp
+        # file open). Record it -- the action log is the only always-on sink,
+        # and a silent pass here is exactly why this failure went untraced.
+        action_logger.log_action(
+            "Cleanup", "Failed to remove runtime temp dir",
+            f"{lil_bro_dir} ({e})", outcome="FAIL",
+        )
+        get_debug_logger().warning("Temp dir cleanup failed: %s", lil_bro_dir, exc_info=True)
 
 
-def _cleanup_stale_mei() -> None:
+def _cleanup_stale_mei(at_startup: bool = False) -> None:
     """Remove orphaned _MEI* directories left by prior crashed runs.
 
     PyInstaller onefile extracts to CWD/_MEIxxxxxx (via runtime_tmpdir='.').
     Normal exits clean up automatically, but crashes leave orphans.
     Skip the current process's own _MEI directory (sys._MEIPASS).
+
+    When ``at_startup`` is True the sweep runs at boot: any leftover _MEI* is
+    evidence that a *prior* run's bootloader could not remove its own extraction
+    dir (a locked file, e.g. _MEI*/tools held open). That failure happens after
+    the Python interpreter exits and is unloggable in-process, so we record it
+    here -- one run later -- before deleting the orphan.
     """
     import sys as _sys
 
@@ -246,11 +280,46 @@ def _cleanup_stale_mei() -> None:
         # Don't delete our own extraction directory
         if current_mei and entry == Path(current_mei):
             continue
+        if at_startup:
+            # The orphan itself is the trace of a prior bootloader cleanup
+            # failure -- the only place Python can record that event.
+            action_logger.log_action(
+                "Cleanup",
+                "Previous run left a temp dir the bootloader could not remove (likely a locked file)",
+                str(entry), outcome="WARN",
+            )
+            get_debug_logger().warning(
+                "Startup: leftover PyInstaller temp dir from a prior run: %s", entry
+            )
         try:
             shutil.rmtree(entry)
             action_logger.log_action("Cleanup", "Removed stale PyInstaller dir", str(entry))
-        except OSError:
-            pass
+        except OSError as e:
+            # A leftover handle inside the dir (e.g. _MEI*/tools open in a
+            # command prompt) blocks removal. Log it instead of swallowing,
+            # then move on to the next orphan.
+            action_logger.log_action(
+                "Cleanup", "Failed to remove stale PyInstaller dir",
+                f"{entry} ({e})", outcome="FAIL",
+            )
+            get_debug_logger().warning("Stale _MEI cleanup failed: %s", entry, exc_info=True)
+
+
+def cleanup_orphaned_mei_at_startup() -> None:
+    """Sweep _MEI* dirs a PRIOR run's bootloader couldn't remove; log then delete.
+
+    Call this once at boot, after logging is initialized. A leftover _MEI* in the
+    CWD means the previous run's PyInstaller bootloader failed to clean up its own
+    extraction dir (a locked file) and showed the at-exit "Failed to remove
+    temporary directory" dialog -- which is unloggable in-process. This records
+    the event on the next launch, then removes the orphan.
+
+    Best-effort, never raises. No-op in dev mode (no _MEI*); skips current _MEIPASS.
+    """
+    try:
+        _cleanup_stale_mei(at_startup=True)
+    except Exception:
+        get_debug_logger().warning("Startup _MEI sweep failed", exc_info=True)
 
 
 def post_run_cleanup(lhm: Optional[LHMSidecar], pawnio_was_preinstalled: bool = False) -> None:

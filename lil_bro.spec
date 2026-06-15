@@ -32,14 +32,19 @@ if os.path.isfile(_npi_exe):
 if os.path.isfile(_pawnio_setup):
     _extra_datas.append((_pawnio_setup, 'tools'))
 
-# ── GUI resources (bundled .ttf fonts) --------------------------------
+# ── GUI resources (bundled .ttf fonts + window icon) -------------------
 _resources_dir = os.path.join(ROOT, 'resources')
 _fonts_dir     = os.path.join(_resources_dir, 'fonts')
+_icons_dir     = os.path.join(_resources_dir, 'icons')
+_app_icon      = os.path.join(_icons_dir, 'lil_bro-01-classic.ico')
 
 if os.path.isdir(_fonts_dir):
     for _name in os.listdir(_fonts_dir):
         if _name.lower().endswith('.ttf'):
             _extra_datas.append((os.path.join(_fonts_dir, _name), 'resources/fonts'))
+
+if os.path.isfile(_app_icon):
+    _extra_datas.append((_app_icon, 'resources/icons'))
 
 
 a = Analysis(
@@ -83,14 +88,20 @@ a = Analysis(
         'src.gui.widgets.batch_selection_dialog',
         'src.gui.widgets.confirm_dialog',
         'src.gui.widgets.dashboard',
+        'src.gui.widgets.dialogs',
+        'src.gui.widgets.game_mode_card',
         'src.gui.widgets.last_run_card',
         'src.gui.widgets.monitor_refresh_card',
         'src.gui.widgets.mouse_poll_card',
         'src.gui.widgets.mouse_ready_dialog',
+        'src.gui.widgets.nvidia_dlss_card',
+        'src.gui.widgets.nvidia_profile_card',
         'src.gui.widgets.output_panel',
         'src.gui.widgets.output_view',
+        'src.gui.widgets.power_plan_card',
         'src.gui.widgets.benchmark_row',
         'src.gui.widgets.revert_view',
+        'src.gui.widgets.scroll_hint',
         'src.gui.widgets.splash',
         'src.gui.widgets.stat_card',
         'src.gui.widgets.status_bar_widget',
@@ -167,5 +178,5 @@ exe = EXE(
     entitlements_file=None,
     runtime_tmpdir='.',  # Extract _MEI* to CWD, not %TEMP%
     uac_admin=True,      # Embeds requireAdministrator manifest
-    icon=None,           # TODO: Add icon when ready
+    icon=_app_icon if os.path.isfile(_app_icon) else None,  # exe / taskbar icon
 )

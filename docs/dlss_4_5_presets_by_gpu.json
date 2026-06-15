@@ -1,0 +1,297 @@
+{
+  "title": "DLSS 4.5 Preset Guidance by GeForce RTX GPU (Desktop)",
+  "last_updated": "2026-06-04",
+  "important_context": {
+    "what_drives_preset_choice": "GPU generation (FP8 hardware support) and DLSS output MODE/RESOLUTION. NOT VRAM capacity.",
+    "vram_clarification": "K, L and M are all transformer models; the VRAM difference between them is negligible (tens of MB). VRAM footprint scales with OUTPUT resolution, not with the preset letter. The big VRAM consumer in DLSS is Frame Generation, and total usage depends on game textures/settings + resolution.",
+    "no_gpu_locked_models": "All presets (K/L/M) run on every RTX GPU back to the 20 series. The difference is execution SPEED, gated by FP8 acceleration, not whether a card 'can' load the model.",
+    "presets": {
+      "K": "DLSS 4 (1st-gen transformer). NVIDIA default for DLAA / Quality / Balanced. Most robust with ray-traced denoisers.",
+      "M": "DLSS 4.5 (2nd-gen transformer). Optimized/recommended for Performance mode.",
+      "L": "DLSS 4.5 (2nd-gen transformer). Optimized/recommended for 4K Ultra Performance mode."
+    },
+    "transformer_upscaler_vram_footprint_MB": {
+      "note": "Per DLSS SDK 310.3.0 (June 2025). Near-identical across K/L/M; scales with output resolution.",
+      "1080p": 85.77,
+      "1440p": 143.52,
+      "4K": 307.37,
+      "8K_approx": 1200,
+      "cnn_model_1080p_reference": 60.83
+    },
+    "how_to_set": "NVIDIA app > Graphics tab > 'DLSS Override - Model Presets'. Choose 'Recommended' (auto-maps M/L/K by mode) or 'Custom' to force a specific preset. Power users can also force presets via NVIDIA Profile Inspector or DLSS Swapper.",
+    "caveat": "In some ray-traced games, Presets M/L interact poorly with the game's denoiser; falling back to Preset K per-game can look better. Verified by Digital Foundry and community testing.",
+    "sources": [
+      {"name": "NVIDIA GeForce News - DLSS 4.5 Super Resolution Available Now", "date": "2026-01-14", "url": "https://www.nvidia.com/en-us/geforce/news/dlss-4-5-super-resolution-available-now/"},
+      {"name": "NVIDIA GeForce News - DLSS 4.5 2nd Gen Transformer + 6X MFG", "date": "2026-01-06", "url": "https://www.nvidia.com/en-us/geforce/news/dlss-4-5-dynamic-multi-frame-gen-6x-2nd-gen-transformer-super-res/"},
+      {"name": "TechPowerUp - NVIDIA Announces DLSS 4.5", "date": "2026-01-06", "url": "https://www.techpowerup.com/344682/nvidia-announces-dlss-4-5-with-increased-image-quality-6x-framegen-and-240-fps-mode"},
+      {"name": "TechPowerUp - DLSS 4.5 Comes to All RTX GPUs", "date": "2026-01-14", "url": "https://www.techpowerup.com/345191/nvidia-dlss-4-5-comes-to-all-geforce-rtx-gpus-today"},
+      {"name": "Digital Foundry - DLSS 4.5 Preset M Image Quality Review", "date": "2026-01-24", "url": "https://www.youtube.com/watch?v=Lv8tJoiApd8"},
+      {"name": "Digital Foundry - DLSS 4.5 Preset L Review (4K & 1440p)", "date": "2026-02-04", "url": "https://www.youtube.com/watch?v=Lv8tJoiApd8"},
+      {"name": "Hardware Unboxed DLSS 4.5 analysis (write-up via ixbt)", "date": "2026-01-23", "url": "https://ixbt.games/en/news/2026/01/23/stoit-li-vkliucat-dlss-45-podrobnyi-razbor-ot-hardware-unboxed.html"},
+      {"name": "Tom's Hardware - DLSS transformer VRAM reduced 20%", "date": "2025-06-28", "url": "https://www.tomshardware.com/pc-components/gpus/nvidias-latest-dlss-revision-reduces-vram-usage-by-20-percent-for-upscaling-optimizations-reduce-overhead-of-more-powerful-transformer-model"},
+      {"name": "VideoCardz - NVIDIA wants gamers to pick the right preset", "date": "2026-01-07", "url": "https://videocardz.com/newz/nvidia-wants-gamers-to-pick-the-right-dlss-4-5-model-preset-for-their-rtx-gpu"},
+      {"name": "r/nvidia - Force DLSS preset via NVIDIA app (community guide)", "date": "2026-01", "url": "https://www.reddit.com/r/nvidia/comments/1ie7kp7/globally_force_dlss4_preset_k_using_only_official/"}
+    ]
+  },
+  "generation_rules": {
+    "50_series": {"architecture": "Blackwell", "fp8_support": true, "preset_policy": "Full DLSS 4.5. K = DLAA/Quality/Balanced, M = Performance, L = 4K Ultra Performance."},
+    "40_series": {"architecture": "Ada Lovelace", "fp8_support": true, "preset_policy": "Same as 50-series for Super Resolution presets. (6X / Dynamic Frame Gen is 50-series only, but that's frame gen, not SR presets.)"},
+    "30_series": {"architecture": "Ampere", "fp8_support": false, "preset_policy": "No FP8 => M/L carry a heavier cost. Recommended: stay on Preset K (DLSS 4) or 'Auto'. M/L usable only if you have FPS headroom."},
+    "20_series": {"architecture": "Turing", "fp8_support": false, "dlss_supported": true, "preset_policy": "Supports DLSS 4.5 transformer Super Resolution, but Turing Tensor cores are FP16-only, so M/L are expensive (similar-to-worse than Ampere). Default to Preset K. No DLSS Frame Generation, no Multi Frame Generation."},
+    "10_series": {"architecture": "Pascal", "fp8_support": false, "dlss_supported": false, "preset_policy": "NOT SUPPORTED - Pascal has no Tensor cores, so no version of DLSS runs and no preset applies. Use FSR, XeSS, or NVIDIA Image Scaling (NIS) instead."}
+  },
+  "gpus": [
+    {
+      "model": "RTX 5090", "series": "50", "architecture": "Blackwell", "vram_gb": 32, "vram_type": "GDDR7", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "No practical VRAM limits for DLSS at any resolution, including 4K + frame gen + max textures."
+    },
+    {
+      "model": "RTX 5080", "series": "50", "architecture": "Blackwell", "vram_gb": 16, "vram_type": "GDDR7", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "16GB comfortable for 4K with frame gen in nearly all current titles."
+    },
+    {
+      "model": "RTX 5070 Ti", "series": "50", "architecture": "Blackwell", "vram_gb": 16, "vram_type": "GDDR7", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "16GB fine for 1440p/4K with frame gen."
+    },
+    {
+      "model": "RTX 5070", "series": "50", "architecture": "Blackwell", "vram_gb": 12, "vram_type": "GDDR7", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "12GB is fine at 1440p; at 4K with frame gen + ultra textures a few heavy titles can approach the limit. Preset choice unaffected."
+    },
+    {
+      "model": "RTX 5060 Ti (16GB)", "series": "50", "architecture": "Blackwell", "vram_gb": 16, "vram_type": "GDDR7", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "16GB variant has ample memory; targeted at 1080p/1440p."
+    },
+    {
+      "model": "RTX 5060 Ti (8GB)", "series": "50", "architecture": "Blackwell", "vram_gb": 8, "vram_type": "GDDR7", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "Preset choice unaffected by the 8GB, but watch total VRAM when stacking frame gen + ultra textures at 4K; that's a settings issue, not a preset issue."
+    },
+    {
+      "model": "RTX 5060", "series": "50", "architecture": "Blackwell", "vram_gb": 8, "vram_type": "GDDR7", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "1080p-class card; FP8 means M/L run efficiently. Manage textures/frame gen if memory-constrained."
+    },
+    {
+      "model": "RTX 4090", "series": "40", "architecture": "Ada Lovelace", "vram_gb": 24, "vram_type": "GDDR6X", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "No VRAM constraints for DLSS at any resolution."
+    },
+    {
+      "model": "RTX 4080 Super", "series": "40", "architecture": "Ada Lovelace", "vram_gb": 16, "vram_type": "GDDR6X", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "16GB comfortable for 4K + frame gen."
+    },
+    {
+      "model": "RTX 4080", "series": "40", "architecture": "Ada Lovelace", "vram_gb": 16, "vram_type": "GDDR6X", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "TechPowerUp measured the DLSS 4 transformer cost on a 4080 at roughly 3-5% - small. 16GB is plenty."
+    },
+    {
+      "model": "RTX 4070 Ti Super", "series": "40", "architecture": "Ada Lovelace", "vram_gb": 16, "vram_type": "GDDR6X", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "16GB fine for 1440p/4K."
+    },
+    {
+      "model": "RTX 4070 Ti", "series": "40", "architecture": "Ada Lovelace", "vram_gb": 12, "vram_type": "GDDR6X", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "12GB fine at 1440p; 4K + frame gen + ultra textures can get tight in a handful of titles. Preset choice unaffected."
+    },
+    {
+      "model": "RTX 4070 Super", "series": "40", "architecture": "Ada Lovelace", "vram_gb": 12, "vram_type": "GDDR6X", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "12GB, 1440p-class. Same note as 4070 Ti for 4K edge cases."
+    },
+    {
+      "model": "RTX 4070", "series": "40", "architecture": "Ada Lovelace", "vram_gb": 12, "vram_type": "GDDR6X", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "12GB comfortable at 1440p with FP8-accelerated M/L."
+    },
+    {
+      "model": "RTX 4060 Ti (16GB)", "series": "40", "architecture": "Ada Lovelace", "vram_gb": 16, "vram_type": "GDDR6", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "16GB variant has generous memory for its tier; 1080p/1440p target."
+    },
+    {
+      "model": "RTX 4060 Ti (8GB)", "series": "40", "architecture": "Ada Lovelace", "vram_gb": 8, "vram_type": "GDDR6", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "8GB: preset choice unaffected, but be mindful of total VRAM with frame gen at higher resolutions."
+    },
+    {
+      "model": "RTX 4060", "series": "40", "architecture": "Ada Lovelace", "vram_gb": 8, "vram_type": "GDDR6", "fp8_support": true,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "M", "ultra_performance_4k": "L"},
+      "runs_full_dlss_4_5": true,
+      "vram_notes": "1080p card; FP8 lets M run efficiently. Manage textures if memory-limited."
+    },
+    {
+      "model": "RTX 3090 Ti", "series": "30", "architecture": "Ampere", "vram_gb": 24, "vram_type": "GDDR6X", "fp8_support": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, heavier)", "ultra_performance_4k": "K (L optional, heavier)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "24GB means VRAM is never the issue; the constraint is lack of FP8, so M/L cost more FPS than on 40/50-series. Stay on K unless you have headroom."
+    },
+    {
+      "model": "RTX 3090", "series": "30", "architecture": "Ampere", "vram_gb": 24, "vram_type": "GDDR6X", "fp8_support": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, heavier)", "ultra_performance_4k": "K (L optional, heavier)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "Plenty of VRAM; no-FP8 penalty is the reason to default to K."
+    },
+    {
+      "model": "RTX 3080 Ti", "series": "30", "architecture": "Ampere", "vram_gb": 12, "vram_type": "GDDR6X", "fp8_support": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, heavier)", "ultra_performance_4k": "K (L optional, heavier)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "12GB fine; default to K for FP8 reasons, not memory."
+    },
+    {
+      "model": "RTX 3080 (10GB)", "series": "30", "architecture": "Ampere", "vram_gb": 10, "vram_type": "GDDR6X", "fp8_support": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, heavier)", "ultra_performance_4k": "K (L optional, heavier)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "10GB can be tight at 4K with heavy textures + frame gen, but that's a settings concern. Preset default is K due to no FP8."
+    },
+    {
+      "model": "RTX 3070 Ti", "series": "30", "architecture": "Ampere", "vram_gb": 8, "vram_type": "GDDR6X", "fp8_support": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, heavier)", "ultra_performance_4k": "K (L optional, heavier)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "8GB: manage textures at high res. Default to K - no FP8."
+    },
+    {
+      "model": "RTX 3070", "series": "30", "architecture": "Ampere", "vram_gb": 8, "vram_type": "GDDR6", "fp8_support": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, heavier)", "ultra_performance_4k": "K (L optional, heavier)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "8GB, 1440p-class. Stay on K; M/L hit FPS harder without FP8."
+    },
+    {
+      "model": "RTX 3060 Ti", "series": "30", "architecture": "Ampere", "vram_gb": 8, "vram_type": "GDDR6", "fp8_support": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, heavier)", "ultra_performance_4k": "K (L optional, heavier)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "Default to K for performance; 8GB is fine at 1080p/1440p."
+    },
+    {
+      "model": "RTX 3060 (12GB)", "series": "30", "architecture": "Ampere", "vram_gb": 12, "vram_type": "GDDR6", "fp8_support": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, heavier)", "ultra_performance_4k": "K (L optional, heavier)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "Comparatively generous 12GB for its tier; the no-FP8 cost is still why K is the sensible default."
+    },
+    {
+      "model": "RTX 3050 (8GB)", "series": "30", "architecture": "Ampere", "vram_gb": 8, "vram_type": "GDDR6", "fp8_support": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, heavier)", "ultra_performance_4k": "K (L optional, heavier)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "Entry tier; keep on K. M/L give little benefit for the added cost on this GPU."
+    },
+    {
+      "model": "RTX 2080 Ti", "series": "20", "architecture": "Turing", "vram_gb": 11, "vram_type": "GDDR6", "fp8_support": false, "dlss_supported": true, "frame_generation": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, expensive)", "ultra_performance_4k": "K (L optional, expensive)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "Best Turing card; 11GB is ample. The constraint is FP16-only Tensor cores, so transformer M/L cost notably more FPS than on 40/50-series. Default to K."
+    },
+    {
+      "model": "RTX 2080 Super", "series": "20", "architecture": "Turing", "vram_gb": 8, "vram_type": "GDDR6", "fp8_support": false, "dlss_supported": true, "frame_generation": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, expensive)", "ultra_performance_4k": "K (L optional, expensive)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "8GB fine at 1080p/1440p. Default to K; M/L are heavy on Turing."
+    },
+    {
+      "model": "RTX 2080", "series": "20", "architecture": "Turing", "vram_gb": 8, "vram_type": "GDDR6", "fp8_support": false, "dlss_supported": true, "frame_generation": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, expensive)", "ultra_performance_4k": "K (L optional, expensive)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "Stay on K. Transformer SR works but the FP16 penalty is real."
+    },
+    {
+      "model": "RTX 2070 Super", "series": "20", "architecture": "Turing", "vram_gb": 8, "vram_type": "GDDR6", "fp8_support": false, "dlss_supported": true, "frame_generation": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, expensive)", "ultra_performance_4k": "K (L optional, expensive)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "8GB, 1080p/1440p target. Default to K."
+    },
+    {
+      "model": "RTX 2070", "series": "20", "architecture": "Turing", "vram_gb": 8, "vram_type": "GDDR6", "fp8_support": false, "dlss_supported": true, "frame_generation": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, expensive)", "ultra_performance_4k": "K (L optional, expensive)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "Keep on K; M/L give limited net benefit for the cost on this GPU."
+    },
+    {
+      "model": "RTX 2060 Super", "series": "20", "architecture": "Turing", "vram_gb": 8, "vram_type": "GDDR6", "fp8_support": false, "dlss_supported": true, "frame_generation": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, expensive)", "ultra_performance_4k": "K (L optional, expensive)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "1080p card. Default to K; the transformer penalty bites hardest on the lower Turing SKUs."
+    },
+    {
+      "model": "RTX 2060 (6GB)", "series": "20", "architecture": "Turing", "vram_gb": 6, "vram_type": "GDDR6", "fp8_support": false, "dlss_supported": true, "frame_generation": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, expensive)", "ultra_performance_4k": "K (L optional, expensive)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "Entry Turing; reviewers flagged M/L can be challenging here in specific scenes. Stick to K. 6GB also limits texture/res headroom."
+    },
+    {
+      "model": "RTX 2060 (12GB)", "series": "20", "architecture": "Turing", "vram_gb": 12, "vram_type": "GDDR6", "fp8_support": false, "dlss_supported": true, "frame_generation": false,
+      "recommended_presets": {"dlaa": "K", "quality": "K", "balanced": "K", "performance": "K (M optional, expensive)", "ultra_performance_4k": "K (L optional, expensive)"},
+      "runs_full_dlss_4_5": "yes_but_slower",
+      "vram_notes": "Later 12GB variant has more memory, but the FP16 compute limit still makes K the default."
+    },
+    {
+      "model": "GTX 1080 Ti", "series": "10", "architecture": "Pascal", "vram_gb": 11, "vram_type": "GDDR5X", "fp8_support": false, "dlss_supported": false, "frame_generation": false,
+      "recommended_presets": null,
+      "runs_full_dlss_4_5": false,
+      "vram_notes": "No Tensor cores - DLSS is not available in any form. Use FSR / XeSS / NIS for upscaling."
+    },
+    {
+      "model": "GTX 1080", "series": "10", "architecture": "Pascal", "vram_gb": 8, "vram_type": "GDDR5X", "fp8_support": false, "dlss_supported": false, "frame_generation": false,
+      "recommended_presets": null,
+      "runs_full_dlss_4_5": false,
+      "vram_notes": "No Tensor cores - DLSS unsupported. Alternatives: FSR, XeSS, NIS."
+    },
+    {
+      "model": "GTX 1070 Ti", "series": "10", "architecture": "Pascal", "vram_gb": 8, "vram_type": "GDDR5", "fp8_support": false, "dlss_supported": false, "frame_generation": false,
+      "recommended_presets": null,
+      "runs_full_dlss_4_5": false,
+      "vram_notes": "No Tensor cores - DLSS unsupported."
+    },
+    {
+      "model": "GTX 1070", "series": "10", "architecture": "Pascal", "vram_gb": 8, "vram_type": "GDDR5", "fp8_support": false, "dlss_supported": false, "frame_generation": false,
+      "recommended_presets": null,
+      "runs_full_dlss_4_5": false,
+      "vram_notes": "No Tensor cores - DLSS unsupported."
+    },
+    {
+      "model": "GTX 1060 (6GB)", "series": "10", "architecture": "Pascal", "vram_gb": 6, "vram_type": "GDDR5", "fp8_support": false, "dlss_supported": false, "frame_generation": false,
+      "recommended_presets": null,
+      "runs_full_dlss_4_5": false,
+      "vram_notes": "No Tensor cores - DLSS unsupported. FSR/XeSS/NIS only."
+    },
+    {
+      "model": "GTX 1060 (3GB)", "series": "10", "architecture": "Pascal", "vram_gb": 3, "vram_type": "GDDR5", "fp8_support": false, "dlss_supported": false, "frame_generation": false,
+      "recommended_presets": null,
+      "runs_full_dlss_4_5": false,
+      "vram_notes": "No Tensor cores - DLSS unsupported."
+    },
+    {
+      "model": "GTX 1050 Ti", "series": "10", "architecture": "Pascal", "vram_gb": 4, "vram_type": "GDDR5", "fp8_support": false, "dlss_supported": false, "frame_generation": false,
+      "recommended_presets": null,
+      "runs_full_dlss_4_5": false,
+      "vram_notes": "No Tensor cores - DLSS unsupported."
+    },
+    {
+      "model": "GTX 1050", "series": "10", "architecture": "Pascal", "vram_gb": 2, "vram_type": "GDDR5", "fp8_support": false, "dlss_supported": false, "frame_generation": false,
+      "recommended_presets": null,
+      "runs_full_dlss_4_5": false,
+      "vram_notes": "No Tensor cores - DLSS unsupported."
+    }
+  ]
+}

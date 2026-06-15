@@ -13,18 +13,22 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 
+from ..config import config
 from ..utils.action_logger import action_logger
+from ..utils.dlss_presets import get_preset
 from ..utils.errors import SetterError
 from ..utils.nvidia_npi import (
-    DLSS_PRESETS,
+    POWER_MGMT_VALUE_BY_MODE,
     SETTING_IDS,
     TARGET_VALUES,
+    VSYNC_VALUE_BY_MODE,
     calculate_fps_cap,
     export_current_profile,
     find_npi_exe,
 )
 from ..utils.paths import get_backups_dir, get_temp_dir
-from .nvidia_profile import _get_gpu_generation, _get_primary_refresh_hz
+from ..utils.subprocess_utils import CREATE_NO_WINDOW
+from .nvidia_profile import _get_primary_refresh_hz
 
 
 def backup_nvidia_profile(npi_exe: str) -> str:
@@ -114,6 +118,7 @@ def apply_nvidia_profile(npi_exe: str, nip_path: str) -> tuple[bool, str]:
             [npi_exe, "-silentImport", nip_path],
             capture_output=True,
             timeout=15,
+            creationflags=CREATE_NO_WINDOW,
         )
     except subprocess.TimeoutExpired:
         return False, "NPI import timed out (15s)"
@@ -131,7 +136,13 @@ def fix_nvidia_profile(
     gpu_generation: str | None = None,
     pre_backup_path: str | None = None,
 ) -> bool:
-    """Apply optimized NVIDIA driver profile.
+    """Apply optimized NVIDIA driver profile (everything EXCEPT the DLSS preset).
+
+    DLSS is intentionally not touched here -- it is owned by
+    ``fix_nvidia_dlss_preset`` / the ``nvidia_dlss_preset`` fix so the two are
+    independently selectable (Dashboard cards + pipeline batch dialog). This
+    handler applies G-Sync, VSync, FPS cap, driver-side ReBar, and power
+    management.
 
     1. Backup current profile (skipped if pre_backup_path provided)
     2. Export fresh .nip
@@ -141,7 +152,7 @@ def fix_nvidia_profile(
     Args:
         specs: Full system specs dict.
         refresh_hz: Override for monitor refresh rate (auto-detected if None).
-        gpu_generation: Override for GPU gen like "40" (auto-detected if None).
+        gpu_generation: Deprecated/ignored; retained for signature compatibility.
         pre_backup_path: Path to an already-created backup .nip. If provided,
             the internal backup step is skipped (avoids duplicate exports).
 
@@ -162,20 +173,35 @@ def fix_nvidia_profile(
 
         target: dict[int, int] = {}
 
-        for key in [
-            "gsync_global_feature", "gsync_global_mode", "gsync_app_mode",
-            "gsync_app_state", "gsync_app_requested",
-            "gsync_indicator_overlay", "gsync_support_indicator",
-        ]:
-            target[SETTING_IDS[key]] = TARGET_VALUES[key]
+        # G-Sync
+        if config.nvidia.profile.gsync:
+            for key in [
+                "gsync_global_feature", "gsync_global_mode", "gsync_app_mode",
+                "gsync_app_state", "gsync_app_requested",
+                "gsync_indicator_overlay", "gsync_support_indicator",
+            ]:
+                target[SETTING_IDS[key]] = TARGET_VALUES[key]
+        else:
+            target[SETTING_IDS["gsync_global_feature"]] = 0
 
-        for key in ["vsync", "vsync_tear_control", "vsync_smooth_afr"]:
-            target[SETTING_IDS[key]] = TARGET_VALUES[key]
+        # VSync
+        _VSYNC_RAW = VSYNC_VALUE_BY_MODE
+        if config.nvidia.profile.vsync == "force_on":
+            for key in ["vsync", "vsync_tear_control", "vsync_smooth_afr"]:
+                target[SETTING_IDS[key]] = TARGET_VALUES[key]
+        else:
+            target[SETTING_IDS["vsync"]] = _VSYNC_RAW.get(config.nvidia.profile.vsync, 0)
 
+        # FPS cap
         if refresh_hz is None:
             refresh_hz = _get_primary_refresh_hz(specs)
         cap: int | None = None
-        if refresh_hz and refresh_hz > 0:
+        fps_override = config.nvidia.profile.fps_cap_override
+        if fps_override is not None:
+            cap = fps_override
+            target[SETTING_IDS["fps_limiter_v3"]] = cap
+            action_logger.log_action("NPI Fix", f"FPS cap: {cap}", "config override")
+        elif refresh_hz and refresh_hz > 0:
             cap = calculate_fps_cap(refresh_hz)
             target[SETTING_IDS["fps_limiter_v3"]] = cap
             action_logger.log_action("NPI Fix", f"FPS cap: {cap}", f"{refresh_hz}Hz monitor")
@@ -185,15 +211,11 @@ def fix_nvidia_profile(
         if bios_rebar is True:
             target[SETTING_IDS["rebar_enable"]] = TARGET_VALUES["rebar_enable"]
 
-        if gpu_generation is None:
-            gpu_name = nvidia[0].get("GPU", "") if isinstance(nvidia, list) and nvidia else ""
-            gpu_generation = _get_gpu_generation(gpu_name)
-        if gpu_generation and gpu_generation in DLSS_PRESETS:
-            _, dlss_hex = DLSS_PRESETS[gpu_generation]
-            target[SETTING_IDS["dlss_preset_profile"]] = TARGET_VALUES["dlss_preset_profile"]
-            target[SETTING_IDS["dlss_preset_letter"]] = dlss_hex
+        # DLSS preset is intentionally omitted -- owned by fix_nvidia_dlss_preset.
 
-        target[SETTING_IDS["power_mgmt"]] = TARGET_VALUES["power_mgmt"]
+        # Power management
+        _POWER_RAW = POWER_MGMT_VALUE_BY_MODE
+        target[SETTING_IDS["power_mgmt"]] = _POWER_RAW.get(config.nvidia.profile.power_mgmt, 1)
 
         modified_nip = build_optimized_nip(source_nip, target)
 
@@ -209,13 +231,81 @@ def fix_nvidia_profile(
         changes = []
         if cap is not None:
             changes.append(f"FPS cap={cap}")
-        if gpu_generation and gpu_generation in DLSS_PRESETS:
-            changes.append(f"DLSS={DLSS_PRESETS[gpu_generation][0]}")
         if bios_rebar is True:
             changes.append("ReBar=ON")
-        changes.extend(["G-Sync=ON", "VSync=ForceOn", "PowerMgmt=MaxPerf"])
+        changes.append("G-Sync=ON" if config.nvidia.profile.gsync else "G-Sync=OFF")
+        changes.append(f"VSync={config.nvidia.profile.vsync}")
+        changes.append(f"PowerMgmt={config.nvidia.profile.power_mgmt}")
         action_logger.log_action("NPI Fix", "Applied", ", ".join(changes))
         return True
 
     action_logger.log_action("NPI Fix", "FAILED", msg)
     raise SetterError(f"Profile import failed -- original profile preserved at {backup_path}. Error: {msg}")
+
+
+def fix_nvidia_dlss_preset(
+    specs: dict,
+    gpu_generation: str | None = None,
+    pre_backup_path: str | None = None,
+) -> bool:
+    """Apply ONLY the per-GPU DLSS preset (Forced Model Preset = Custom + letter).
+
+    Mirrors ``fix_nvidia_profile`` but writes just the two DLSS SettingIDs,
+    leaving every other driver-profile setting untouched. The preset letter is
+    resolved from GPU capability + ``config.nvidia.dlss.priority`` via
+    ``get_preset``.
+
+    Args:
+        specs: Full system specs dict.
+        gpu_generation: Deprecated/ignored; retained for signature compatibility.
+        pre_backup_path: Path to an already-created backup .nip. If provided,
+            the internal backup step is skipped (avoids duplicate exports).
+
+    Returns True on success.
+
+    Raises:
+        FileNotFoundError: NPI binary not found.
+        SetterError: GPU is not DLSS-capable, or import failed.
+    """
+    npi_exe = find_npi_exe()
+    if npi_exe is None:
+        raise FileNotFoundError("NVIDIA Profile Inspector binary not found")
+
+    nvidia = specs.get("NVIDIA", [])
+    gpu_name = nvidia[0].get("GPU", "") if isinstance(nvidia, list) and nvidia else ""
+    preset = get_preset(gpu_name, config.nvidia.dlss.priority)
+    if preset is None:
+        raise SetterError(f"No DLSS preset for GPU: {gpu_name!r}")
+
+    if pre_backup_path is not None:
+        backup_path = pre_backup_path
+    else:
+        backup_path = backup_nvidia_profile(npi_exe)
+        action_logger.log_action("NPI DLSS Fix", "Backup created", backup_path)
+
+    with tempfile.TemporaryDirectory(dir=str(get_temp_dir())) as tmpdir:
+        source_nip, _ = export_current_profile(npi_exe, tmpdir)
+
+        target: dict[int, int] = {
+            SETTING_IDS["dlss_preset_profile"]: TARGET_VALUES["dlss_preset_profile"],
+            SETTING_IDS["dlss_preset_letter"]: preset.value,
+        }
+
+        modified_nip = build_optimized_nip(source_nip, target)
+
+    try:
+        ok, msg = apply_nvidia_profile(npi_exe, modified_nip)
+    finally:
+        try:
+            os.unlink(modified_nip)
+        except OSError:
+            pass
+
+    if ok:
+        action_logger.log_action("NPI DLSS Fix", "Applied", f"DLSS={preset.letter} ({preset.priority})")
+        return True
+
+    action_logger.log_action("NPI DLSS Fix", "FAILED", msg)
+    raise SetterError(
+        f"DLSS preset import failed -- original profile preserved at {backup_path}. Error: {msg}"
+    )

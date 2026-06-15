@@ -15,7 +15,7 @@ files are silently ignored — lil_bro always starts with working defaults.
 """
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -51,15 +51,38 @@ class ThermalConfig:
 
 
 @dataclass
+class NvidiaDlssConfig:
+    # "quality" -> M on RTX 40/50 (FP8), K on 20/30; "fps" -> L on FP8, K on 20/30.
+    # A GUI toggle (QSettings) may override this in-memory at runtime.
+    priority: str = "quality"
+
+
+@dataclass
+class NvidiaProfileConfig:
+    gsync: bool = True
+    vsync: str = "force_on"           # "force_on" | "off"
+    fps_cap_override: int | None = None
+    power_mgmt: str = "max_performance"  # "max_performance" | "adaptive"
+
+
+@dataclass
+class NvidiaConfig:
+    dlss: NvidiaDlssConfig = field(default_factory=NvidiaDlssConfig)
+    profile: NvidiaProfileConfig = field(default_factory=NvidiaProfileConfig)
+
+
+@dataclass
 class AppConfig:
     benchmark: BenchmarkConfig
     thermal: ThermalConfig
+    nvidia: NvidiaConfig
 
 
 def _load_config() -> AppConfig:
     """Load config from lil_bro_config.json if present, else return defaults."""
     benchmark = BenchmarkConfig()
     thermal = ThermalConfig()
+    nvidia = NvidiaConfig()
 
     config_path = get_config_path()
     if config_path.exists():
@@ -81,10 +104,25 @@ def _load_config() -> AppConfig:
                         thermal.watchdog_sustained_secs = int(t["watchdog_sustained_secs"])
                     if "poll_interval" in t:
                         thermal.poll_interval = float(t["poll_interval"])
+                n = data.get("nvidia", {})
+                if isinstance(n, dict):
+                    d = n.get("dlss", {})
+                    if isinstance(d, dict) and d.get("priority") in ("quality", "fps"):
+                        nvidia.dlss.priority = str(d["priority"])
+                    p = n.get("profile", {})
+                    if isinstance(p, dict):
+                        if isinstance(p.get("gsync"), bool):
+                            nvidia.profile.gsync = p["gsync"]
+                        if p.get("vsync") in ("force_on", "off"):
+                            nvidia.profile.vsync = str(p["vsync"])
+                        if isinstance(p.get("fps_cap_override"), int) and p["fps_cap_override"] > 0:
+                            nvidia.profile.fps_cap_override = int(p["fps_cap_override"])
+                        if p.get("power_mgmt") in ("max_performance", "adaptive"):
+                            nvidia.profile.power_mgmt = str(p["power_mgmt"])
         except Exception:
             pass  # Malformed config — silently use defaults
 
-    return AppConfig(benchmark=benchmark, thermal=thermal)
+    return AppConfig(benchmark=benchmark, thermal=thermal, nvidia=nvidia)
 
 
 # Module-level singleton — loaded once at first import.
@@ -120,6 +158,40 @@ _DEFAULT_CONFIG_TEMPLATE = """\
 
         // Seconds between LibreHardwareMonitor temperature polls.
         "poll_interval": 1.0
+    },
+
+    // ── NVIDIA Settings ─────────────────────────────────────────────
+
+    "nvidia": {
+        "dlss": {
+            // DLSS forced-model-preset lean:
+            //   "quality" -> M on RTX 40/50 (FP8), K on RTX 20/30
+            //   "fps"     -> L on RTX 40/50 (FP8), K on RTX 20/30
+            // A GUI toggle (QSettings) overrides this at runtime.
+            "priority": "quality"
+        },
+
+        // ── NVIDIA Profile Inspector settings ─────────────────────────
+        "profile": {
+            // Enable G-Sync in the NVIDIA driver profile. Set false to leave
+            // G-Sync disabled (e.g. competitive players who prefer it off).
+            "gsync": true,
+
+            // VSync mode applied by the NVIDIA driver profile.
+            //   "force_on" — Blur Busters optimal (pairs with G-Sync + FPS cap)
+            //   "off"      — application-controlled (competitive / no-vsync builds)
+            "vsync": "force_on",
+
+            // FPS cap in frames per second. null = auto-calculate via
+            // Blur Busters formula (refresh_hz - refresh_hz²/4096).
+            // Set an integer to override, e.g. 141 on a 144 Hz display.
+            "fps_cap_override": null,
+
+            // Power management mode.
+            //   "max_performance" — always boost clocks (default for gaming)
+            //   "adaptive"        — allow GPU to downclock when idle
+            "power_mgmt": "max_performance"
+        }
     }
 }
 """

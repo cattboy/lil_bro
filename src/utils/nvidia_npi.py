@@ -17,6 +17,7 @@ from .action_logger import action_logger
 from .errors import NvapiInitError, SetterError
 from .nip_io import parse_nip_with_retry, wait_for_nip_ready
 from .paths import get_lil_bro_dir
+from .subprocess_utils import CREATE_NO_WINDOW
 
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -51,7 +52,7 @@ SETTING_IDS: dict[str, int] = {
 
 # Target values for optimal gaming configuration.
 # fps_limiter_v3 is calculated per monitor Hz (see calculate_fps_cap).
-# dlss_preset_letter depends on GPU generation (see DLSS_PRESETS).
+# dlss_preset_letter depends on GPU + priority (see src/utils/dlss_presets.py).
 TARGET_VALUES: dict[str, int] = {
     "gsync_global_feature":     1,           # On
     "gsync_global_mode":        1,           # Fullscreen only
@@ -75,13 +76,15 @@ DLSS_LETTER_MAP: dict[int, str] = {
     14: "N", 15: "O", 0x00FFFFFF: "recommended",
 }
 
-# GPU generation → recommended DLSS preset (letter, hex value).
-DLSS_PRESETS: dict[str, tuple[str, int]] = {
-    "50": ("L", 0x0C),   # RTX 50-series — Transformer Gen 2
-    "40": ("L", 0x0C),   # RTX 40-series — Transformer Gen 2
-    "30": ("K", 0x0B),   # RTX 30-series — Transformer Gen 1
-    "20": ("K", 0x0B),   # RTX 20-series — Transformer Gen 1
-}
+# letter -> NPI forced-preset value (reverse of DLSS_LETTER_MAP; injective for K/L/M).
+# The GPU + priority -> letter policy lives in src/utils/dlss_presets.py.
+DLSS_VALUE_BY_LETTER: dict[str, int] = {letter: val for val, letter in DLSS_LETTER_MAP.items()}
+
+# Driver raw values keyed by config mode -- shared by the analyzer (OK-check) and
+# the setter (written value) so the two can't drift (see nvidia_profile.py /
+# nvidia_profile_setter.py).
+VSYNC_VALUE_BY_MODE: dict[str, int] = {"force_on": 0x47814940, "off": 0}
+POWER_MGMT_VALUE_BY_MODE: dict[str, int] = {"max_performance": 1, "adaptive": 0}
 
 
 def calculate_fps_cap(refresh_hz: int) -> int:
@@ -123,6 +126,7 @@ def export_current_profile(npi_exe: str, dest_dir: str) -> tuple[str, dict[int, 
         cwd=str(npi_dir),
         capture_output=True,
         timeout=30,
+        creationflags=CREATE_NO_WINDOW,
     )
     if result.returncode != 0:
         stderr = result.stderr.decode(errors="replace").strip()

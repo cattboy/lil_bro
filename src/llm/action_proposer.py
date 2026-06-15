@@ -79,6 +79,12 @@ def build_llm_input(hardware: dict, findings: list[dict]) -> dict:
                     s["name"] for s in f.get("sub_findings", []) if not s.get("ok")
                 ],
             })
+        elif check == "nvidia_dlss_preset":
+            entry.update({
+                "gpu_model": f.get("current", {}).get("gpu_model", "Unknown"),
+                "current_preset": f.get("current_letter", "unknown"),
+                "recommended_preset": f.get("expected_letter", "unknown"),
+            })
 
         llm_findings.append(entry)
 
@@ -215,10 +221,22 @@ FALLBACK_PROPOSALS: dict[str, dict] = {
         "severity": "HIGH",
         "explanation": (
             "Your NVIDIA driver profile isn't optimized for gaming — G-Sync, VSync, "
-            "FPS cap, and DLSS settings aren't configured for your hardware. "
+            "FPS cap, ReBar, and power management aren't configured for your hardware. "
             "This is like buying a sports car and leaving it in eco mode."
         ),
-        "proposed_action": "Apply optimized NVIDIA driver profile (G-Sync + VSync + FPS cap + ReBar + DLSS)",
+        "proposed_action": "Apply optimized NVIDIA driver profile (G-Sync + VSync + FPS cap + ReBar + power)",
+        "can_auto_fix": True,
+    },
+    "nvidia_dlss_preset": {
+        "finding": "nvidia_dlss_preset",
+        "severity": "MEDIUM",
+        "explanation": (
+            "DLSS can run a newer AI upscaling preset than the driver default. "
+            "Forcing the recommended preset for your GPU improves image quality "
+            "and stability in DLSS titles. This changes only the DLSS preset — "
+            "nothing else in your driver profile."
+        ),
+        "proposed_action": "Force the recommended DLSS preset for your GPU",
         "can_auto_fix": True,
     },
 }

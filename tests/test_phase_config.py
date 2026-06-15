@@ -101,3 +101,50 @@ class TestConfigPhaseHappyPath:
         assert isinstance(result, PhaseResult)
         assert result.status == "completed"
         assert "analysis complete" in result.message
+
+
+
+class TestConfigPhaseDlssFinding:
+    """The standalone DLSS preset finding is surfaced into the proposal set only
+    when not SKIPPED (mirrors the Dashboard's separate DLSS card)."""
+
+    @patch("src.pipeline.phase_config.run_approval_flow")
+    @patch("src.pipeline.phase_config.extract_hardware_summary", return_value={})
+    @patch("src.pipeline.phase_config.check_polling_rate", return_value={"status": "OK"})
+    @patch("src.pipeline.phase_config.analyze_display", return_value={"status": "OK", "check": "display", "message": ""})
+    @patch("src.pipeline.phase_config.analyze_game_mode", return_value={"status": "OK", "check": "game_mode", "message": ""})
+    @patch("src.pipeline.phase_config.analyze_power_plan", return_value={"status": "OK", "check": "power_plan", "message": ""})
+    @patch("src.pipeline.phase_config.analyze_xmp", return_value={"status": "OK", "check": "xmp", "message": ""})
+    @patch("src.pipeline.phase_config.analyze_rebar", return_value={"status": "OK", "check": "rebar", "message": ""})
+    @patch("src.pipeline.phase_config.analyze_temp_folders", return_value={"status": "OK", "check": "temp_folders", "message": ""})
+    @patch("src.pipeline.phase_config.analyze_nvidia_profile", return_value={"status": "SKIPPED", "check": "nvidia_profile", "message": ""})
+    @patch("src.pipeline.phase_config.propose_actions", return_value=[])
+    def test_dlss_warning_is_surfaced(self, mock_propose, *_mocks):
+        with patch(
+            "src.pipeline.phase_config.analyze_nvidia_dlss_preset",
+            return_value={"status": "WARNING", "check": "nvidia_dlss_preset",
+                          "message": "preset wrong", "can_auto_fix": True},
+        ):
+            ConfigPhase().run(_make_ctx())
+        findings = mock_propose.call_args[0][1]
+        assert any(f["check"] == "nvidia_dlss_preset" for f in findings)
+
+    @patch("src.pipeline.phase_config.run_approval_flow")
+    @patch("src.pipeline.phase_config.extract_hardware_summary", return_value={})
+    @patch("src.pipeline.phase_config.check_polling_rate", return_value={"status": "OK"})
+    @patch("src.pipeline.phase_config.analyze_display", return_value={"status": "OK", "check": "display", "message": ""})
+    @patch("src.pipeline.phase_config.analyze_game_mode", return_value={"status": "OK", "check": "game_mode", "message": ""})
+    @patch("src.pipeline.phase_config.analyze_power_plan", return_value={"status": "OK", "check": "power_plan", "message": ""})
+    @patch("src.pipeline.phase_config.analyze_xmp", return_value={"status": "OK", "check": "xmp", "message": ""})
+    @patch("src.pipeline.phase_config.analyze_rebar", return_value={"status": "OK", "check": "rebar", "message": ""})
+    @patch("src.pipeline.phase_config.analyze_temp_folders", return_value={"status": "OK", "check": "temp_folders", "message": ""})
+    @patch("src.pipeline.phase_config.analyze_nvidia_profile", return_value={"status": "SKIPPED", "check": "nvidia_profile", "message": ""})
+    @patch("src.pipeline.phase_config.propose_actions", return_value=[])
+    def test_dlss_skipped_is_omitted(self, mock_propose, *_mocks):
+        with patch(
+            "src.pipeline.phase_config.analyze_nvidia_dlss_preset",
+            return_value={"status": "SKIPPED", "check": "nvidia_dlss_preset", "message": ""},
+        ):
+            ConfigPhase().run(_make_ctx())
+        findings = mock_propose.call_args[0][1]
+        assert not any(f["check"] == "nvidia_dlss_preset" for f in findings)

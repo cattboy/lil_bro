@@ -159,12 +159,29 @@ def notify_benchmark_started() -> None:
 
 
 def _emit(text: str, sink: Callable[[str], None] | None = None, end: str = "\n") -> None:
-    """Route a formatted string. Per-call ``sink`` wins, else ``_DEFAULT_SINK``, else print()."""
+    """Route a formatted string. Per-call ``sink`` wins, else ``_DEFAULT_SINK``, else print().
+
+    The bare ``print`` path is hardened against the console's encoding: glyphs like
+    ``✓ ⚠ ℹ`` aren't representable on a legacy code page (e.g. Windows cp1252), so a
+    raw ``print`` raises ``UnicodeEncodeError``. ``_ASCII_FALLBACK`` is decided once at
+    import from ``sys.stdout.encoding``, which is unreliable under pytest capture, on
+    worker threads, and at interpreter teardown -- and an uncaught error on a worker
+    thread surfaces as an unhandled-thread exception. So we re-emit with the
+    unrepresentable characters replaced rather than ever letting a console write crash.
+    """
     chosen = sink if sink is not None else _DEFAULT_SINK
     if chosen is not None:
         chosen(text + end)
-    else:
+        return
+    try:
         print(text, end=end, flush=(end == ""))
+    except UnicodeEncodeError:
+        try:
+            enc = getattr(sys.stdout, "encoding", None) or "ascii"
+            safe = text.encode(enc, "replace").decode(enc, "replace")
+            print(safe, end=end, flush=(end == ""))
+        except Exception:
+            pass  # a console-print failure must never propagate (esp. off-thread)
 
 
 def print_header(title: str, output_sink: Callable[[str], None] | None = None) -> None:

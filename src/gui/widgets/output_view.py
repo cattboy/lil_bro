@@ -22,8 +22,8 @@ class OutputView(QWidget):
     """Pipeline output page. Sub-widgets are exposed as attributes.
 
     ``_output_panel``, ``_benchmark_row``, ``_progress_bar``,
-    ``_progress_label``, ``_live_stat_row``, ``_phase_pill`` and
-    ``_output_title`` are read by ``MainWindow`` and ``app.py`` after
+    ``_progress_label``, ``_live_stat_row`` and ``_output_title`` are read
+    by ``MainWindow`` and ``app.py`` after
     construction — keep these attribute names stable.
     """
 
@@ -48,10 +48,6 @@ class OutputView(QWidget):
         self._output_title.setObjectName("outputTitle")
         hdr_row.addWidget(self._output_title)
         hdr_row.addStretch()
-
-        self._phase_pill = QLabel("○ Idle")
-        self._phase_pill.setObjectName("sbLabel")
-        hdr_row.addWidget(self._phase_pill)
 
         output_layout.addWidget(output_header)
 

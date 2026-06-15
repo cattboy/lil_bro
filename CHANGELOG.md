@@ -2,6 +2,51 @@
 
 All notable changes to lil_bro are documented here.
 
+## [0.5.0.0] - 2026-06-15
+
+### Added
+- **Power Plan and Game Mode Dashboard cards** — two new one-click fix cards: Power Plan switches Windows to a high-performance plan, and Game Mode turns the Windows Game Mode toggle on. Each is approval-gated and revertible through the shared session manifest, exactly like the NVIDIA and monitor cards.
+- **Live Dashboard fix-card refresh** — after the optimization pipeline runs (or a revert), the Dashboard fix cards re-collect live system state and repaint instead of showing the stale startup snapshot, so a card never offers an already-applied fix or shows pre-fix data. The re-collect is scoped to only the sections that actually changed this session (e.g. a power-plan-only run skips the slow NVIDIA profile export) and runs off the GUI thread.
+- **NVIDIA card split** — the single NVIDIA card is now two: a DLSS preset card and a driver-profile card, each with its own Apply, so the DLSS preset and the full profile (G-Sync / VSync / FPS cap / ReBar / power mode) can be applied independently.
+- **DLSS preset in the optimization pipeline** — the pipeline's apply phase now offers the per-GPU DLSS preset fix alongside the full driver-profile fix.
+- **User-editable NVIDIA controls in `lil_bro_config.json`** — NVIDIA profile targets are surfaced in config so power users can adjust them without a code change.
+- **App and taskbar icons** — lil_bro now ships with proper window and taskbar icons.
+
+### Changed
+- **Scrollable Dashboard with a scroll-hint** — the Dashboard scrolls when cards overflow the window (fixing squished monitor cards on shorter windows), with a pulsing down-arrow hint that appears only when there's more content below the fold.
+- **Two-column, scrollable batch fix dialog** — the batch fix selection dialog lays fixes out in two scrollable columns so long lists stay on screen with the confirm button reachable.
+- NVIDIA card descriptions were reworked across several passes for readability.
+- Every Dashboard card fix (NVIDIA, power plan, game mode, monitor) now routes through one generalized, revertible apply path.
+
+### Fixed
+- **Dashboard no longer locks after a card fix** — previously, clicking one card's "Fix Now" left every later fix click logging "a card fix is already in progress" and stopped lil_bro from closing (it had to be killed). Worker-thread signal cleanup now runs on the GUI thread, so the in-progress flag clears reliably.
+- **No more stray-window storm on exit or during startup** — console windows from `nvidia-smi`, Cinebench cancel taskkills, the service-query poll loop, and the sidecar's tasklist/taskkill loop are suppressed, eliminating the splash-screen flash and the post-exit window flicker.
+- **Monitor cards no longer squished** — the monitor card layout stretches correctly so the refresh-rate (Hz) value isn't clipped.
+- **Unicode console-output crash fixed** — printing non-ASCII text no longer raises under the Windows console code page.
+- Leftover `_MEI*` temp directories the PyInstaller bootloader couldn't remove are now logged on the next startup so they can be cleaned up.
+- The revert view now offers a direct option to open Windows System Restore (`rstrui.exe`).
+
+---
+
+## [0.4.0.0] - 2026-06-07
+
+### Added
+- **DLSS preset framework** — lil_bro resolves the forced DLSS preset from GPU capability (FP8 vs no-FP8) plus a quality/FPS lean, replacing the hardcoded per-generation letter. FP8 cards (RTX 40/50) get Preset **M** (quality) or **L** (FPS); non-FP8 (RTX 20/30) get **K**; GTX / Pascal / workstation GPUs are gated out with an explicit "DLSS not supported". The policy is baked-in Python constants (`src/utils/dlss_presets.py`), so updating for a new model is a one-line edit. See `docs/dlss_preset_framework.md`.
+- **DLSS card quality/FPS toggle** — a Quality/FPS toggle on the Dashboard DLSS card flips the lean without editing config; the choice persists across runs (`QSettings`) and re-renders the recommended preset live. The toggle changes nothing on its own — only Apply writes the profile (approval-gated, revertible `.nip` backup).
+- **Monitor-aware DLSS default** — at startup the recommended lean is seeded from the primary display (≤60 Hz or ≥4K → quality), overridable by the toggle or `lil_bro_config.json` (`nvidia.dlss.priority`).
+- **Explain-why tooltip** on the DLSS card surfaces the model name, the quality/FPS tradeoff, and the ray-traced-denoiser caveat.
+- **NVIDIA driver-profile Dashboard cards** — one-click apply for the full driver profile (G-Sync, VSync, FPS cap, ReBar, power mode) and the DLSS-only preset, each gated by approval + a revertible `.nip` backup.
+- **Thermal diagnostics** — environment probes and classified failure attribution for the thermal-monitoring sidecar.
+
+### Changed
+- **Shared `CardDialog` template** — every dialog now renders from one DESIGN.md card template (`src/gui/widgets/dialogs.py`); the stock `QMessageBox` dialogs and the bespoke confirm / admin / mouse-ready dialogs were migrated onto it.
+- `lil_bro_config.json` gains an `nvidia.dlss.priority` setting (`quality` | `fps`), written on first run.
+
+### Removed
+- The hardcoded `DLSS_PRESETS` generation→letter dict, replaced by the capability-tier + priority service (`src/utils/dlss_presets.py`).
+
+---
+
 ## [0.3.0.0] - 2026-06-02
 
 ### Added

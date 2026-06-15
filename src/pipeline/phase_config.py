@@ -5,7 +5,7 @@ from src.agent_tools.display import analyze_display
 from src.agent_tools.game_mode import analyze_game_mode
 from src.agent_tools.power_plan import analyze_power_plan
 from src.agent_tools.xmp_check import analyze_xmp
-from src.agent_tools.nvidia_profile import analyze_nvidia_profile
+from src.agent_tools.nvidia_profile import analyze_nvidia_dlss_preset, analyze_nvidia_profile
 from src.agent_tools.rebar import analyze_rebar
 from src.agent_tools.temp_audit import analyze_temp_folders
 from src.agent_tools.mouse import check_polling_rate
@@ -45,6 +45,14 @@ class ConfigPhase:
             nvidia_finding = analyze_nvidia_profile(ctx.specs)
             if nvidia_finding["status"] != "SKIPPED":
                 findings.append(nvidia_finding)
+
+            # DLSS preset is a separate, independently-selectable fix (mirrors
+            # the Dashboard's DLSS card). Surfaced only when not SKIPPED;
+            # propose_actions further filters to WARNING/ERROR, so an already
+            # optimal preset never reaches the batch dialog.
+            dlss_finding = analyze_nvidia_dlss_preset(ctx.specs)
+            if dlss_finding["status"] != "SKIPPED":
+                findings.append(dlss_finding)
 
             if ctx.peak_temps:
                 thermal_finding = analyze_thermals(

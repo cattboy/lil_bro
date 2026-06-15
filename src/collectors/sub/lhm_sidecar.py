@@ -25,6 +25,7 @@ from ...utils.action_logger import action_logger
 from ...utils.debug_logger import get_debug_logger
 from ...utils.formatting import print_dim, print_info, print_step, print_step_done, print_warning
 from ...utils.platform import is_admin
+from ...utils.subprocess_utils import CREATE_NO_WINDOW
 from .lhm_discovery import _LHM_SEARCH_PATHS, _PROJECT_ROOT, find_lhm_executable
 from .lhm_http import (
     LHM_PORT, LHM_URL, _MAX_RESPONSE_BYTES, _POLL_INTERVAL, _STARTUP_TIMEOUT,
@@ -140,7 +141,7 @@ class LHMSidecar:
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                    creationflags=CREATE_NO_WINDOW,
                 )
                 threading.Thread(target=self._drain_stdout, daemon=True).start()
                 threading.Thread(target=self._drain_stderr, daemon=True).start()
@@ -288,6 +289,10 @@ class LHMSidecar:
         (via Computer.Close() in lhm-server's CTS-cancellation path) before
         _uninstall_pawnio() runs.  Otherwise the SCM cannot remove the service
         entry without a reboot.
+
+        Waits are capped at 5 s: a healthy lhm-server exits well under 2 s
+        after /shutdown; past 5 s it is hung and _kill_process() takes over
+        (process death releases the driver handle regardless).
         """
         try:
             req = urllib.request.Request(
@@ -299,17 +304,17 @@ class LHMSidecar:
 
         if self._process is not None:
             try:
-                self._process.wait(timeout=10)
+                self._process.wait(timeout=5)
             except Exception:
                 return False
             return True
 
         if self._elevated:
-            deadline = time.monotonic() + 10.0
+            deadline = time.monotonic() + 5.0
             while time.monotonic() < deadline:
                 if _find_elevated_pid("lhm-server.exe") is None:
                     return True
-                time.sleep(0.5)
+                time.sleep(0.25)
             return False
 
         return True
@@ -326,6 +331,7 @@ class LHMSidecar:
                         ["taskkill", "/F", "/T", "/PID", str(pid)],
                         capture_output=True,
                         timeout=5,
+                        creationflags=CREATE_NO_WINDOW,
                     )
                 except Exception:
                     pass  # safe: subprocess cleanup is best-effort
@@ -336,7 +342,7 @@ class LHMSidecar:
                 while time.monotonic() < deadline:
                     if _find_elevated_pid("lhm-server.exe") is None:
                         break
-                    time.sleep(0.5)
+                    time.sleep(0.25)
             log.info("LHM Sidecar: Stopped (elevated)")
             self._elevated = False
             return
@@ -362,6 +368,7 @@ class LHMSidecar:
                     ["taskkill", "/F", "/T", "/PID", str(pid)],
                     capture_output=True,
                     timeout=5,
+                    creationflags=CREATE_NO_WINDOW,
                 )
             except Exception:
                 pass  # safe: taskkill fallback is best-effort

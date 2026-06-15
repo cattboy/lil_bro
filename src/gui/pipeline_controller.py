@@ -159,9 +159,15 @@ class PipelineController:
         self.set_flow_controls(False)
         main.show_output()
         main.set_running(True)
-        main._output_panel.clear_log()
         main._benchmark_row.reset()
         main.status_bar_widget.set_state("run", "Pipeline starting…")
+
+        # Snapshot the session manifest's fix count BEFORE the run. The delta
+        # after the run is exactly this run's applied fixes (card fixes are
+        # guarded off while the pipeline runs), which scopes the post-run
+        # dashboard re-collect to only the cards that changed.
+        from src.utils.revert import load_manifest
+        runtime["_pipeline_manifest_fix_count"] = len((load_manifest() or {}).get("fixes", []))
 
         pipeline_thread = QThread()
         pipeline_worker = PipelineWorker(lhm=runtime["lhm"], llm=None, preloaded_specs=runtime.get("preloaded_specs", {}))
@@ -200,6 +206,20 @@ class PipelineController:
                 pass
             pipeline_worker.deleteLater()
             pipeline_thread.deleteLater()
+            # Dashboard fix cards were built from the pre-run spec snapshot; the
+            # run may have applied fixes, leaving the cards showing stale data /
+            # offering already-applied fixes. Scope the live re-collect to just
+            # the sections this run's fixes touched (manifest delta) and skip it
+            # entirely when nothing was applied. Runs after pipeline_thread is
+            # cleared above so refresh_dashboard_fix_cards' guard passes.
+            startup = runtime.get("_startup_coordinator")
+            if startup is not None:
+                from src.gui.startup_coordinator import _sections_for_fixes
+                from src.utils.revert import load_manifest
+                before = runtime.pop("_pipeline_manifest_fix_count", 0)
+                new_fixes = (load_manifest() or {}).get("fixes", [])[before:]
+                scope = _sections_for_fixes(e.get("fix", "") for e in new_fixes)
+                startup.refresh_dashboard_fix_cards(scope)
 
         pipeline_worker.pipeline_started.connect(_on_pipeline_started)
         pipeline_worker.pipeline_finished.connect(_on_pipeline_finished)
@@ -232,9 +252,19 @@ class PipelineController:
         if runtime.get("revert_thread") is not None:
             return
         from src.utils.revert import load_manifest
-        if load_manifest() is None:
+        manifest = load_manifest()
+        if manifest is None:
             main.status_bar_widget.set_state("ok", "No session backup found — nothing to revert")
             return
+
+        # Capture which sections the to-be-reverted fixes touch BEFORE the worker
+        # runs -- a successful revert deletes the manifest, so refresh_fix_cards_
+        # after_revert can no longer read it. This scopes the post-revert live
+        # re-collect to just the affected cards.
+        from src.gui.startup_coordinator import _sections_for_fixes
+        runtime["_revert_refresh_scope"] = _sections_for_fixes(
+            e.get("fix", "") for e in manifest.get("fixes", [])
+        )
 
         self.set_flow_controls(False)
         main.status_bar_widget.set_state("run", "Reverting session…")
@@ -264,6 +294,15 @@ class PipelineController:
         revert_worker.revert_failed.connect(_on_revert_failed)
         revert_thread.finished.connect(_on_revert_thread_done)
 
+        # Re-scan the Dashboard fix cards once the revert succeeds, so the NVIDIA /
+        # monitor cards drop the optimistic "applied" state set at apply time. Routed
+        # through StartupCoordinator (a QObject on the GUI thread) -- the local
+        # closures above are plain callables that run on the worker thread, so they
+        # must not touch dashboard widgets. QObject receiver => QueuedConnection.
+        startup = runtime.get("_startup_coordinator")
+        if startup is not None:
+            revert_worker.revert_finished.connect(startup.refresh_fix_cards_after_revert)
+
         runtime["revert_thread"] = revert_thread
         runtime["revert_worker"] = revert_worker
         revert_thread.start()
@@ -274,3 +313,67 @@ class PipelineController:
         from src.gui.widgets.ai_setup_dialog import AISetupDialog
         dialog = AISetupDialog(parent=self._main)
         dialog.exec()
+
+    # ── System Restore ─────────────────────────────────────────────────
+
+    def open_system_restore(self) -> None:
+        """Launch Windows System Restore (rstrui.exe) behind a confirm dialog.
+
+        The dialog copy adapts to whether lil_bro created a restore point this
+        session: it names the exact 'lil_bro Pre-Tuning <date>' point when one
+        exists, otherwise tells the user to pick any point from before lil_bro
+        ran. ``trigger_system_restore`` is a non-blocking ``Popen``, so this
+        runs on the GUI thread with no worker (unlike ``start_revert``). See
+        ``src.utils.revert.trigger_system_restore``.
+        """
+        from PySide6.QtWidgets import QDialog
+
+        from src.gui.widgets.dialogs import CardDialog
+        from src.utils.revert import load_manifest, trigger_system_restore
+
+        manifest = load_manifest()
+        restore_point_created = bool(
+            isinstance(manifest, dict) and manifest.get("restore_point_created")
+        )
+        session_date = ""
+        if isinstance(manifest, dict):
+            session_date = str(manifest.get("session_date", ""))[:10]
+
+        if restore_point_created:
+            label = f"lil_bro Pre-Tuning {session_date}".strip()
+            description = (
+                "This opens Windows System Restore and rolls your entire PC back "
+                "to the snapshot lil_bro saved before tuning — undoing everything "
+                "since then, not just lil_bro's changes. Your PC will restart.\n\n"
+                f'In the wizard, pick the point named "{label}", then follow the prompts.'
+            )
+        else:
+            description = (
+                "This opens Windows System Restore and rolls your entire PC back "
+                "to an earlier snapshot — undoing everything since then, not just "
+                "lil_bro's changes. Your PC will restart.\n\n"
+                "lil_bro didn't create a restore point this session, so pick any "
+                "point dated before you ran lil_bro, then follow the prompts."
+            )
+
+        confirm = CardDialog(
+            "Open System Restore?",
+            description,
+            tone="warning",
+            primary_label="Open System Restore",
+            secondary_label="Cancel",
+            parent=self._main,
+        )
+        if confirm.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        if not trigger_system_restore(session_date):
+            CardDialog(
+                "Couldn't open System Restore",
+                'lil_bro couldn\'t launch System Restore automatically. Open it '
+                'manually: press Start, type "Create a restore point", open it, '
+                'then click "System Restore…".',
+                tone="error",
+                primary_label="OK",
+                parent=self._main,
+            ).exec()

@@ -16,6 +16,8 @@ import socket
 import subprocess
 from typing import Optional
 
+from ...utils.subprocess_utils import CREATE_NO_WINDOW
+
 __all__ = ["_is_port_in_use", "_find_elevated_pid", "_port_owner"]
 
 # Locks _find_elevated_pid's exe_name to safe inputs before it's interpolated
@@ -35,6 +37,7 @@ def _find_elevated_pid(exe_name: str) -> Optional[int]:
             capture_output=True,
             text=True,
             timeout=5,
+            creationflags=CREATE_NO_WINDOW,
         )
         for line in result.stdout.strip().splitlines():
             parts = line.strip('"').split('","')

@@ -231,3 +231,18 @@ class TestRevertViewSetLastRun:
             })
             assert not view._last_run_card.isHidden()
             assert view._no_fixes_lbl.isHidden()
+
+    def test_system_restore_button_emits_signal(self, qtbot):
+        """Clicking 'Open System Restore' fires system_restore_requested.
+
+        The page-level wiring (app.py) connects this to
+        PipelineController.open_system_restore; the button itself only emits.
+        """
+        from src.gui.widgets.revert_view import RevertView
+        with patch("src.gui.widgets.last_run_card.repolish"):
+            view = RevertView()
+            qtbot.addWidget(view)
+            fired: list[bool] = []
+            view.system_restore_requested.connect(lambda: fired.append(True))
+            view._restore_btn.click()
+            assert fired == [True]

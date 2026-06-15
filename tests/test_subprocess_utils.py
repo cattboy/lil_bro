@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from src.utils.subprocess_utils import run_subprocess
+from src.utils.subprocess_utils import CREATE_NO_WINDOW, run_subprocess
 
 
 @patch("src.utils.subprocess_utils.subprocess.run")
@@ -22,7 +22,20 @@ def test_happy_path_returns_completed_process(mock_run):
         capture_output=True,
         text=True,
         check=False,
+        creationflags=CREATE_NO_WINDOW,
     )
+
+
+@patch("src.utils.subprocess_utils.subprocess.run")
+def test_caller_creationflags_merged_with_create_no_window(mock_run):
+    """Caller-supplied creationflags are OR-merged with CREATE_NO_WINDOW, not replaced."""
+    mock_result = MagicMock(spec=subprocess.CompletedProcess)
+    mock_result.returncode = 0
+    mock_run.return_value = mock_result
+
+    run_subprocess(["echo", "hi"], creationflags=0x10)
+
+    assert mock_run.call_args.kwargs["creationflags"] == 0x10 | CREATE_NO_WINDOW
 
 
 @patch("src.utils.subprocess_utils.subprocess.run")

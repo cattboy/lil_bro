@@ -33,6 +33,23 @@ def load_fonts() -> None:
         QFontDatabase.addApplicationFont(str(ttf))
 
 
+def app_icon():
+    """Return the lil_bro window/taskbar icon as a ``QIcon``.
+
+    Loads ``resources/icons/lil_bro-01-classic.ico`` (multi-size .ico so
+    Windows picks the right resolution for the taskbar, title bar and
+    Alt-Tab). Returns a null ``QIcon`` if the file isn't present — callers
+    can hand it to ``setWindowIcon`` unconditionally; Qt treats a null icon
+    as "no change".
+    """
+    from PySide6.QtGui import QIcon
+
+    ico = _resources_dir() / "icons" / "lil_bro-01-classic.ico"
+    if not ico.is_file():
+        return QIcon()
+    return QIcon(str(ico))
+
+
 def _resources_dir() -> Path:
     """Return the bundled resources directory next to the ``src/`` tree.
 

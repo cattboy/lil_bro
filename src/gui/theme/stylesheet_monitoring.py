@@ -140,6 +140,37 @@ def _qss_poll(c: dict[str, str]) -> str:
 """
 
 
+def _qss_dashboard_scroll(c: dict[str, str]) -> str:
+    """Dashboard scroll viewport + pulsing scroll-hint chip."""
+    return f"""
+    /* --- Dashboard scroll area --------------------------------------- */
+    /* Transparent shell so the deep window background shows through; the
+     * scrollbar itself is themed by the global QScrollBar rules. */
+    QScrollArea#dashboardScroll {{
+        background-color: transparent;
+        border: none;
+    }}
+    QScrollArea#dashboardScroll > QWidget > QWidget {{
+        background-color: transparent;
+    }}
+
+    /* Scroll-hint chip — circular, amber ring on elevated surface. The glow
+     * pulse is a QGraphicsDropShadowEffect animation (ScrollHintArrow),
+     * not QSS — Qt QSS has no box-shadow. */
+    QToolButton#scrollHintArrow {{
+        background-color: {c["elevated"]};
+        color: {c["warning"]};
+        border: 1px solid {c["warning"]};
+        border-radius: 16px;  /* half the 32px chip — fully round */
+        font-size: 13px;
+    }}
+    QToolButton#scrollHintArrow:hover {{
+        background-color: {c["hover"]};
+        border: 1px solid {c["warning"]};
+    }}
+"""
+
+
 def _qss_phase_row(c: dict[str, str]) -> str:
     """Pipeline phase row container and compact per-phase cards/labels."""
     return f"""
