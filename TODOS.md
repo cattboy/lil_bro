@@ -28,11 +28,6 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
-### T-011 — Global Win32 hotkey for cancel (deferred from /plan-eng-review D1)
-**Priority:** P3 — **COMPLETED 2026-05-28**
-
----
-
 ### T-012 — Pre-flight "Run benchmarks" toggle in sidebar (deferred from /plan-eng-review D7)
 **Priority:** P2
 **Effort:** S human / S with CC
@@ -53,55 +48,6 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
-### T-016 — Persistent "what was applied / last run" UI panel
-**Priority:** P2 — **COMPLETED 2026-06-01**
-Read-only `LastRunCard` (`src/gui/widgets/last_run_card.py`) mirrors the session manifest: one row per applied fix with name, time, before→after transition (e.g. `60 Hz → 144 Hz`), and revert status; header shows the session date + System Restore availability. Pre-allocated in `Dashboard.__init__`, fed via `Dashboard.set_last_run()`. Live refresh via a single `QFileSystemWatcher` on the backups dir (150 ms debounce, parented to main) in `StartupCoordinator`, seeded once in `on_finished` (covers fast + slow startup, no `app.run()` edit). Three CEO-review expansions surfaced manifest data the baseline discarded: per-fix before→after, restore-point header line, inline non-revertible reason. 24 new tests; suite 833 green. Reviewed: office-hours design doc 9/10 → CEO SELECTIVE EXPANSION → eng review CLEAR. **Note:** the manifest persists across runs until a revert (by design), so the card shows accumulated fixes headed by the original session date — it does NOT clear on launch (would hide still-revertible fixes). Deferred: session-boundary grouping → **T-024**.
-
----
-
-### T-017 — Test coverage for new pipeline phases + controller + workers
-**Priority:** P2 — **COMPLETED 2026-05-28**
-
----
-
-### T-018 — SystemStatsWorker missing deleteLater wire
-**Priority:** P3 — **COMPLETED 2026-05-28**
-
----
-
-### T-019 — Cinebench output_file path `%` defense + 50 MB output cap
-**Priority:** P4 — **COMPLETED 2026-05-28**
-
----
-
-### T-020 — Strip triple-comment tail artifacts from Serena replace edits
-**Priority:** P4 (cosmetic) — **COMPLETED 2026-05-28**
-
----
-
-### T-021 — Maintainability polish (PEP-8 + `__all__` + docstring direction inversions)
-**Priority:** P4 (cosmetic) — **COMPLETED 2026-05-28**
-
----
-
-### T-023 — DESIGN.md-aligned styling pass for all QMessageBox dialogs
-**Priority:** P3 — **COMPLETED 2026-06-04**
-Introduced the shared `CardDialog` template (`src/gui/widgets/dialogs.py`) — one DESIGN.md card (surface, tone-coloured icon, JetBrains-Mono title, glow primary, WASD `(W)`/`(S)` buttons, Esc handling) driven by a `cardTone` property. The two stock `QMessageBox` dialogs (`cap_notifier`, `main_window._open_debug_log`) now render as on-brand cards; `ConfirmDialog` / `AdminWarningDialog` / `MouseReadyDialog` were refactored onto the base and the three duplicate `_qss_*` blocks collapsed into one `_qss_card_dialog`. Multi-agent plan review (sonnet review + opus devil's-advocate + opus orchestrator + sonnet final) caught a `sev` property-name collision (→ renamed `cardTone`) and a missed `test_admin_notifier.py` objectName assertion. Deferred: T-025 (dialog style variants, seeded with MouseReady's pre-unify look), T-027 (emoji→QIcon). Original scope/Why/Fix kept below as historical context.
-**Effort:** S human / S with CC
-**Why:** The app's `QMessageBox` dialogs (the cap warning in `src/gui/cap_notifier.py` and the
-debug-log notice at `src/gui/windows/main_window.py:279`) use stock OS chrome, which clashes with
-the dark / JetBrains-Mono / coral (`#FF6B6B`) system defined in `DESIGN.md`. Stock chrome is
-acceptable for a rare error dialog but is off-brand.
-**Fix:** Give all `QMessageBox` dialogs one DESIGN.md-aligned pass — dark theme, JetBrains Mono,
-`#FF6B6B` error accent — via shared QSS or a thin styled-dialog helper. Audit for any other stock
-dialogs at the same time. Reference implementation: `src/gui/admin_notifier.py` +
-`_qss_admin_dialog` in `src/gui/theme/stylesheet_dialogs.py` already did this for the not-elevated
-warning (object-name-driven QSS, `warning` amber accent). `cap_notifier.py` should follow the same
-template (error dialog → `#FF6B6B` accent, not amber).
-**Blocked by:** Nothing.
-**Added:** 2026-06-01 (from /plan-ceo-review D7 on T-022)
-
----
 
 ### T-024 — Session-boundary grouping in the Applied Fixes card
 **Priority:** P3
@@ -193,13 +139,43 @@ template (error dialog → `#FF6B6B` accent, not amber).
 
 ---
 
+## Completed
+
 ### T-035 — Bump the version banner in the next release
 **Priority:** P2 — **COMPLETED 2026-06-15**
 `src/_version.py` bumped to `"0.5.0.0"` (matching `VERSION` file); `pyproject.toml` converted from static `version = "0.5.0"` to `dynamic = ["version"]` with `[tool.setuptools.dynamic] version = {attr = "_version.__version__"}` — single source of truth, no more three-way drift. `dist/lil_bro.exe` rebuilt from the corrected source. `SESSION START | lil_bro v0.5.0.0` banner now matches the release.
 
 ---
 
-## Completed
+### T-011 — Global Win32 hotkey for cancel (deferred from /plan-eng-review D1)
+**Priority:** P3 — **COMPLETED 2026-05-28**
+
+---
+
+### T-023 — DESIGN.md-aligned styling pass for all QMessageBox dialogs
+**Priority:** P3 — **COMPLETED 2026-06-04**
+Introduced the shared `CardDialog` template (`src/gui/widgets/dialogs.py`) — one DESIGN.md card (surface, tone-coloured icon, JetBrains-Mono title, glow primary, WASD `(W)`/`(S)` buttons, Esc handling) driven by a `cardTone` property. The two stock `QMessageBox` dialogs (`cap_notifier`, `main_window._open_debug_log`) now render as on-brand cards; `ConfirmDialog` / `AdminWarningDialog` / `MouseReadyDialog` were refactored onto the base and the three duplicate `_qss_*` blocks collapsed into one `_qss_card_dialog`. Multi-agent plan review (sonnet review + opus devil's-advocate + opus orchestrator + sonnet final) caught a `sev` property-name collision (→ renamed `cardTone`) and a missed `test_admin_notifier.py` objectName assertion. Deferred: T-025 (dialog style variants, seeded with MouseReady's pre-unify look), T-027 (emoji→QIcon). Original scope/Why/Fix kept below as historical context.
+**Effort:** S human / S with CC
+**Why:** The app's `QMessageBox` dialogs (the cap warning in `src/gui/cap_notifier.py` and the
+debug-log notice at `src/gui/windows/main_window.py:279`) use stock OS chrome, which clashes with
+the dark / JetBrains-Mono / coral (`#FF6B6B`) system defined in `DESIGN.md`. Stock chrome is
+acceptable for a rare error dialog but is off-brand.
+**Fix:** Give all `QMessageBox` dialogs one DESIGN.md-aligned pass — dark theme, JetBrains Mono,
+`#FF6B6B` error accent — via shared QSS or a thin styled-dialog helper. Audit for any other stock
+dialogs at the same time. Reference implementation: `src/gui/admin_notifier.py` +
+`_qss_admin_dialog` in `src/gui/theme/stylesheet_dialogs.py` already did this for the not-elevated
+warning (object-name-driven QSS, `warning` amber accent). `cap_notifier.py` should follow the same
+template (error dialog → `#FF6B6B` accent, not amber).
+**Blocked by:** Nothing.
+**Added:** 2026-06-01 (from /plan-ceo-review D7 on T-022)
+
+---
+
+### T-016 — Persistent "what was applied / last run" UI panel
+**Priority:** P2 — **COMPLETED 2026-06-01**
+Read-only `LastRunCard` (`src/gui/widgets/last_run_card.py`) mirrors the session manifest: one row per applied fix with name, time, before→after transition (e.g. `60 Hz → 144 Hz`), and revert status; header shows the session date + System Restore availability. Pre-allocated in `Dashboard.__init__`, fed via `Dashboard.set_last_run()`. Live refresh via a single `QFileSystemWatcher` on the backups dir (150 ms debounce, parented to main) in `StartupCoordinator`, seeded once in `on_finished` (covers fast + slow startup, no `app.run()` edit). Three CEO-review expansions surfaced manifest data the baseline discarded: per-fix before→after, restore-point header line, inline non-revertible reason. 24 new tests; suite 833 green. Reviewed: office-hours design doc 9/10 → CEO SELECTIVE EXPANSION → eng review CLEAR. **Note:** the manifest persists across runs until a revert (by design), so the card shows accumulated fixes headed by the original session date — it does NOT clear on launch (would hide still-revertible fixes). Deferred: session-boundary grouping → **T-024**.
+
+---
 
 ### T-034 — Power Plan + Game Mode Dashboard fix cards (with post-revert refresh)
 **Priority:** P3 — **COMPLETED 2026-06-11**
