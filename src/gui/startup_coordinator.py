@@ -78,6 +78,8 @@ class StartupCoordinator(QObject):
         # Power Plan / Game Mode card-fix check_name -- same capture-at-request
         # rationale as _nvidia_fix_check_name.
         self._setting_fix_check_name: str | None = None
+        # Monitor card-fix device, captured at request time (same rationale as above).
+        self._monitor_fix_device: str | None = None
         # Applied Fixes card (T-016): a QFileSystemWatcher refreshes it live; a
         # single-shot QTimer debounces the double directoryChanged per write.
         self._last_run_watcher = None
@@ -594,6 +596,7 @@ class StartupCoordinator(QObject):
     # dashboard. Replacing bare-lambda connections also fixes the off-main-thread
     # set_monitor_data / leaked refresh QThread that prevented a clean exit.
 
+    @Slot()
     def _on_monitor_fix_thread_finished(self) -> None:
         runtime = self._runtime
         runtime.pop("card_fix_in_progress", None)
@@ -606,12 +609,13 @@ class StartupCoordinator(QObject):
         # button's visibility; re-enabling a hidden button is harmless.
         try:
             self._main._dashboard.set_fix_card_applying(
-                "display", False, getattr(self, "_monitor_fix_device", None)
+                "display", False, self._monitor_fix_device
             )
             self._main.status_bar_widget.set_state("ok", "Idle")
         except Exception:
             pass
 
+    @Slot()
     def _on_nvidia_fix_thread_finished(self) -> None:
         runtime = self._runtime
         runtime.pop("card_fix_in_progress", None)
@@ -630,6 +634,7 @@ class StartupCoordinator(QObject):
         except Exception:
             pass
 
+    @Slot()
     def _on_setting_fix_thread_finished(self) -> None:
         runtime = self._runtime
         runtime.pop("card_fix_in_progress", None)
