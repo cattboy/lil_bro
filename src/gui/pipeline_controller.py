@@ -268,6 +268,11 @@ class PipelineController:
 
         self.set_flow_controls(False)
         main.status_bar_widget.set_state("run", "Reverting session…")
+        # Lock the in-page revert button with a "Reverting…" busy label, mirroring
+        # the dashboard cards' "Applying…" cue. Placed after the early-return
+        # guards above so a "nothing to revert" click never flashes a busy button.
+        # Reset on thread-finished (below), for both success and failure.
+        main._revert_view.set_reverting(True)
 
         revert_thread = QThread()
         revert_worker = RevertWorker()
@@ -285,6 +290,16 @@ class PipelineController:
 
         def _on_revert_thread_done() -> None:
             self.set_flow_controls(True)
+            # Restore the revert button from its "Reverting…" busy label for both
+            # success and failure (thread.finished fires either way). Best-effort
+            # so a widget teardown during app-close can't propagate out of the
+            # finished handler -- matches the busy-reset sites in
+            # startup_coordinator. Order vs set_flow_controls is irrelevant: both
+            # re-enable the button, and this restores the label last.
+            try:
+                main._revert_view.set_reverting(False)
+            except Exception:
+                pass
             runtime["revert_thread"] = None
             runtime["revert_worker"] = None
             revert_worker.deleteLater()
