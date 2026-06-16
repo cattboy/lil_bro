@@ -347,3 +347,45 @@ class BatchSelectionDialog(QDialog):
                 self._fix_items[idx].toggle()
                 return
         super().keyPressEvent(event)
+
+    # ── Fit-to-content ─────────────────────────────────────────────────
+
+    def showEvent(self, event) -> None:  # noqa: N802  Qt override
+        super().showEvent(event)
+        self._fit_to_content()
+
+    def _fit_to_content(self) -> None:
+        """Grow the dialog to swallow any scroll overflow, clamped to the screen.
+
+        ``QGridLayout.heightForWidth`` under-reports the height of multi-row,
+        two-column card grids (verified: ~28px short at 3-4 fixes, more beyond),
+        so ``_FitContentScrollArea.sizeHint`` opens the dialog a touch too short
+        and a needless vertical scrollbar appears even when the cards would fit.
+        Rather than re-derive the grid height (Qt gets it wrong), read Qt's *own*
+        measured overflow once the body is laid out and grow to absorb it. Each
+        pass forces a synchronous layout so the scrollbar range is current before
+        we read it; a few passes converge because growing widens the viewport
+        (which re-wraps text slightly shorter once the scrollbar drops out).
+
+        Grow with ``resize``, never ``setFixedHeight`` -- the latter collapses
+        ``maximumHeight`` onto the new value, which would destroy the screen
+        clamp and stop the loop after one pass. ``maximumHeight`` (set in
+        ``__init__``) stays the real screen-based clamp and is the loop's exit
+        guard: genuinely long lists stop growing at the screen edge and keep
+        scrolling, so the footer (Apply/Skip) stays on-screen exactly as before.
+        """
+        vbar = self._scroll.verticalScrollBar()
+        body = self._scroll.widget()
+        for _ in range(4):
+            dlg_layout = self.layout()
+            if dlg_layout is not None:
+                dlg_layout.activate()
+            if body is not None and body.layout() is not None:
+                body.layout().activate()
+            overflow = vbar.maximum()
+            if overflow <= 0 or self.height() >= self.maximumHeight():
+                break
+            target = min(self.height() + overflow, self.maximumHeight())
+            if target <= self.height():
+                break
+            self.resize(self.width(), target)
