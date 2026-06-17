@@ -27,7 +27,7 @@ lil_bro ships as a **single, self-contained `.exe`** — there is nothing extra 
 
 ## Status
 
-🟢 **v0.2.0.0 — PySide6 Desktop GUI + Pipeline Rescan Idempotency** — Full windowed app with dashboard (live thermals, mouse polling, monitor refresh tiles), optimization pipeline with phase-card progress, batch fix selection dialog, and animated splash screen. Running the pipeline twice in one session now finds nothing the second time. Dashboard "Fix Now" buttons are race-guarded and revertible. CLI mode preserved via `--terminal`. 671 tests passing.
+🟢 **v0.5.0.1 — Dashboard fix cards + one-click optimization** — Full windowed app with a live dashboard (thermals, mouse polling, monitor refresh tiles) and one-click fix cards for NVIDIA driver profile, NVIDIA DLSS preset (with a Quality/FPS switch), Power Plan, Game Mode, and monitor refresh rate — each approval-gated, revertible, and showing live "Applying…" feedback while it runs. Optimization pipeline with phase-card progress and a batch fix selection dialog; session-level revert with a Windows System Restore fallback. CLI mode preserved via `--terminal`. 1106 tests passing.
 
 ## How to Run
 
