@@ -86,6 +86,7 @@ a = Analysis(
         'src.gui.input.wasd_filter',
         'src.gui.widgets.ai_setup_dialog',
         'src.gui.widgets.batch_selection_dialog',
+        'src.gui.widgets.coachmarks',
         'src.gui.widgets.confirm_dialog',
         'src.gui.widgets.dashboard',
         'src.gui.widgets.dialogs',

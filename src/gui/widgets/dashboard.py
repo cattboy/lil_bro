@@ -678,3 +678,49 @@ class Dashboard(QWidget):
         if not items:
             return f"<span style='color:{_NPI_GREEN}'>✓ All settings optimal</span>"
         return " · ".join(items)
+
+    # ── Coachmark targets (first-run onboarding tour) ──────────────────
+
+    def coachmark_fix_target(self):
+        """First visible quick-fix action button, for the coachmark "fix" beat.
+
+        Returns the ``primary`` QPushButton of the first visible fix card (power /
+        game mode / NVIDIA / monitor), or ``None`` when every card is hidden or
+        already-optimal — the coachmark controller then falls back to a stat tile.
+        """
+        cards = [
+            self._power_plan_card, self._game_mode_card,
+            self._nvidia_full_card, self._nvidia_dlss_card,
+            self._monitor_card_slot, *self._monitor_cards,
+        ]
+        for card in cards:
+            if not card.isVisibleTo(self):
+                continue
+            for btn in card.findChildren(QPushButton):
+                if btn.objectName() == "primary" and btn.isVisibleTo(card):
+                    return btn
+        return None
+
+    def coachmark_fix_fallback(self):
+        """Always-present fallback anchor for the coachmark "fix" beat.
+
+        When no fix card has an actionable button (a fully-optimal PC), the beat
+        anchors here -- the always-visible Mouse Polling card, a real per-card
+        action -- instead of a stat tile that has no Fix button (which made the
+        "Hit Fix Now" copy point at nothing). The mouse card's button is
+        ``objectName="secondary"``, so ``coachmark_fix_target`` never selects it,
+        which is exactly why it is the reliable fallback here.
+        """
+        return self._mouse_poll_card
+
+    def is_coachmark_ready(self) -> bool:
+        """True once monitor wiring has run (polled by the coachmark controller).
+
+        ``set_monitor_data`` shows exactly one of the monitor slots; both are
+        hidden before wiring. The first-run coachmark "fix" beat polls this so it
+        waits for live quick-fix cards on the slow startup path before anchoring.
+        """
+        return (
+            self._monitor_card_slot.isVisibleTo(self)
+            or self._monitor_empty_slot.isVisibleTo(self)
+        )

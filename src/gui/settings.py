@@ -27,6 +27,7 @@ _ORG = "lil_bro"
 _APP = "GUI"
 _GEOMETRY_KEY = "window/geometry"
 _STATE_KEY = "window/state"
+_COACHMARKS_KEY = "onboarding/seen_coachmarks"
 
 
 class Settings:
@@ -71,3 +72,20 @@ class Settings:
                 except Exception:
                     pass  # safe: restoreState may reject stale state from a prior Qt version
         return True
+
+    # ── Onboarding state ───────────────────────────────────────────────
+
+    def has_seen_coachmarks(self) -> bool:
+        """True once the first-run coachmark tour has been seen/dismissed.
+
+        Stored under ``onboarding/seen_coachmarks`` in the same QSettings key
+        that already persists window geometry and the mouse-Hz cache.
+        ``post_run_cleanup`` never touches the registry, so this survives across
+        runs without leaving a new on-disk trace.
+        """
+        return bool(self._qs.value(_COACHMARKS_KEY, False, type=bool))
+
+    def mark_coachmarks_seen(self) -> None:
+        """Persist that the user has seen (and dismissed) the coachmark tour."""
+        self._qs.setValue(_COACHMARKS_KEY, True)
+        self._qs.sync()

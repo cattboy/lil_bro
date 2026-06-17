@@ -126,21 +126,30 @@ class MainWindow(QMainWindow):
             shortcut.activated.connect(button.click)
             self._nav_shortcuts.append(shortcut)
 
-        # Sidebar action hotkeys: R -> Revert, E -> Exit, A -> AI Setup. Same
-        # WindowShortcut scope as the nav hotkeys above, so they stay inert
-        # while a modal dialog (e.g. the confirm dialogs these open) holds
-        # focus. R and E route through handlers; A drives the AI Setup button
-        # directly, mirroring the nav hotkeys' "click the existing button"
-        # approach.
+        # Sidebar action hotkeys: R -> Revert, E -> Exit, A -> AI Setup,
+        # H -> Help / FAQ (replay the coachmark tour). Same WindowShortcut scope
+        # as the nav hotkeys above, so they stay inert while a modal dialog (e.g.
+        # the confirm dialogs these open) holds focus. R and E route through
+        # handlers; A and H drive their sidebar buttons directly, mirroring the
+        # nav hotkeys' "click the existing button" approach.
         self._action_shortcuts = []
         for key, slot in (
             (Qt.Key.Key_R, self._on_revert_hotkey),
             (Qt.Key.Key_E, self._on_exit_requested),
             (Qt.Key.Key_A, self._ai_setup_button.click),
+            (Qt.Key.Key_H, self._help_button.click),
         ):
             shortcut = QShortcut(QKeySequence(key), self)
             shortcut.activated.connect(slot)
             self._action_shortcuts.append(shortcut)
+
+        # First-run coachmark tour controller. Pre-allocated here (like the
+        # dashboard cards) so it parents correctly in the bundled exe; the
+        # one-time first-run show is scheduled later from app.run()'s post-show
+        # tail / StartupCoordinator.on_finished (both inside app.exec()).
+        # Replayed on demand via the Help / FAQ (H) button.
+        from src.gui.widgets.coachmarks import CoachmarkController
+        self._coachmark_controller = CoachmarkController(self, self._settings)
 
     def _inject_status_bar(self, widget) -> None:
         """Pin the custom status bar widget to the bottom of the main window."""
@@ -197,11 +206,13 @@ class MainWindow(QMainWindow):
         self._nav_log = self._nav_btn("📄  View Debug Log", state="muted")
         self._revert_button = self._nav_btn("↩  Revert Changes (R)", state="warning")
         self._ai_setup_button = self._nav_btn("⚙  AI Setup (A)", state="muted")
+        self._help_button = self._nav_btn("❔  Help / FAQ (H)", state="muted")
         self._nav_exit = self._nav_btn("✕  Exit (E)", state="danger")
 
         col.addWidget(self._nav_log)
         col.addWidget(self._revert_button)
         col.addWidget(self._ai_setup_button)
+        col.addWidget(self._help_button)
         col.addWidget(self._nav_exit)
 
         # Wire built-in nav actions
@@ -210,6 +221,8 @@ class MainWindow(QMainWindow):
         self._stop_button.clicked.connect(self._on_stop_clicked)
         self._nav_log.clicked.connect(self._open_debug_log)
         self._revert_button.clicked.connect(self.show_revert)
+        # Help / FAQ replays the first-run coachmark tour on demand.
+        self._help_button.clicked.connect(self._on_help_requested)
         # Exit routes through a W/S confirm dialog rather than closing directly.
         self._nav_exit.clicked.connect(self._on_exit_requested)
 
@@ -357,6 +370,17 @@ class MainWindow(QMainWindow):
         if dlg.exec():
             self.close()
 
+    def _on_help_requested(self) -> None:
+        """H / sidebar Help: replay the first-run coachmark tour on demand.
+
+        Switches to the Dashboard first so the tour's targets (the quick-fix
+        cards) exist, then restarts the controller regardless of the seen-flag.
+        """
+        self.show_dashboard()
+        controller = getattr(self, "_coachmark_controller", None)
+        if controller is not None:
+            controller.start()
+
     # ── Debug log ──────────────────────────────────────────────────────
 
     def _open_debug_log(self) -> None:
@@ -379,3 +403,16 @@ class MainWindow(QMainWindow):
         if self._settings is not None:
             self._settings.save_geometry(self)
         super().closeEvent(event)
+
+    def showEvent(self, event):  # noqa: N802  Qt override
+        super().showEvent(event)
+        # Kick the one-time first-run coachmark tour on the first show. show() is
+        # called from app.run() AFTER splash.exec() returns, so this runs in the
+        # app.exec() lead-in -- the QTimer scheduled by schedule_first_run is not
+        # dropped in the bundled exe (the splash-loop trap; see scroll_hint.py).
+        if getattr(self, "_coachmark_first_show", False):
+            return
+        self._coachmark_first_show = True
+        controller = getattr(self, "_coachmark_controller", None)
+        if controller is not None:
+            controller.schedule_first_run()

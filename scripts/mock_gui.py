@@ -8,7 +8,8 @@ card between its visual states and applies whole scenarios.
 Run from the repo root (venv active):
 
     python scripts/mock_gui.py
-    python scripts/mock_gui.py --smoke   # headless-friendly auto-cycle + exit
+    python scripts/mock_gui.py --smoke        # headless-friendly auto-cycle + exit
+    python scripts/mock_gui.py --screenshots  # render docs/screenshots/*.png + exit
 
 Monkeypatches (script-level only; production code untouched):
   * src.utils.nvidia_npi.find_npi_exe — canned path/None so the NVIDIA cards
@@ -477,6 +478,20 @@ def _run_smoke(app: QApplication, driver: MockDriver) -> None:
             busy_reset = d._nvidia_full_card._apply_btn.isEnabled()
             print(f"[smoke] busy-cue: lock={busy_lock} reset={busy_reset}")
             assert busy_lock and busy_reset, "set_fix_card_applying not wired"
+
+            # Coachmark tour: anchors to the run button, makes its Next button the
+            # sole default (W=proceed via the WASD filter), and restores defaults
+            # on dismiss (the C-reuse determinism guard).
+            m = driver.main
+            ctrl = m._coachmark_controller
+            ctrl.start()
+            cm_anchored = ctrl._overlay._active is m._run_button
+            cm_sole = [b for b in m.findChildren(QPushButton) if b.isDefault()] == [ctrl._bubble.next_btn]
+            ctrl.dismiss()
+            cm_restored = not any(b.isDefault() for b in m.findChildren(QPushButton))
+            print(f"[smoke] coachmark: anchored={cm_anchored} sole_default={cm_sole} restored={cm_restored}")
+            assert cm_anchored and cm_sole and cm_restored, "coachmark tour not wired"
+
             driver.set_animation(False)
             print("[smoke] OK")
             app.quit()
@@ -488,11 +503,52 @@ def _run_smoke(app: QApplication, driver: MockDriver) -> None:
     QTimer.singleShot(0, lambda: step(0))
 
 
+def _run_screenshots(app: QApplication, main_win: MainWindow, driver: MockDriver) -> None:
+    """Render annotated Dashboard PNGs for the README into docs/screenshots/.
+
+    Drives the REAL Dashboard + coachmark controller over fixture data, so the
+    images always reflect the live widgets. Offscreen-safe — QWidget.grab()
+    renders without a display.
+    """
+    out = ROOT / "docs" / "screenshots"
+    out.mkdir(parents=True, exist_ok=True)
+    main_win.resize(1320, 860)
+
+    def _grab(name: str) -> None:
+        for _ in range(3):
+            app.processEvents()
+        main_win.grab().save(str(out / name))
+        print(f"[screenshots] wrote {(out / name).as_posix()}")
+
+    ctrl = main_win._coachmark_controller
+
+    # Hero: issues present + the first-run coachmark pointing at Start Optimization.
+    driver.apply_scenario("Mixed issues")
+    app.processEvents()
+    ctrl.start()
+    _grab("dashboard.png")
+
+    # The quick-fix beat (arrow on a live Fix Now card).
+    ctrl.next()
+    _grab("dashboard-coachmark-fix.png")
+    ctrl.dismiss()
+
+    # All-green success state (no issues, no coachmark).
+    driver.apply_scenario("All optimal")
+    _grab("dashboard-optimal.png")
+
+    print("[screenshots] OK")
+
+
 # ── Entry ───────────────────────────────────────────────────────────────────
 
 
 def main() -> int:
     smoke = "--smoke" in sys.argv
+    screenshots = "--screenshots" in sys.argv
+    if screenshots:
+        # grab() renders without a real display; no visible window needed.
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
     QApplication.setApplicationName("lil_bro")
     QApplication.setOrganizationName("lil_bro")
@@ -511,6 +567,10 @@ def main() -> int:
     panel = MockControls(driver)
 
     main_win.show()  # before set_monitor_data — mirrors app.py ordering
+
+    if screenshots:
+        _run_screenshots(app, main_win, driver)
+        return 0
 
     if smoke:
         _run_smoke(app, driver)

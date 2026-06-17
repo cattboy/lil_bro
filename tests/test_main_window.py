@@ -327,21 +327,21 @@ def test_nav_buttons_show_number_hints(qtbot):
 
 
 def test_action_shortcuts_use_window_scope(qtbot):
-    """R/E/A are bound with WindowShortcut scope so modals keep those letters."""
+    """R/E/A/H are bound with WindowShortcut scope so modals keep those letters."""
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QKeySequence
 
     window = MainWindow()
     qtbot.addWidget(window)
 
-    assert len(window._action_shortcuts) == 3
+    assert len(window._action_shortcuts) == 4
     bound = set()
     for shortcut in window._action_shortcuts:
         assert shortcut.context() == Qt.ShortcutContext.WindowShortcut
-        for key in (Qt.Key.Key_R, Qt.Key.Key_E, Qt.Key.Key_A):
+        for key in (Qt.Key.Key_R, Qt.Key.Key_E, Qt.Key.Key_A, Qt.Key.Key_H):
             if shortcut.key().matches(QKeySequence(key)) == QKeySequence.SequenceMatch.ExactMatch:
                 bound.add(key)
-    assert bound == {Qt.Key.Key_R, Qt.Key.Key_E, Qt.Key.Key_A}
+    assert bound == {Qt.Key.Key_R, Qt.Key.Key_E, Qt.Key.Key_A, Qt.Key.Key_H}
 
 
 def test_action_buttons_show_letter_hints(qtbot):

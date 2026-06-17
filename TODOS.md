@@ -7,6 +7,16 @@ Format: Priority | Effort (human / CC) | Context
 
 ## Open
 
+### T-038 — Populate mock OutputView for a real pipeline screenshot
+**Priority:** P3
+**Effort:** M human / S-M with CC
+**Why:** `scripts/mock_gui.py --screenshots` renders the Dashboard beautifully (real widgets + fixtures), but the pipeline / Output view is unpopulated in mock mode, so the README's headline flow ("Start Optimization") is documented with prose + the first-run callout instead of a real screenshot.
+**Fix:** Add fixture data for the OutputView (phase-card states + output-panel lines) to `scripts/mock_fixtures.py`; drive it via `MockDriver` in `scripts/mock_gui.py`; capture a `docs/screenshots/pipeline.png` in `_run_screenshots` and embed it in the README "Start Optimization" section.
+**Blocked by:** Nothing. Deferred from the FAQ-Instructions onboarding PR (the Dashboard + coachmark screenshots shipped; the populated pipeline screenshot was out of scope).
+**Added:** 2026-06-17 (deferred from /plan-eng-review on the FAQ-Instructions coachmark plan)
+
+---
+
 ### T-006 — Observability & Instrumentation
 **Priority:** P3
 **Effort:** L human / L with CC

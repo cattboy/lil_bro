@@ -2,6 +2,8 @@
 
 A **local, privacy-first AI agent** that optimizes your gaming PC for peak performance.
 
+![lil_bro Dashboard with quick-fix cards and the first-run tour](docs/screenshots/dashboard.png)
+
 ## What It Does
 
 - 🔍 **Detects misconfigurations** — monitor refresh rates, mouse polling, G-Sync, power plans, XMP/EXPO, NVIDIA GPU profiles
@@ -29,13 +31,35 @@ lil_bro ships as a **single, self-contained `.exe`** — there is nothing extra 
 
 🟢 **v0.5.0.1 — Dashboard fix cards + one-click optimization** — Full windowed app with a live dashboard (thermals, mouse polling, monitor refresh tiles) and one-click fix cards for NVIDIA driver profile, NVIDIA DLSS preset (with a Quality/FPS switch), Power Plan, Game Mode, and monitor refresh rate — each approval-gated, revertible, and showing live "Applying…" feedback while it runs. Optimization pipeline with phase-card progress and a batch fix selection dialog; session-level revert with a Windows System Restore fallback. CLI mode preserved via `--terminal`. 1106 tests passing.
 
-## How to Run
+## Getting Started
 
-1. **Download** `lil_bro.exe` from [Releases](https://github.com/anthropics/lil_bro/releases)
-2. **Double-click** the `.exe` to launch
-   - A **UAC (User Access Control) prompt** will appear — this is expected and required. lil_bro needs admin privileges to analyze and modify system settings.
-3. **Follow the on-screen prompts** — the app will analyze your system and propose optimizations
-4. **Review and approve** fixes before they're applied
+1. **Download** `lil_bro.exe` from [Releases](https://github.com/anthropics/lil_bro/releases).
+2. **Double-click** to launch. A **UAC (User Access Control) prompt** appears — this is expected and required: lil_bro needs admin rights to read sensors and apply system tweaks.
+3. **The first launch shows a quick tour.** Arrow callouts point at the two things you'll use. Press **W** (or click **Next**) to step through, **Esc** to skip. Replay it anytime from **❔ Help / FAQ (H)** in the sidebar.
+
+lil_bro has two surfaces — a live **Dashboard** for quick one-off fixes, and **Start Optimization** for a full guided pass.
+
+### The Dashboard — live stats + one-click quick fixes
+
+The home view (**◆ Dashboard (1)**) shows live CPU/GPU temperatures, RAM, and mouse polling. When something is holding back your FPS — a monitor stuck below its max refresh rate, a non-performance power plan, Game Mode off, or an unoptimized NVIDIA driver profile / DLSS preset — a **quick-fix card** appears with a one-click **Fix Now** / **Apply** button. Every fix is approval-gated, shows live "Applying…" feedback, and is revertible. Use these anytime; no full run required.
+
+![A Dashboard quick-fix card with its callout](docs/screenshots/dashboard-coachmark-fix.png)
+
+When everything is already healthy, the cards step back and the Dashboard is simply your live monitor:
+
+![Dashboard in the all-optimal state](docs/screenshots/dashboard-optimal.png)
+
+### Start Optimization — the guided pipeline
+
+**▶ Start Optimization (2)** runs the full guided pass:
+
+1. **Restore point first** — a Windows System Restore Point is created before anything changes.
+2. **Scan** — a deep hardware + configuration scan (display, power, GPU, thermals, NVIDIA profile, and more).
+3. **Propose** — lil_bro lists the fixes it recommends in a batch selection dialog.
+4. **Approve** — you choose exactly which fixes to apply. Nothing changes without your OK.
+5. **Apply + benchmark** — the selected fixes run, with an optional before/after benchmark.
+
+Changed your mind? **↩ Revert Changes (R)** rolls back everything from the session in one click, with the restore point as the safety net behind it.
 
 ### CLI Mode (Terminal)
 
