@@ -16,7 +16,7 @@ import copy
 import math
 
 from src.agent_tools.power_plan import KNOWN_PLANS
-from src.utils.dlss_presets import get_preset
+from src.utils.dlss_presets import _VALID_PRIORITIES, get_preset
 from src.utils.nvidia_npi import SETTING_IDS, TARGET_VALUES, calculate_fps_cap
 
 # ── Stat-card snapshots (SystemStatsWorker._tick shape, minus the raw ──────
@@ -227,26 +227,31 @@ def nvidia_specs(state: str) -> dict:
     return specs
 
 
+# ── DLSS Quality/FPS toggle priorities (drives NvidiaDlssCard.set_priority) ──
+# Sourced from the production validity tuple so the combo can never drift.
+DLSS_PRIORITIES: list[str] = list(_VALID_PRIORITIES)
+
+
 # ── Whole-dashboard scenario presets ────────────────────────────────────────
 SCENARIOS: dict[str, dict] = {
     "All optimal": {
         "stats": "normal", "thermal": "normal", "mouse": "ok_1000",
-        "monitors": "optimal", "nvidia": "ok",
+        "monitors": "optimal", "nvidia": "ok", "dlss": "quality",
         "power": "high_perf", "game": "enabled", "animate": True,
     },
     "Mixed issues": {
         "stats": "normal", "thermal": "warning", "mouse": "warn_500",
-        "monitors": "suboptimal", "nvidia": "warning",
+        "monitors": "suboptimal", "nvidia": "warning", "dlss": "fps",
         "power": "balanced", "game": "disabled", "animate": False,
     },
     "Everything broken": {
         "stats": "hot", "thermal": "critical", "mouse": "low_125",
-        "monitors": "wmi", "nvidia": "warning",
+        "monitors": "wmi", "nvidia": "warning", "dlss": "fps",
         "power": "power_saver", "game": "disabled", "animate": False,
     },
     "Fresh install": {
         "stats": "missing", "thermal": "offline", "mouse": "not_measured",
-        "monitors": "empty", "nvidia": "no_gpu",
+        "monitors": "empty", "nvidia": "no_gpu", "dlss": "quality",
         "power": "missing", "game": "missing", "animate": False,
     },
 }

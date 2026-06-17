@@ -111,3 +111,23 @@ def test_create_restore_point_assume_approved_enable_fails(
     assert result is False
     mock_prompt.assert_not_called()
     mock_enable.assert_called_once()
+
+
+@patch('src.bootstrapper.datetime')
+@patch('src.bootstrapper.is_system_restore_enabled')
+@patch('src.bootstrapper.prompt_approval')
+@patch('src.bootstrapper.subprocess.run')
+def test_create_restore_point_bypasses_frequency_throttle(mock_run, mock_prompt, mock_is_enabled, mock_dt):
+    """PS command must set SystemRestorePointCreationFrequency=0 before Checkpoint-Computer."""
+    mock_dt.now.return_value = FIXED_DT
+    mock_is_enabled.return_value = True
+    mock_prompt.return_value = True
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_run.return_value = mock_result
+
+    create_restore_point()
+
+    ps_cmd = mock_run.call_args[0][0][2]
+    assert "SystemRestorePointCreationFrequency" in ps_cmd
+    assert "Checkpoint-Computer" in ps_cmd

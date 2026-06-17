@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from src.gui.theme import set_apply_busy
 from src.gui.widgets.last_run_card import LastRunCard
 from src.utils.debug_logger import get_debug_logger
 
@@ -174,3 +175,14 @@ class RevertView(QWidget):
     def set_revert_enabled(self, enabled: bool) -> None:
         """Enable or disable the in-page revert action button."""
         self._revert_btn.setEnabled(enabled)
+
+    def set_reverting(self, reverting: bool) -> None:
+        """Reflect an in-flight revert on the action button (busy <-> idle).
+
+        Mirrors each dashboard fix card's ``set_applying``: reuses the shared
+        ``set_apply_busy`` helper so the button disables and reads "Reverting…"
+        while ``PipelineController.start_revert``'s worker runs, then round-trips
+        back to "↩  Revert All Changes (R)" on completion. Button-only — the
+        status bar carries the textual progress, exactly like the cards.
+        """
+        set_apply_busy(self._revert_btn, reverting, busy_label="Reverting…")

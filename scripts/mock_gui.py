@@ -117,6 +117,7 @@ class MockDriver:
         self._displays: list[dict] = fx.displays("optimal")
         self._power_key = "high_perf"
         self._game_key = "enabled"
+        self._dlss_key = "quality"
         self._anim_base = fx.ANIM_BASES["normal"]
         self._anim_phase = 0
         self._anim_timer = QTimer(main)
@@ -174,6 +175,18 @@ class MockDriver:
         self.dashboard.set_nvidia_data(specs.get("NVIDIA") or [])
         self.dashboard.set_nvidia_profile_findings(analyze_nvidia_profile(specs))
 
+    def apply_dlss_priority(self, key: str) -> None:
+        # Reproduce a user flip of the DLSS card's Quality/FPS toggle: move the
+        # toggle via the card's real public setter, then emit its real signal so
+        # the dashboard's connected slot runs (persists the QSettings override and
+        # re-renders the "Recommended: DLSS Preset {letter}" text for the new
+        # lean). A no-op visually when the DLSS card is hidden (no_gpu / GTX),
+        # exactly like the real app.
+        self._dlss_key = key
+        card = self.dashboard._nvidia_dlss_card
+        card.set_priority(key)
+        card.priority_changed.emit(key)
+
     def apply_power(self, key: str) -> None:
         self._power_key = key
         self._apply_settings()
@@ -201,6 +214,7 @@ class MockDriver:
         self.apply_mouse(sc["mouse"])
         self.apply_monitors(sc["monitors"])
         self.apply_nvidia(sc["nvidia"])
+        self.apply_dlss_priority(sc["dlss"])
         self.apply_power(sc["power"])
         self.apply_game(sc["game"])
         self.set_animation(sc["animate"])
@@ -234,11 +248,18 @@ class MockDriver:
 
     def _on_monitor_fix(self, device: str) -> None:
         print(f"[mock] monitor fix requested for {device} — applying in 800 ms")
+        self.dashboard.set_fix_card_applying("display", True, device)
         for d in self._displays:
             if d.get("device") == device and d.get("max_refresh_hz"):
                 d["current_refresh_hz"] = d["max_refresh_hz"]
-        # Mirrors the real coordinator's post-fix re-probe -> set_monitor_data.
-        QTimer.singleShot(800, lambda: self.dashboard.set_monitor_data(self._displays))
+
+        def _done() -> None:
+            # Mirrors the real coordinator: post-fix re-probe -> set_monitor_data,
+            # then the thread.finished reset clears the busy cue.
+            self.dashboard.set_monitor_data(self._displays)
+            self.dashboard.set_fix_card_applying("display", False, device)
+
+        QTimer.singleShot(800, _done)
 
     def _on_monitor_refresh(self) -> None:
         if self._monitor_key == "empty":
@@ -250,32 +271,46 @@ class MockDriver:
             self.apply_monitors(self._monitor_key)
 
     def _on_nvidia_fix(self, check_name: str) -> None:
+        self.dashboard.set_fix_card_applying(check_name, True)
         if check_name == "nvidia_profile":
             print("[mock] nvidia_profile fix requested — flipping to OK in 800 ms")
-            # Replicates StartupCoordinator._on_nvidia_fix_result success path,
-            # exercising the _nvidia_last_expected fallback render.
-            QTimer.singleShot(
-                800,
-                lambda: self.dashboard.set_nvidia_profile_findings({"status": "OK"}),
-            )
+
+            def _done() -> None:
+                # Replicates StartupCoordinator._on_nvidia_fix_result success path,
+                # exercising the _nvidia_last_expected fallback render, then the
+                # thread.finished reset clears the busy cue.
+                self.dashboard.set_nvidia_profile_findings({"status": "OK"})
+                self.dashboard.set_fix_card_applying(check_name, False)
+
+            QTimer.singleShot(800, _done)
         else:
             print(f"[mock] {check_name} apply requested (no card change in the real app)")
+            QTimer.singleShot(
+                800, lambda: self.dashboard.set_fix_card_applying(check_name, False)
+            )
 
     def _on_power_plan_fix(self) -> None:
         print("[mock] power_plan fix requested — flipping to applied in 800 ms")
-        # Replicates StartupCoordinator._on_setting_fix_result's optimistic
-        # bare {"status": "OK"} path (fallback applied text, button hidden).
-        QTimer.singleShot(
-            800,
-            lambda: self.dashboard.set_power_plan_findings({"status": "OK"}),
-        )
+        self.dashboard.set_fix_card_applying("power_plan", True)
+
+        def _done() -> None:
+            # Replicates StartupCoordinator._on_setting_fix_result's optimistic
+            # bare {"status": "OK"} path (fallback applied text, button hidden),
+            # then the thread.finished reset clears the busy cue.
+            self.dashboard.set_power_plan_findings({"status": "OK"})
+            self.dashboard.set_fix_card_applying("power_plan", False)
+
+        QTimer.singleShot(800, _done)
 
     def _on_game_mode_fix(self) -> None:
         print("[mock] game_mode fix requested — flipping to applied in 800 ms")
-        QTimer.singleShot(
-            800,
-            lambda: self.dashboard.set_game_mode_findings({"status": "OK"}),
-        )
+        self.dashboard.set_fix_card_applying("game_mode", True)
+
+        def _done() -> None:
+            self.dashboard.set_game_mode_findings({"status": "OK"})
+            self.dashboard.set_fix_card_applying("game_mode", False)
+
+        QTimer.singleShot(800, _done)
 
     def _on_thermal_retry(self) -> None:
         print("[mock] thermal retry — simulating a successful sidecar relaunch")
@@ -334,6 +369,9 @@ class MockControls(QWidget):
         self._nvidia = self._combo(
             root, "NVIDIA", ["ok", "warning", "gtx_no_dlss", "no_gpu"], driver.apply_nvidia
         )
+        self._dlss = self._combo(
+            root, "DLSS Priority", list(fx.DLSS_PRIORITIES), driver.apply_dlss_priority
+        )
         self._power = self._combo(root, "Power Plan", list(fx.POWER_PLANS), driver.apply_power)
         self._game = self._combo(root, "Game Mode", list(fx.GAME_MODES), driver.apply_game)
 
@@ -363,10 +401,10 @@ class MockControls(QWidget):
         name = self._scenario.currentText()
         sc = fx.SCENARIOS[name]
         # Sync combos silently, then apply once through the driver — avoids
-        # five redundant cascading applies from currentTextChanged.
+        # redundant cascading applies from currentTextChanged.
         for box, key in (
             (self._stats, "stats"), (self._thermal, "thermal"), (self._mouse, "mouse"),
-            (self._monitors, "monitors"), (self._nvidia, "nvidia"),
+            (self._monitors, "monitors"), (self._nvidia, "nvidia"), (self._dlss, "dlss"),
             (self._power, "power"), (self._game, "game"),
         ):
             self._set_silently(box, sc[key])
@@ -404,6 +442,8 @@ class MockControls(QWidget):
 def _smoke_report(driver: MockDriver, name: str) -> None:
     d = driver.dashboard
     vbar = d._scroll.verticalScrollBar()
+    dlss_card = d._nvidia_dlss_card
+    dlss_priority = "fps" if dlss_card._toggle.isChecked() else "quality"
     print(
         f"[smoke] {name!r}: "
         f"cpu={d._cards['cpu_usage']._value.text()!r} "
@@ -411,7 +451,7 @@ def _smoke_report(driver: MockDriver, name: str) -> None:
         f"empty={d._monitor_empty_slot.isVisibleTo(d)} "
         f"extras={len(d._monitor_cards)} "
         f"nvidia_full={d._nvidia_full_card.isVisibleTo(d)} "
-        f"nvidia_dlss={d._nvidia_dlss_card.isVisibleTo(d)} "
+        f"nvidia_dlss={dlss_card.isVisibleTo(d)}/{dlss_priority} "
         f"power={d._power_plan_card.isVisibleTo(d)}/{d._power_plan_card._status_lbl.text()!r} "
         f"game={d._game_mode_card.isVisibleTo(d)}/{d._game_mode_card._status_lbl.text()!r} "
         f"chart_offline={d.thermal_chart._offline} "
@@ -428,6 +468,15 @@ def _run_smoke(app: QApplication, driver: MockDriver) -> None:
         if i >= len(names):
             driver.apply_monitors("multi")  # exercises the dynamic-extras path
             _smoke_report(driver, "multi-monitor")
+            # Busy cue (bug-hunt-v0.5.0.0): set_fix_card_applying must lock then
+            # release the targeted card's button.
+            d = driver.dashboard
+            d.set_fix_card_applying("nvidia_profile", True)
+            busy_lock = not d._nvidia_full_card._apply_btn.isEnabled()
+            d.set_fix_card_applying("nvidia_profile", False)
+            busy_reset = d._nvidia_full_card._apply_btn.isEnabled()
+            print(f"[smoke] busy-cue: lock={busy_lock} reset={busy_reset}")
+            assert busy_lock and busy_reset, "set_fix_card_applying not wired"
             driver.set_animation(False)
             print("[smoke] OK")
             app.quit()

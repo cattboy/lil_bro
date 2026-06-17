@@ -8,14 +8,14 @@ and connects the bridge + nav-button signals to its methods.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import QObject, Qt, QThread, Slot
 
 from src.gui.widgets.batch_selection_dialog import BatchSelectionDialog
 from src.gui.widgets.confirm_dialog import ConfirmDialog
 from src.gui.worker import PipelineWorker, RevertWorker
 
 
-class PipelineController:
+class PipelineController(QObject):
     """Owns the pipeline/revert lifecycle and the dialog + output handlers.
 
     Constructed once by ``app.run()``; the shared ``runtime`` dict is stored
@@ -24,6 +24,7 @@ class PipelineController:
     """
 
     def __init__(self, main, bridge, runtime: dict, log, ansi_re) -> None:
+        super().__init__()
         self._main = main
         self._bridge = bridge
         self._runtime = runtime
@@ -268,37 +269,33 @@ class PipelineController:
 
         self.set_flow_controls(False)
         main.status_bar_widget.set_state("run", "Reverting session…")
+        # Lock the in-page revert button with a "Reverting…" busy label, mirroring
+        # the dashboard cards' "Applying…" cue. Placed after the early-return
+        # guards above so a "nothing to revert" click never flashes a busy button.
+        # Reset on thread-finished (below), for both success and failure.
+        main._revert_view.set_reverting(True)
 
         revert_thread = QThread()
         revert_worker = RevertWorker()
         revert_worker.moveToThread(revert_thread)
         revert_thread.started.connect(revert_worker.run)
 
-        def _on_revert_finished() -> None:
-            main.status_bar_widget.set_state("ok", "Revert complete")
-            revert_thread.quit()
-
-        def _on_revert_failed(exc_type: str, msg: str, tb: str) -> None:
-            log.error("Revert: GUI revert failed -- %s: %s\n%s", exc_type, msg, tb)
-            main.status_bar_widget.set_state("ok", f"Revert failed: {exc_type}")
-            revert_thread.quit()
-
-        def _on_revert_thread_done() -> None:
-            self.set_flow_controls(True)
-            runtime["revert_thread"] = None
-            runtime["revert_worker"] = None
-            revert_worker.deleteLater()
-            revert_thread.deleteLater()
-
-        revert_worker.revert_finished.connect(_on_revert_finished)
-        revert_worker.revert_failed.connect(_on_revert_failed)
-        revert_thread.finished.connect(_on_revert_thread_done)
+        # The three handlers below are @Slot() methods on this QObject controller
+        # (GUI-thread affinity), NOT local closures. A worker-thread signal
+        # (revert_finished / revert_failed / thread.finished) delivered to a
+        # GUI-thread QObject slot runs queued on the GUI thread, so the button +
+        # status-bar resets they perform never mutate widgets off-thread. (Local
+        # closures here would run on the worker thread -- see the routing note
+        # below for why dashboard refresh already goes through StartupCoordinator.)
+        revert_worker.revert_finished.connect(self._on_revert_finished)
+        revert_worker.revert_failed.connect(self._on_revert_failed)
+        revert_thread.finished.connect(self._on_revert_thread_done)
 
         # Re-scan the Dashboard fix cards once the revert succeeds, so the NVIDIA /
         # monitor cards drop the optimistic "applied" state set at apply time. Routed
-        # through StartupCoordinator (a QObject on the GUI thread) -- the local
-        # closures above are plain callables that run on the worker thread, so they
-        # must not touch dashboard widgets. QObject receiver => QueuedConnection.
+        # through StartupCoordinator (also a QObject on the GUI thread) for the same
+        # reason as the handlers above: a worker-thread signal to a QObject receiver
+        # is a QueuedConnection, so the re-scan runs on the GUI thread.
         startup = runtime.get("_startup_coordinator")
         if startup is not None:
             revert_worker.revert_finished.connect(startup.refresh_fix_cards_after_revert)
@@ -306,6 +303,47 @@ class PipelineController:
         runtime["revert_thread"] = revert_thread
         runtime["revert_worker"] = revert_worker
         revert_thread.start()
+
+    @Slot()
+    def _on_revert_finished(self) -> None:
+        # revert_worker emits this from the worker thread; as a @Slot() bound to
+        # this GUI-thread QObject the call is delivered queued on the GUI thread,
+        # so touching the status bar is safe. quit() is itself thread-safe.
+        self._main.status_bar_widget.set_state("ok", "Revert complete")
+        revert_thread = self._runtime.get("revert_thread")
+        if revert_thread is not None:
+            revert_thread.quit()
+
+    @Slot(str, str, str)
+    def _on_revert_failed(self, exc_type: str, msg: str, tb: str) -> None:
+        self._log.error("Revert: GUI revert failed -- %s: %s\n%s", exc_type, msg, tb)
+        self._main.status_bar_widget.set_state("ok", f"Revert failed: {exc_type}")
+        revert_thread = self._runtime.get("revert_thread")
+        if revert_thread is not None:
+            revert_thread.quit()
+
+    @Slot()
+    def _on_revert_thread_done(self) -> None:
+        # revert_thread.finished fires on the worker thread for both success and
+        # failure; this @Slot() on the GUI-thread QObject runs queued on the GUI
+        # thread, so the button + flow-control resets below never mutate widgets
+        # off-thread (the bug 7228cd8 fixed for the dashboard card paths). The
+        # set_reverting reset is best-effort so a widget teardown during app-close
+        # can't propagate out of the finished handler.
+        self.set_flow_controls(True)
+        try:
+            self._main._revert_view.set_reverting(False)
+        except Exception:
+            pass
+        runtime = self._runtime
+        revert_worker = runtime.get("revert_worker")
+        revert_thread = runtime.get("revert_thread")
+        runtime["revert_thread"] = None
+        runtime["revert_worker"] = None
+        if revert_worker is not None:
+            revert_worker.deleteLater()
+        if revert_thread is not None:
+            revert_thread.deleteLater()
 
     # ── AI setup ───────────────────────────────────────────────────────
 

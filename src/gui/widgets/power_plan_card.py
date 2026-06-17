@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from src.gui.theme import repolish
+from src.gui.theme import repolish, set_apply_busy
 from src.llm.action_proposer import propose_for_check
 
 # Optimistic post-fix text for a bare {"status": "OK"} finding (no message).
@@ -95,3 +95,7 @@ class PowerPlanCard(QFrame):
 
     def _on_apply_clicked(self) -> None:
         self.apply_requested.emit()
+
+    def set_applying(self, applying: bool) -> None:
+        """Reflect an in-flight fix on the Fix Now button (busy <-> idle)."""
+        set_apply_busy(self._apply_btn, applying)

@@ -146,3 +146,90 @@ def test_long_list_clamps_height_and_keeps_footer_visible(qtbot):
     assert dialog._apply_btn.isVisible()
     # The card body is wrapped in a scroll area that absorbs the overflow.
     assert dialog.findChild(QScrollArea) is not None
+
+
+def test_short_list_fits_without_scrolling(qtbot):
+    """A 1-2 card list must render in full -- no scrollbar, no compression.
+
+    Word-wrapped descriptions made the dialog open shorter than the cards needed
+    once laid out at the fixed two-column width, forcing a needless scrollbar and
+    squashing the cards. The dialog now sizes to the cards' true wrapped height,
+    so the body fits the viewport and the vertical scrollbar has no range.
+    """
+    proposals = [
+        {"finding": f"c{i}", "title": f"Title {i}",
+         "description": "A deliberately long explanation that wraps across "
+                        "several lines so the card needs real vertical space. " * 2,
+         "severity": "HIGH", "can_auto_fix": True}
+        for i in range(2)
+    ]
+    dialog = BatchSelectionDialog(proposals)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QTest.qWait(20)
+
+    # Cards fit: the body never overflows the viewport, so there is no scroll
+    # range (and the ScrollHintArrow stays hidden off the back of this).
+    assert dialog._scroll.verticalScrollBar().maximum() == 0
+
+
+def test_single_fix_never_scrolls(qtbot):
+    """A lone fix must NEVER show a scrollbar, however long its description.
+
+    Regression for the single-item dialog opening too short. The scroll area's
+    ``sizeHint`` measured the body's wrapped height at ``viewport().width()``,
+    which before show reports a wide default (~640px, not 0) instead of the
+    dialog's fixed 540px content width. Measured too wide, the text wrapped to
+    fewer lines and under-reported its height, so the dialog opened short and a
+    needless scrollbar appeared once laid out at the real width. The single
+    column (540px) is its own code path -- ``test_short_list_fits_without_scrolling``
+    only exercises the two-column (820px) path -- so it needs its own guard.
+    """
+    proposals = [
+        {"finding": "power_plan", "title": "Switch power plan to High Performance",
+         "description": "Your power plan is throttling your CPU. High Performance "
+                        "keeps it at peak clock speed instead of scaling down "
+                        "between tasks. All changes revertable and backed up, "
+                        "lil_bro can roll them back.",
+         "severity": "HIGH", "tag": "power plan", "can_auto_fix": True}
+    ]
+    dialog = BatchSelectionDialog(proposals)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QTest.qWait(20)
+
+    # The lone card fits the viewport: no scroll range, and the attention
+    # ScrollHintArrow stays hidden because there is nothing below the fold.
+    assert dialog._scroll.verticalScrollBar().maximum() == 0
+    assert dialog._scroll_hint.isVisible() is False
+
+
+def test_multi_row_lists_never_scroll(qtbot):
+    """3-4 fixes (the first two-column, multi-row cases) must not scroll either.
+
+    ``QGridLayout.heightForWidth`` under-reports the height of a multi-row,
+    two-column card grid, so the dialog opened ~28px too short and showed a
+    needless scrollbar for 3-4 fixes even though the cards fit -- the case the
+    user hit in a real optimization run. ``_fit_to_content`` grows the dialog to
+    swallow the real measured overflow (clamped to the screen). n=1 (single row,
+    one column) and n=2 (single row, two columns) were already fine; this guards
+    the first and second *multi-row* counts, which exercise the broken grid path.
+    """
+    long_desc = ("Your power plan is throttling your CPU. High Performance keeps "
+                 "it at peak clock speed instead of scaling down between tasks. "
+                 "All changes are revertable and backed up.")
+    for n in (3, 4):
+        proposals = [
+            {"finding": f"c{i}", "title": f"Switch fix {i} to optimal setting",
+             "description": long_desc, "severity": "HIGH",
+             "tag": "power plan", "can_auto_fix": True}
+            for i in range(n)
+        ]
+        dialog = BatchSelectionDialog(proposals)
+        qtbot.addWidget(dialog)
+        dialog.show()
+        QTest.qWait(20)
+
+        vmax = dialog._scroll.verticalScrollBar().maximum()
+        assert vmax == 0, f"{n} fixes must fit without a scrollbar, got max={vmax}"
+        assert dialog._scroll_hint.isVisible() is False

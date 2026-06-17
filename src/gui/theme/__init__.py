@@ -8,7 +8,7 @@ keeps resolving. See ``tokens.py`` for the token-assignment reference table.
 
 from __future__ import annotations
 
-from src.gui.theme.helpers import app_icon, load_fonts, repolish
+from src.gui.theme.helpers import app_icon, load_fonts, repolish, set_apply_busy
 from src.gui.theme.stylesheet import build_stylesheet
 from src.gui.theme.tokens import COLORS, FONTS
 
@@ -19,4 +19,5 @@ __all__ = [
     "build_stylesheet",
     "load_fonts",
     "repolish",
+    "set_apply_busy",
 ]

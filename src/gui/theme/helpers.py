@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from PySide6.QtWidgets import QPushButton
 
 
 def repolish(widget) -> None:
@@ -15,6 +19,28 @@ def repolish(widget) -> None:
     """
     widget.style().unpolish(widget)
     widget.style().polish(widget)
+
+
+def set_apply_busy(button: QPushButton, busy: bool, busy_label: str = "Applying…") -> None:
+    """Toggle a card's action button between idle and an in-flight 'busy' state.
+
+    Touches ONLY the button's enabled-state and label -- never the card's status
+    QLabel. The status label is owned by the findings/refresh path; writing the
+    transient "Applying…" text there would race the fix-result handler (which
+    runs before the thread-finished reset, see StartupCoordinator) and could
+    clobber a freshly-applied "✓ optimal" message. Shared by every dashboard fix
+    card's ``set_applying``. ``_idle_text`` round-trips the original label through
+    a dynamic property so the reset restores it without the card storing state.
+    """
+    if busy:
+        button.setProperty("_idle_text", button.text())
+        button.setText(busy_label)
+        button.setEnabled(False)
+    else:
+        button.setEnabled(True)
+        prev = button.property("_idle_text")
+        if prev:
+            button.setText(prev)
 
 
 def load_fonts() -> None:

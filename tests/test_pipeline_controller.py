@@ -99,3 +99,40 @@ class TestOpenSystemRestore:
             _make_controller().open_system_restore()
             # No session → generic copy, empty session_date passed through.
             trigger.assert_called_once_with("")
+
+
+class TestStartRevert:
+    """The revert button's "Reverting…" busy lock is driven from start_revert.
+
+    Mirrors the dashboard cards' lock-at-worker-start cue. ``QThread`` and
+    ``RevertWorker`` are patched at the importing module so no real thread spawns;
+    with the thread mocked, ``finished`` never fires, so these assert ONLY the
+    lock (``True``) -- the reset (``False``) is covered by test_revert_view.py.
+    """
+
+    _MANIFEST = {
+        "schema_version": 1,
+        "session_date": "2026-06-10T08:30:00",
+        "restore_point_created": False,
+        "fixes": [],
+    }
+
+    def test_happy_path_locks_revert_button(self):
+        with patch("src.utils.revert.load_manifest", return_value=self._MANIFEST), \
+                patch("src.gui.pipeline_controller.QThread"), \
+                patch("src.gui.pipeline_controller.RevertWorker"):
+            controller = _make_controller()
+            controller.start_revert()
+            controller._main._revert_view.set_reverting.assert_called_once_with(True)
+
+    def test_no_manifest_does_not_lock(self):
+        with patch("src.utils.revert.load_manifest", return_value=None):
+            controller = _make_controller()
+            controller.start_revert()
+            controller._main._revert_view.set_reverting.assert_not_called()
+
+    def test_already_in_flight_does_not_lock(self):
+        controller = _make_controller()
+        controller._runtime["revert_thread"] = MagicMock()  # a revert is running
+        controller.start_revert()
+        controller._main._revert_view.set_reverting.assert_not_called()

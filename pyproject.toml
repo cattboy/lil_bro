@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lil_bro"
-version = "0.5.0"
+dynamic = ["version"]
 description = "A local, privacy-first AI agent that optimizes your gaming PC for peak performance."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -39,6 +39,9 @@ lil_bro = "src.main:main"
 
 [tool.setuptools.packages.find]
 include = ["src*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "_version.__version__"}
 
 [tool.lil_bro.system-requirements]
 # Informational only — not enforced by uv/pip.

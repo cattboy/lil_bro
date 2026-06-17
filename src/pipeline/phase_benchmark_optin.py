@@ -11,6 +11,17 @@ class BenchmarkOptInPhase:
         log.info("Phase 4: Benchmark Opt-In")
         print_header("Phase 4: Benchmark Opt-In")
 
+        # PRE/POST Cinebench exists only to measure the impact of the fixes
+        # that get applied. If the user skipped every fix in the approval
+        # dialog, there is nothing to measure — don't prompt for (or run) a
+        # benchmark. BaselineBench then skips on run_benchmarks=False and
+        # FinalBench skips on fixes_applied=0.
+        if not ctx.approved_proposals:
+            log.info("No approved fixes — skipping benchmark opt-in (nothing to measure)")
+            print_info("No fixes selected — skipping benchmarks.")
+            ctx.run_benchmarks = False
+            return PhaseResult("skipped", "No approved fixes — nothing to benchmark")
+
         if not ctx.lhm_available:
             log.info("LHM unavailable — skipping benchmark opt-in (no thermal protection)")
             print_info("Thermal monitoring unavailable — benchmarks require LHM. Skipping.")

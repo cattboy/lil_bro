@@ -78,6 +78,8 @@ class StartupCoordinator(QObject):
         # Power Plan / Game Mode card-fix check_name -- same capture-at-request
         # rationale as _nvidia_fix_check_name.
         self._setting_fix_check_name: str | None = None
+        # Monitor card-fix device, captured at request time (same rationale as above).
+        self._monitor_fix_device: str | None = None
         # Applied Fixes card (T-016): a QFileSystemWatcher refreshes it live; a
         # single-shot QTimer debounces the double directoryChanged per write.
         self._last_run_watcher = None
@@ -540,6 +542,12 @@ class StartupCoordinator(QObject):
         if create_rp:
             runtime["restore_point_in_progress"] = True
         fix_thread.finished.connect(self._on_monitor_fix_thread_finished)
+        # In-flight feedback: lock this monitor's Fix button + light the status
+        # bar. Store the device so the finished slot can route the reset back to
+        # the same card (multi-monitor).
+        self._monitor_fix_device = device
+        main._dashboard.set_fix_card_applying("display", True, device)
+        main.status_bar_widget.set_state("run", "Applying display fix…")
         fix_thread.start()
 
 
@@ -595,6 +603,17 @@ class StartupCoordinator(QObject):
         runtime.pop("restore_point_in_progress", None)
         runtime.pop("monitor_fix_thread", None)
         runtime.pop("monitor_fix_worker", None)
+        # Reset the busy cue on the monitor card that was fixed (routed by the
+        # device stored at request time) + the status bar. refresh_monitor_card
+        # (connected earlier on thread.finished) has already re-evaluated the
+        # button's visibility; re-enabling a hidden button is harmless.
+        try:
+            self._main._dashboard.set_fix_card_applying(
+                "display", False, self._monitor_fix_device
+            )
+            self._main.status_bar_widget.set_state("ok", "Idle")
+        except Exception:
+            pass
 
     @Slot()
     def _on_nvidia_fix_thread_finished(self) -> None:
@@ -603,6 +622,17 @@ class StartupCoordinator(QObject):
         runtime.pop("restore_point_in_progress", None)
         runtime.pop("nvidia_fix_thread", None)
         runtime.pop("nvidia_fix_worker", None)
+        # Reset the busy cue (button + status bar) for BOTH success and failure
+        # -- thread.finished fires either way. Route via the stored check_name
+        # (sender() is unreliable for queued connections). Best-effort so a UI
+        # reset failure can't strand the guard pops above.
+        try:
+            self._main._dashboard.set_fix_card_applying(
+                self._nvidia_fix_check_name or "nvidia_profile", False
+            )
+            self._main.status_bar_widget.set_state("ok", "Idle")
+        except Exception:
+            pass
 
     @Slot()
     def _on_setting_fix_thread_finished(self) -> None:
@@ -611,6 +641,14 @@ class StartupCoordinator(QObject):
         runtime.pop("restore_point_in_progress", None)
         runtime.pop("setting_fix_thread", None)
         runtime.pop("setting_fix_worker", None)
+        # Reset the busy cue (button + status bar) for both success and failure.
+        try:
+            self._main._dashboard.set_fix_card_applying(
+                self._setting_fix_check_name or "power_plan", False
+            )
+            self._main.status_bar_widget.set_state("ok", "Idle")
+        except Exception:
+            pass
 
     @Slot()
     def _on_refresh_thread_finished(self) -> None:
@@ -738,6 +776,10 @@ class StartupCoordinator(QObject):
         if create_rp:
             runtime["restore_point_in_progress"] = True
         fix_thread.finished.connect(self._on_nvidia_fix_thread_finished)
+        # In-flight feedback: lock the card's button + light the status bar
+        # before the worker blocks on the NPI export/import (3-10s).
+        main._dashboard.set_fix_card_applying(check_name, True)
+        main.status_bar_widget.set_state("run", f"Applying {tag} fix…")
         fix_thread.start()
 
     # ── Power Plan / Game Mode card fixes (T-034) ───────────────────────
@@ -826,6 +868,9 @@ class StartupCoordinator(QObject):
         if create_rp:
             runtime["restore_point_in_progress"] = True
         fix_thread.finished.connect(self._on_setting_fix_thread_finished)
+        # In-flight feedback: lock the card's button + light the status bar.
+        main._dashboard.set_fix_card_applying(check_name, True)
+        main.status_bar_widget.set_state("run", f"Applying {tag} fix…")
         fix_thread.start()
 
 

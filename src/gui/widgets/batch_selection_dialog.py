@@ -31,17 +31,58 @@ from src.gui.theme import repolish
 from src.gui.widgets.scroll_hint import ScrollHintArrow
 
 class _FitContentScrollArea(QScrollArea):
-    """Scroll area that advertises its *content's* sizeHint as its own.
+    """Scroll area that advertises its *content's* true height as its own.
 
     A stock ``QScrollArea`` reports a small fixed sizeHint, which would make the
-    dialog ignore its cards and always show a scrollbar. Returning the inner
-    widget's hint lets the dialog size to its content for short lists; the
-    dialog's ``maximumHeight`` clamp is what forces scrolling for long ones.
+    dialog ignore its cards and always show a scrollbar. We instead report the
+    body's height-for-width at the dialog's fixed content width, so word-wrapped
+    cards are measured at the width they actually wrap to. A plain ``sizeHint()``
+    is computed width-unconstrained (≈ one line per label) and under-reports
+    their height, which opened the dialog too short and forced a needless
+    scrollbar for short lists. The dialog's ``maximumHeight`` clamp is still what
+    forces scrolling for long lists.
     """
+
+    def __init__(self, content_width: int, parent=None) -> None:
+        super().__init__(parent)
+        self._content_width = content_width
 
     def sizeHint(self):  # noqa: N802  Qt override
         w = self.widget()
-        return w.sizeHint() if w is not None else super().sizeHint()
+        if w is None:
+            return super().sizeHint()
+        hint = w.sizeHint()
+        lay = w.layout()
+        if lay is not None and lay.hasHeightForWidth():
+            # Always measure at the dialog's fixed content width, never the live
+            # viewport width. The dialog is ``setFixedWidth()``, so the content
+            # width is constant and known, whereas the viewport width is
+            # unreliable here: before the dialog is shown it reports a wide
+            # default (~640px, not 0, so a ``viewport().width() or ...`` fallback
+            # never fires), and once a vertical scrollbar appears it shrinks by
+            # the scrollbar extent. Measuring at either makes the word-wrapped
+            # height wrong -- too wide a width wraps to fewer lines, under-reports
+            # the height, opens the dialog too short, and forces a needless
+            # scrollbar at the real width. ``QLayout.heightForWidth`` subtracts
+            # its own margins, so pass the full content width.
+            h = lay.heightForWidth(self._content_width)
+            if h > 0:
+                hint.setHeight(h)
+        return hint
+
+
+def _enable_height_for_width(widget) -> None:
+    """Opt *widget*'s size policy into height-for-width.
+
+    Qt only consults ``heightForWidth()`` when the widget's size policy says so;
+    word-wrapped ``QLabel``s (and the card frames containing them) don't set this
+    by default, so the layout's reported height is computed width-unconstrained
+    (≈ one line) and under-reports the space the text needs once wrapped. Setting
+    it lets ``_FitContentScrollArea`` size the dialog to the cards' real height.
+    """
+    sp = widget.sizePolicy()
+    sp.setHeightForWidth(True)
+    widget.setSizePolicy(sp)
 
 
 class _FixItem(QFrame):
@@ -53,6 +94,9 @@ class _FixItem(QFrame):
         super().__init__(parent)
         self.setObjectName("fixItem")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        # The card frame must opt into height-for-width too, or the grid won't
+        # recurse into the row layout to measure the wrapped labels below.
+        _enable_height_for_width(self)
 
         sev = (proposal.get("sev") or proposal.get("severity") or "low").lower()
         tag = (proposal.get("tag") or proposal.get("category") or "").upper()
@@ -96,12 +140,14 @@ class _FixItem(QFrame):
         title_lbl = QLabel(title)
         title_lbl.setObjectName("fixTitle")
         title_lbl.setWordWrap(True)
+        _enable_height_for_width(title_lbl)
         info_col.addWidget(title_lbl)
 
         if desc:
             desc_lbl = QLabel(desc)
             desc_lbl.setObjectName("fixDesc")
             desc_lbl.setWordWrap(True)
+            _enable_height_for_width(desc_lbl)
             info_col.addWidget(desc_lbl)
 
         row.addLayout(info_col, stretch=1)
@@ -141,7 +187,8 @@ class BatchSelectionDialog(QDialog):
         # Two columns when there is more than one fix: halves the card stack's
         # height so the footer (Apply/Skip) stays on screen for long lists. A
         # lone fix keeps the narrower single-column width.
-        self.setFixedWidth(820 if len(proposals) > 1 else 540)
+        dialog_width = 820 if len(proposals) > 1 else 540
+        self.setFixedWidth(dialog_width)
         self.setAccessibleName("Batch selection dialog")
 
         self._proposals = proposals
@@ -183,6 +230,7 @@ class BatchSelectionDialog(QDialog):
                           f"Click a row or press its number (1-9) to toggle:")
         subtitle.setObjectName("dlgSubtitle")
         subtitle.setWordWrap(True)
+        _enable_height_for_width(subtitle)
         body_layout.addWidget(subtitle)
 
         # Fix cards in a grid, filled left-to-right then top-to-bottom. Two
@@ -210,7 +258,9 @@ class BatchSelectionDialog(QDialog):
         # off-screen as future pipeline checks add more fixes. The header and
         # footer sit outside the scroll area and stay pinned; the dialog's
         # maximumHeight (clamped to the screen below) is what triggers scrolling.
-        self._scroll = _FitContentScrollArea()
+        # The scroll area is told the fixed content width so it can size the
+        # dialog to the cards' true wrapped height (no scrollbar for short lists).
+        self._scroll = _FitContentScrollArea(dialog_width)
         self._scroll.setObjectName("dialogScroll")
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -297,3 +347,45 @@ class BatchSelectionDialog(QDialog):
                 self._fix_items[idx].toggle()
                 return
         super().keyPressEvent(event)
+
+    # ── Fit-to-content ─────────────────────────────────────────────────
+
+    def showEvent(self, event) -> None:  # noqa: N802  Qt override
+        super().showEvent(event)
+        self._fit_to_content()
+
+    def _fit_to_content(self) -> None:
+        """Grow the dialog to swallow any scroll overflow, clamped to the screen.
+
+        ``QGridLayout.heightForWidth`` under-reports the height of multi-row,
+        two-column card grids (verified: ~28px short at 3-4 fixes, more beyond),
+        so ``_FitContentScrollArea.sizeHint`` opens the dialog a touch too short
+        and a needless vertical scrollbar appears even when the cards would fit.
+        Rather than re-derive the grid height (Qt gets it wrong), read Qt's *own*
+        measured overflow once the body is laid out and grow to absorb it. Each
+        pass forces a synchronous layout so the scrollbar range is current before
+        we read it; a few passes converge because growing widens the viewport
+        (which re-wraps text slightly shorter once the scrollbar drops out).
+
+        Grow with ``resize``, never ``setFixedHeight`` -- the latter collapses
+        ``maximumHeight`` onto the new value, which would destroy the screen
+        clamp and stop the loop after one pass. ``maximumHeight`` (set in
+        ``__init__``) stays the real screen-based clamp and is the loop's exit
+        guard: genuinely long lists stop growing at the screen edge and keep
+        scrolling, so the footer (Apply/Skip) stays on-screen exactly as before.
+        """
+        vbar = self._scroll.verticalScrollBar()
+        body = self._scroll.widget()
+        for _ in range(4):
+            dlg_layout = self.layout()
+            if dlg_layout is not None:
+                dlg_layout.activate()
+            if body is not None and body.layout() is not None:
+                body.layout().activate()
+            overflow = vbar.maximum()
+            if overflow <= 0 or self.height() >= self.maximumHeight():
+                break
+            target = min(self.height() + overflow, self.maximumHeight())
+            if target <= self.height():
+                break
+            self.resize(self.width(), target)
