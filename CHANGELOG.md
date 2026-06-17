@@ -2,6 +2,21 @@
 
 All notable changes to lil_bro are documented here.
 
+## [0.5.0.1] - 2026-06-17
+
+### Added
+- **Live "Applying…" feedback on every Dashboard fix card** — clicking Optimize / Apply / Fix on any card (NVIDIA driver-profile, NVIDIA DLSS, Power Plan, Game Mode, Monitor) now turns its button into a disabled "Applying…" label and lights the bottom status bar while the fix runs, so a slow NVIDIA profile export or restore-point step no longer looks like a frozen click. The DLSS Quality/FPS switch locks while its preset is applying, and the in-page Revert button shows "Reverting…" during a session revert. The busy cue clears on both success and failure, and a card that's already optimal hides its button entirely.
+
+### Changed
+- **DLSS card Quality/FPS control is now an animated pill switch** with two clickable labels that highlight the active side, replacing the old segmented two-button toggle whose fixed height cropped the label text.
+
+### Fixed
+- **Batch fix dialog no longer opens too short for small fix lists** — with fewer than ~4 fixes the selection dialog used to open with a needless scrollbar and clipped, word-wrapped card text. It now measures the cards' true wrapped height and grows to fit, keeping the Apply/Skip buttons on screen.
+- **System Restore Point is always created at the start of a run** — previously, if Windows had already made a restore point in the last 24 hours, lil_bro's own checkpoint was silently skipped, leaving you without a fresh snapshot to roll back to. lil_bro now temporarily lifts Windows' restore-point frequency throttle for its checkpoint, then restores your original setting.
+- **No more pointless benchmark prompts when you skip everything** — if you decline every fix in the approval dialog, lil_bro now skips the benchmark step instead of prompting for one (there's nothing to measure), and it no longer asks "apply the approved fixes anyway?" after a benchmark you deliberately skipped (that prompt now only appears if a benchmark was cancelled or failed).
+- **Cinebench is skipped when all tuning is skipped**, so you're not made to wait through a benchmark with nothing to measure.
+- **More reliable session revert** — the in-page revert's "Reverting…" button reset, status-bar text, and control re-enabling now run on the GUI thread instead of the background worker thread, removing a class of off-thread UI updates that could occasionally glitch the window while a revert finishes.
+
 ## [0.5.0.0] - 2026-06-15
 
 ### Added

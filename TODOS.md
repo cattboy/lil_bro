@@ -139,6 +139,16 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
+### T-037 — Make the pipeline-run path's worker-signal handlers GUI-thread slots
+**Priority:** P2
+**Effort:** S human / S with CC
+**Why:** `PipelineController.start_revert` now routes its `revert_finished` / `revert_failed` / `thread.finished` handlers through `@Slot()` bound methods on the (now `QObject`) controller, so their button/status-bar/flow-control updates run queued on the GUI thread. The optimization-run path (`start_pipeline`) still uses local closures (`_on_pipeline_started`, `_on_pipeline_finished`, `_on_pipeline_failed`, `_on_thread_done`) connected to worker-thread signals, so those touch `status_bar_widget`, `_benchmark_row`, `set_flow_controls`, `main.set_running`, and `_progress_*` off the GUI thread — the same latent off-thread-GUI class `7228cd8` fixed for the dashboard cards. It has not crashed in practice (Qt on Windows tolerates simple property sets), but it's the same bug.
+**Fix:** convert the four `start_pipeline` closures to `@Slot()` methods on `PipelineController` (now a `QObject`), reading `pipeline_thread`/`pipeline_worker` from `runtime` like the revert handlers do. Keep the `stop_requested` `DirectConnection` as-is (deliberate, documented). Preserve the manifest-delta refresh logic in `_on_thread_done`.
+**Blocked by:** Nothing. Own PR; mirrors the revert-path fix shipped in v0.5.0.1.
+**Added:** 2026-06-17 (found during v0.5.0.1 pre-landing review while fixing the revert path)
+
+---
+
 ## Completed
 
 ### T-028 — DLSS V2 config overrides (target_mode / forced_letter)
