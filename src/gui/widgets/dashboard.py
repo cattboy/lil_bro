@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from src.gui.widgets.game_mode_card import GameModeCard
+from src.gui.widgets.hags_card import HAGSCard
 from src.gui.widgets.monitor_refresh_card import MonitorEmptyCard, MonitorRefreshCard
 from src.gui.widgets.mouse_poll_card import MousePollCard
 from src.gui.widgets.nvidia_dlss_card import NvidiaDlssCard
@@ -79,6 +80,8 @@ class Dashboard(QWidget):
     # StartupCoordinator.on_power_plan_fix_requested / on_game_mode_fix_requested.
     power_plan_fix_requested = Signal()
     game_mode_fix_requested = Signal()
+    # Single registry toggle (HKLM HwSchMode); reboot required to take effect.
+    hags_fix_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -219,6 +222,11 @@ class Dashboard(QWidget):
         self._game_mode_card.apply_requested.connect(self.game_mode_fix_requested)
         self._game_mode_card.hide()
         outer.addWidget(self._game_mode_card)
+
+        self._hags_card = HAGSCard(parent=content)
+        self._hags_card.apply_requested.connect(self.hags_fix_requested)
+        self._hags_card.hide()
+        outer.addWidget(self._hags_card)
 
         # Extras list (slots are separate). Uses indexOf(slot) at insert
         # time rather than a cached index, so it's robust to layout
@@ -594,6 +602,7 @@ class Dashboard(QWidget):
             "nvidia_profile": self._nvidia_full_card,
             "power_plan": self._power_plan_card,
             "game_mode": self._game_mode_card,
+            "hags": self._hags_card,
         }.get(check_name)
         if card is not None:
             card.set_applying(applying)
@@ -628,6 +637,26 @@ class Dashboard(QWidget):
     def set_game_mode_findings(self, result: dict) -> None:
         """Feed an ``analyze_game_mode`` finding to the Game Mode card."""
         self._game_mode_card.set_findings(result or {})
+
+    def set_hags_data(self, hags) -> None:
+        """Show/hide the HAGS card based on the ``HAGS`` spec entry.
+
+        Same gate as set_game_mode_data (missing entry / collection error ->
+        non-revertible fix), PLUS a ``supported`` gate: when the GPU/driver does
+        not expose HwSchMode the card hides rather than offer a no-op fix.
+        """
+        visible = (
+            isinstance(hags, dict)
+            and bool(hags)
+            and "error" not in hags
+            and bool(hags.get("supported", False))
+        )
+        self._log.info("Dashboard.set_hags_data: visible=%s", visible)
+        self._hags_card.setVisible(visible)
+
+    def set_hags_findings(self, result: dict) -> None:
+        """Feed an ``analyze_hags`` finding to the HAGS card."""
+        self._hags_card.set_findings(result or {})
 
     def _nvidia_delta_text(self, current: dict, expected: dict) -> tuple[str, str]:
         """Build per-setting text from analysis dicts for the WARNING state.
@@ -711,7 +740,7 @@ class Dashboard(QWidget):
         already-optimal — the coachmark controller then falls back to a stat tile.
         """
         cards = [
-            self._power_plan_card, self._game_mode_card,
+            self._power_plan_card, self._game_mode_card, self._hags_card,
             self._nvidia_full_card, self._nvidia_dlss_card,
             self._monitor_card_slot, *self._monitor_cards,
         ]

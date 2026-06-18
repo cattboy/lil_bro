@@ -91,6 +91,7 @@ a = Analysis(
         'src.gui.widgets.dashboard',
         'src.gui.widgets.dialogs',
         'src.gui.widgets.game_mode_card',
+        'src.gui.widgets.hags_card',
         'src.gui.widgets.info_marker',
         'src.gui.widgets.last_run_card',
         'src.gui.widgets.monitor_refresh_card',

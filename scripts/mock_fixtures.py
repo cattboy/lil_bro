@@ -159,6 +159,21 @@ def game_mode(key: str) -> dict:
     return copy.deepcopy(GAME_MODES[key])
 
 
+# ── HAGS spec entries (consumed by set_hags_data + the REAL analyze_hags) ────
+# Single registry toggle (HKLM HwSchMode). "unsupported"/"missing" hide the card.
+HAGS_STATES: dict[str, dict] = {
+    "enabled": {"enabled": True, "supported": True},
+    "disabled": {"enabled": False, "supported": True},
+    "unsupported": {"enabled": False, "supported": False},  # card hidden (no HwSchMode value)
+    "missing": {"error": "registry read failed (mock)"},     # card hidden
+}
+
+
+def hags(key: str) -> dict:
+    """Deep copy so appliers can mutate without corrupting fixtures."""
+    return copy.deepcopy(HAGS_STATES[key])
+
+
 # ── NVIDIA specs (consumed by set_nvidia_data + the REAL analyze_nvidia_profile)
 
 
@@ -237,21 +252,21 @@ SCENARIOS: dict[str, dict] = {
     "All optimal": {
         "stats": "normal", "thermal": "normal", "mouse": "ok_1000",
         "monitors": "optimal", "nvidia": "ok", "dlss": "quality",
-        "power": "high_perf", "game": "enabled", "animate": True,
+        "power": "high_perf", "game": "enabled", "hags": "enabled", "animate": True,
     },
     "Mixed issues": {
         "stats": "normal", "thermal": "warning", "mouse": "warn_500",
         "monitors": "suboptimal", "nvidia": "warning", "dlss": "fps",
-        "power": "balanced", "game": "disabled", "animate": False,
+        "power": "balanced", "game": "disabled", "hags": "disabled", "animate": False,
     },
     "Everything broken": {
         "stats": "hot", "thermal": "critical", "mouse": "low_125",
         "monitors": "wmi", "nvidia": "warning", "dlss": "fps",
-        "power": "power_saver", "game": "disabled", "animate": False,
+        "power": "power_saver", "game": "disabled", "hags": "disabled", "animate": False,
     },
     "Fresh install": {
         "stats": "missing", "thermal": "offline", "mouse": "not_measured",
         "monitors": "empty", "nvidia": "no_gpu", "dlss": "quality",
-        "power": "missing", "game": "missing", "animate": False,
+        "power": "missing", "game": "missing", "hags": "missing", "animate": False,
     },
 }

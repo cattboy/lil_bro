@@ -6,7 +6,7 @@ from src.pipeline.fix_dispatch import FIX_REGISTRY, execute_fix
 class TestFixRegistry:
     def test_all_expected_checks_registered(self):
         """All auto-fixable checks must be in the registry."""
-        expected = {"display", "power_plan", "temp_folders", "game_mode",
+        expected = {"display", "power_plan", "temp_folders", "game_mode", "hags",
                     "nvidia_profile", "nvidia_dlss_preset"}
         assert set(FIX_REGISTRY.keys()) == expected
 
@@ -40,6 +40,30 @@ class TestFixGameMode:
         assert entry["revertible"] is True
         assert entry["before"]["AutoGameModeEnabled"] == 0
         assert entry["after"]["AutoGameModeEnabled"] == 1
+
+
+class TestFixHags:
+    @patch("src.agent_tools.hags.set_hags")
+    def test_hags_success(self, mock_set):
+        assert execute_fix("hags", {}) is True
+        mock_set.assert_called_once_with(enabled=True)
+
+    @patch("src.agent_tools.hags.set_hags", side_effect=Exception("denied"))
+    def test_hags_failure(self, mock_set):
+        assert execute_fix("hags", {}) is False
+
+    @patch("src.utils.revert.append_fix_to_manifest")
+    @patch("src.agent_tools.hags.set_hags")
+    def test_hags_manifest_entry_captured(self, mock_set, mock_append):
+        """Manifest entry written with before-state from specs (HwSchMode 1 -> 2)."""
+        specs = {"HAGS": {"enabled": False, "supported": True}}
+        assert execute_fix("hags", specs) is True
+        mock_append.assert_called_once()
+        entry = mock_append.call_args[0][0]
+        assert entry["fix"] == "hags"
+        assert entry["revertible"] is True
+        assert entry["before"]["HwSchMode"] == 1
+        assert entry["after"]["HwSchMode"] == 2
 
 
 class TestFixTempFolders:

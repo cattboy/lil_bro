@@ -11,6 +11,7 @@ from .sub.nvidia_smi_dumper import get_nvidia_smi
 from .sub.wmi_dumper import get_wmi_specs
 from ..agent_tools.power_plan import get_active_power_plan
 from ..agent_tools.game_mode import get_game_mode_status
+from ..agent_tools.hags import get_hags_status
 from ..agent_tools.temp_audit import get_temp_sizes
 from ..utils.formatting import print_step, print_step_done, print_error
 from ..utils.paths import get_specs_path
@@ -37,6 +38,13 @@ def _collect_power_plan() -> dict:
 def _collect_game_mode() -> dict:
     try:
         return {"enabled": get_game_mode_status()}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _collect_hags() -> dict:
+    try:
+        return get_hags_status()
     except Exception as e:
         return {"error": str(e)}
 
@@ -72,6 +80,8 @@ def collect_fix_sections(sections: set[str] | None = None) -> dict:
         out["PowerPlan"] = _collect_power_plan()
     if _want("GameMode"):
         out["GameMode"] = _collect_game_mode()
+    if _want("HAGS"):
+        out["HAGS"] = _collect_hags()
     return out
 
 
@@ -95,6 +105,7 @@ def dump_system_specs(output_path: str | None = None) -> str:
         "DisplayCapabilities": _safe_collect(get_monitor_refresh_capabilities),
         "PowerPlan": _collect_power_plan(),
         "GameMode": _collect_game_mode(),
+        "HAGS": _collect_hags(),
         "TempFolders": _safe_collect(get_temp_sizes),
         "NVIDIAProfile": _safe_collect(get_nvidia_profile),
     }

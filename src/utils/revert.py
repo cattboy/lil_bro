@@ -157,6 +157,8 @@ def revert_fix(entry: dict) -> tuple[bool, str]:
             return _revert_power_plan(entry)
         if fix_key == "game_mode":
             return _revert_game_mode(entry)
+        if fix_key == "hags":
+            return _revert_hags(entry)
         # nvidia_dlss_preset shares the whole-profile .nip restore: its
         # before_backup is a full profile snapshot, so re-importing it undoes
         # the DLSS preset change (along with anything else in that snapshot).
@@ -264,6 +266,25 @@ def _revert_game_mode(entry: dict) -> tuple[bool, str]:
             "Revert",
             f"Game Mode restored to AutoGameModeEnabled={value}",
             r"HKCU\SOFTWARE\Microsoft\GameBar",
+        )
+        return True, ""
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
+
+
+def _revert_hags(entry: dict) -> tuple[bool, str]:
+    from src.agent_tools.hags import set_hags
+
+    before = entry.get("before", {})
+    value = before.get("HwSchMode")
+    if value is None:
+        return False, "hags revert: missing before.HwSchMode"
+    try:
+        set_hags(enabled=(value == 2))
+        action_logger.log_action(
+            "Revert",
+            f"HAGS restored to HwSchMode={value} (restart to apply)",
+            r"HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
         )
         return True, ""
     except Exception as exc:  # noqa: BLE001

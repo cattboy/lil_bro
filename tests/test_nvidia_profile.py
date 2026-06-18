@@ -650,7 +650,7 @@ class TestFixDispatchNvidiaProfile:
 
     def test_all_expected_checks_registered(self):
         from src.pipeline.fix_dispatch import FIX_REGISTRY
-        expected = {"display", "power_plan", "temp_folders", "game_mode",
+        expected = {"display", "power_plan", "temp_folders", "game_mode", "hags",
                     "nvidia_profile", "nvidia_dlss_preset"}
         assert set(FIX_REGISTRY.keys()) == expected
 

@@ -241,6 +241,33 @@ def _fix_game_mode(specs: dict) -> bool:
     return True
 
 
+@register_fix("hags")
+def _fix_hags(specs: dict) -> bool:
+    """Enables Hardware-Accelerated GPU Scheduling via registry (HKLM HwSchMode)."""
+    from src.agent_tools.hags import set_hags
+
+    hags_spec = specs.get("HAGS", {})
+    before_enabled = hags_spec.get("enabled")
+
+    try:
+        set_hags(enabled=True)
+    except Exception as e:
+        print_error(f"[hags] Failed: {e}")
+        return False
+
+    if before_enabled is not None:
+        _record_revertible(
+            "hags",
+            before={"HwSchMode": 2 if before_enabled else 1},
+            after={"HwSchMode": 2},
+        )
+    else:
+        _record_non_revertible("hags", "Before-state not available in specs")
+
+    print_success("[hags] Hardware-Accelerated GPU Scheduling enabled — restart to apply.")
+    return True
+
+
 @register_fix("nvidia_profile")
 def _fix_nvidia_profile(specs: dict) -> bool:
     """Applies optimized NVIDIA driver profile via NPI (DLSS excluded)."""

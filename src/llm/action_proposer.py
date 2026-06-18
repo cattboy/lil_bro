@@ -57,6 +57,8 @@ def build_llm_input(hardware: dict, findings: list[dict]) -> dict:
             entry.update({"current_plan": f.get("current", "Unknown")})
         elif check == "game_mode":
             entry.update({"enabled": False})
+        elif check == "hags":
+            entry.update({"enabled": False})
         elif check == "rebar":
             entry.update({"enabled": False})
         elif check == "temp_folders":
@@ -173,6 +175,17 @@ FALLBACK_PROPOSALS: dict[str, dict] = {
             "game and reduces background jitter."
         ),
         "proposed_action": "Enable Game Mode via registry",
+        "can_auto_fix": True,
+    },
+    "hags": {
+        "finding": "hags",
+        "severity": "MEDIUM",
+        "explanation": (
+            "Hardware-Accelerated GPU Scheduling lets the GPU manage its own "
+            "memory and scheduling, which can lower latency and offload work "
+            "from the CPU in modern games. Requires a reboot to take effect."
+        ),
+        "proposed_action": "Enable Hardware-Accelerated GPU Scheduling",
         "can_auto_fix": True,
     },
     "rebar": {

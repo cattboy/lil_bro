@@ -169,13 +169,15 @@ class TestCollectFixSections:
              patch.object(spec_dumper, "get_nvidia_smi", return_value=[{"GPU": "RTX 4090"}]), \
              patch.object(spec_dumper, "get_active_power_plan", return_value=("guid", "High")), \
              patch.object(spec_dumper, "get_game_mode_status", return_value=True), \
+             patch.object(spec_dumper, "get_hags_status", return_value={"enabled": True, "supported": True}), \
              patch.object(spec_dumper, "get_nvidia_profile", return_value={"available": True}) as m_prof:
             sections = spec_dumper.collect_fix_sections()
         assert set(sections) == {
-            "DisplayCapabilities", "NVIDIA", "PowerPlan", "GameMode", "NVIDIAProfile",
+            "DisplayCapabilities", "NVIDIA", "PowerPlan", "GameMode", "HAGS", "NVIDIAProfile",
         }
         assert sections["PowerPlan"] == {"guid": "guid", "name": "High"}
         assert sections["GameMode"] == {"enabled": True}
+        assert sections["HAGS"] == {"enabled": True, "supported": True}
         m_prof.assert_called_once()
 
     def test_skips_nvidia_profile_when_no_gpu(self):
@@ -184,6 +186,7 @@ class TestCollectFixSections:
              patch.object(spec_dumper, "get_nvidia_smi", return_value=[]), \
              patch.object(spec_dumper, "get_active_power_plan", return_value=("g", "Balanced")), \
              patch.object(spec_dumper, "get_game_mode_status", return_value=False), \
+             patch.object(spec_dumper, "get_hags_status", return_value={"enabled": False, "supported": True}), \
              patch.object(spec_dumper, "get_nvidia_profile") as m_prof:
             sections = spec_dumper.collect_fix_sections()
         assert "NVIDIAProfile" not in sections
