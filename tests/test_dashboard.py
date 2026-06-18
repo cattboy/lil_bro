@@ -158,3 +158,11 @@ def test_mouse_poll_card_has_info_marker(qtbot):
     markers = card.findChildren(InfoMarker)
     assert len(markers) == 1
     assert markers[0].toolTip()
+
+
+
+def test_info_marker_uses_short_hover_delay(qtbot):
+    marker = InfoMarker("Title", "body text")
+    qtbot.addWidget(marker)
+    assert InfoMarker._SHOW_DELAY_MS == 300  # snappier than Qt's 700ms default
+    assert marker._hover_timer.isSingleShot()

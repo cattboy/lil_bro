@@ -74,7 +74,7 @@ BEATS: list[dict[str, str]] = [
         "side": "right",
         "title": "Start Optimization",
         "body": (
-            "One click and lil_bro scans your whole rig, holding your hand through the process. "
+            "lil_bro scans your rig, holding your hand through each fix. "
             "Nothing touches your PC without approval."
         ),
     },
@@ -83,7 +83,7 @@ BEATS: list[dict[str, str]] = [
         "side": "left",
         "title": "Card quick fixes",
         "body": (
-            "Or knock out fixes one at a time, here on DASHBOARD — no need to run the whole optimization pass."
+            "Or knock out fixes one at a time in the DASHBOARD."
         ),
     },
     {
