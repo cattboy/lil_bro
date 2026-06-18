@@ -12,6 +12,7 @@ from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from src.gui.theme import repolish
+from src.gui.widgets.info_marker import InfoMarker
 from src.llm.action_proposer import propose_for_check
 
 
@@ -29,9 +30,26 @@ class MousePollCard(QFrame):
         poll_left = QVBoxLayout()
         poll_left.setSpacing(4)
 
+        # Label row: "MOUSE POLLING" + a hover "?" info marker explaining
+        # what polling rate is good for gaming.
+        label_row = QHBoxLayout()
+        label_row.setContentsMargins(0, 0, 0, 0)
+        label_row.setSpacing(6)
         poll_label = QLabel("MOUSE POLLING")
         poll_label.setObjectName("pollLabel")
-        poll_left.addWidget(poll_label)
+        label_row.addWidget(poll_label)
+        label_row.addWidget(
+            InfoMarker(
+                "Mouse Polling Rate",
+                "How many times per second your mouse reports its position. "
+                "125Hz is old and laggy, 500Hz is acceptable, and 1000Hz (1ms) "
+                "is ideal for gaming — higher means a smoother cursor and lower "
+                "input lag.",
+                parent=self,
+            )
+        )
+        label_row.addStretch()
+        poll_left.addLayout(label_row)
 
         hz_row = QHBoxLayout()
         hz_row.setSpacing(4)

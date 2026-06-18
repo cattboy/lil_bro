@@ -50,6 +50,30 @@ def _qss_stat_cards(c: dict[str, str]) -> str:
 """
 
 
+def _qss_info_marker(c: dict[str, str]) -> str:
+    """Small circular "?" hover-help chip (InfoMarker) on stat / poll cards."""
+    return f"""
+    /* --- "?" info marker -------------------------------------------- */
+    /* Tiny circular hover-help chip; its flyout chrome is the global
+     * QToolTip rule (stylesheet_foundation). Muted by default, accent on
+     * hover — mirrors the scroll-hint chip idiom below. */
+    QLabel#infoMarker {{
+        font-family: "{FONTS["mono"]}";
+        font-size: 10px;
+        font-weight: 700;
+        color: {c["text_muted"]};
+        background-color: transparent;
+        border: 1px solid {c["text_muted"]};
+        border-radius: 8px;
+    }}
+    QLabel#infoMarker:hover {{
+        color: {c["accent"]};
+        border: 1px solid {c["accent"]};
+        background-color: {c["accent_dim"]};
+    }}
+"""
+
+
 def _qss_chart(c: dict[str, str]) -> str:
     """Thermal chart wrapper, header, and CPU/GPU legend labels."""
     return f"""

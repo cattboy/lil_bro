@@ -41,6 +41,23 @@ from src.utils.debug_logger import get_debug_logger
 _NPI_RED = "#FF6B6B"
 _NPI_GREEN = "#4ADE80"
 
+# Hover "?" flyout copy for the temperature stat tiles (idle vs under-load
+# guidance). Numbers mirror src/agent_tools/thermal_guidance.py thresholds
+# (CPU warn 85 / idle-warn 75 / throttle ~95-100; GPU warn 90 / idle-warn 80
+# / throttle ~93-100).
+_CPU_TEMP_HELP = (
+    "CPU Temperature",
+    "Idle: 30–50°C is healthy. Under load: up to ~80°C is normal, 85°C+ "
+    "runs hot, and 95–100°C forces thermal throttling (lost FPS). Above "
+    "75°C at rest signals weak cooling — clean fans, check airflow/paste.",
+)
+_GPU_TEMP_HELP = (
+    "GPU Temperature",
+    "Idle: 30–50°C is healthy. Under gaming load: up to ~83°C is normal, "
+    "90°C+ runs hot, and 93–100°C forces throttling. Above 80°C at rest "
+    "signals poor case airflow.",
+)
+
 class Dashboard(QWidget):
     """V2 dashboard: 4-col stat grid + temperature chart + USB polling widget."""
 
@@ -95,6 +112,11 @@ class Dashboard(QWidget):
             card = StatCard(label, tone)
             self._cards[key] = card
             grid.addWidget(card, 0, col)
+
+        # Hover "?" info markers on the temperature tiles only — idle/load
+        # guidance flyout. Dashboard-only; LiveStatRow stays marker-free.
+        self._cards["cpu_temp"].set_info(*_CPU_TEMP_HELP)
+        self._cards["gpu_temp"].set_info(*_GPU_TEMP_HELP)
 
         outer.addWidget(grid_frame)
 

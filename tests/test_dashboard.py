@@ -5,6 +5,8 @@ from __future__ import annotations
 from PySide6.QtWidgets import QScrollArea
 
 from src.gui.widgets.dashboard import Dashboard
+from src.gui.widgets.info_marker import InfoMarker
+from src.gui.widgets.mouse_poll_card import MousePollCard
 from src.gui.widgets.stat_card import STAT_CARDS
 
 
@@ -132,3 +134,27 @@ def test_monitor_cards_keep_natural_height_when_column_overflows(qtbot):
     vbar = dash._scroll.verticalScrollBar()
     assert vbar.maximum() > 0
     assert dash._scroll_hint.isVisibleTo(dash._scroll)
+
+
+
+# ── Hover "?" info markers (temp tiles + mouse poll card) ────────────────────
+
+
+def test_temp_cards_have_info_markers(qtbot):
+    dash = Dashboard()
+    qtbot.addWidget(dash)
+    for key in ("cpu_temp", "gpu_temp"):
+        marker = dash._cards[key]._info_marker
+        assert isinstance(marker, InfoMarker)
+        assert marker.toolTip()  # non-empty hover-flyout copy
+    # Non-temperature tiles get no marker.
+    for key in ("cpu_usage", "ram_used"):
+        assert dash._cards[key]._info_marker is None
+
+
+def test_mouse_poll_card_has_info_marker(qtbot):
+    card = MousePollCard()
+    qtbot.addWidget(card)
+    markers = card.findChildren(InfoMarker)
+    assert len(markers) == 1
+    assert markers[0].toolTip()
