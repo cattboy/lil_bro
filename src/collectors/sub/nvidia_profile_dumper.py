@@ -77,6 +77,18 @@ def _interpret_power_mgmt(raw: dict[int, int]) -> str | None:
     return f"other_{val}"
 
 
+def _interpret_rtx_hdr(raw: dict[int, int]) -> bool | None:
+    """True if RTX HDR is enabled in the driver profile.
+
+    Read from the same NPI export the DLSS/profile cards already use (no second
+    export — D9). The RTX HDR *enable* one-click write is deferred to TODO T-040.
+    """
+    val = raw.get(SETTING_IDS["rtx_hdr_enable"])
+    if val is None:
+        return None
+    return val == 1
+
+
 def get_nvidia_profile() -> dict[str, Any]:
     """Export current NVIDIA profile via NPI CLI and parse key settings.
 
@@ -119,5 +131,6 @@ def get_nvidia_profile() -> dict[str, Any]:
         "rebar_driver": _interpret_rebar(raw_settings),
         "dlss_preset": _interpret_dlss(raw_settings),
         "power_mgmt": _interpret_power_mgmt(raw_settings),
+        "rtx_hdr_enabled": _interpret_rtx_hdr(raw_settings),
         "raw_settings": raw_settings,
     }

@@ -120,6 +120,7 @@ class MockDriver:
         self._power_key = "high_perf"
         self._game_key = "enabled"
         self._hags_key = "enabled"
+        self._hdr_key = "rtx_off"
         self._dlss_key = "quality"
         self._anim_base = fx.ANIM_BASES["normal"]
         self._anim_phase = 0
@@ -203,6 +204,10 @@ class MockDriver:
         self._hags_key = key
         self._apply_settings()
 
+    def apply_hdr(self, key: str) -> None:
+        self._hdr_key = key
+        self.dashboard.set_hdr_data(fx.hdr_specs(key))
+
     def _apply_settings(self) -> None:
         # Order mirrors app.py run(): visibility (set_*_data) then findings
         # via the REAL analyzers over the fixture specs.
@@ -229,6 +234,7 @@ class MockDriver:
         self.apply_power(sc["power"])
         self.apply_game(sc["game"])
         self.apply_hags(sc["hags"])
+        self.apply_hdr(sc["hdr"])
         self.set_animation(sc["animate"])
 
     def set_animation(self, on: bool) -> None:
@@ -397,6 +403,7 @@ class MockControls(QWidget):
         self._power = self._combo(root, "Power Plan", list(fx.POWER_PLANS), driver.apply_power)
         self._game = self._combo(root, "Game Mode", list(fx.GAME_MODES), driver.apply_game)
         self._hags = self._combo(root, "HAGS", list(fx.HAGS_STATES), driver.apply_hags)
+        self._hdr = self._combo(root, "HDR", list(fx.HDR_SPEC_STATES), driver.apply_hdr)
 
         # Toggles
         self._animate = QCheckBox("Animate stats/thermal (1 Hz)")
@@ -429,6 +436,7 @@ class MockControls(QWidget):
             (self._stats, "stats"), (self._thermal, "thermal"), (self._mouse, "mouse"),
             (self._monitors, "monitors"), (self._nvidia, "nvidia"), (self._dlss, "dlss"),
             (self._power, "power"), (self._game, "game"), (self._hags, "hags"),
+            (self._hdr, "hdr"),
         ):
             self._set_silently(box, sc[key])
         self.driver.apply_scenario(name)
@@ -478,6 +486,7 @@ def _smoke_report(driver: MockDriver, name: str) -> None:
         f"power={d._power_plan_card.isVisibleTo(d)}/{d._power_plan_card._status_lbl.text()!r} "
         f"game={d._game_mode_card.isVisibleTo(d)}/{d._game_mode_card._status_lbl.text()!r} "
         f"hags={d._hags_card.isVisibleTo(d)}/{d._hags_card._status_lbl.text()!r} "
+        f"hdr={d._hdr_card.isVisibleTo(d)}/{d._hdr_card._status_lbl.text()!r} "
         f"chart_offline={d.thermal_chart._offline} "
         f"mouse={d._mouse_poll_card._poll_status.text()!r} "
         f"scroll_overflow={vbar.maximum() > 0} "

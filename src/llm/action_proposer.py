@@ -252,6 +252,22 @@ FALLBACK_PROPOSALS: dict[str, dict] = {
         "proposed_action": "Force the recommended DLSS preset for your GPU",
         "can_auto_fix": True,
     },
+    "hdr": {
+        # Generic entry for the pipeline/LLM path. The card renders tier-specific
+        # copy (RTX HDR / Auto HDR / base HDR) from HDR_TIER_COPY in
+        # src/agent_tools/hdr.py — the single source for the priority ladder.
+        # v1 is detection-only (can_auto_fix=False); the one-click Auto HDR / RTX
+        # HDR writes are TODOS T-039 / T-040.
+        "finding": "hdr",
+        "severity": "MEDIUM",
+        "explanation": (
+            "Your monitor supports HDR but your games aren't using it. "
+            "lil_bro suggests the best HDR path for your "
+            "hardware — RTX HDR on RTX cards, otherwise Windows Auto HDR."
+        ),
+        "proposed_action": "Turn on HDR for your games",
+        "can_auto_fix": False,
+    },
 }
 
 

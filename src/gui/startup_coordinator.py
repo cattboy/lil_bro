@@ -33,7 +33,7 @@ class StartupCompleter(QObject):
 # spec sections its card reads. Used to scope the post-apply dashboard re-collect to
 # only what changed this session. Any NEW dashboard fix card must extend this map.
 _FIX_TO_SECTIONS: dict[str, set[str]] = {
-    "display": {"DisplayCapabilities"},
+    "display": {"DisplayCapabilities", "HDRStatus"},
     "nvidia_profile": {"NVIDIA", "NVIDIAProfile"},
     "nvidia_dlss_preset": {"NVIDIA", "NVIDIAProfile"},
     "power_plan": {"PowerPlan"},
@@ -281,6 +281,7 @@ class StartupCoordinator(QObject):
             try:
                 _specs = runtime.get("preloaded_specs", {}) or {}
                 main._dashboard.set_monitor_data(_specs.get("DisplayCapabilities", []))
+                main._dashboard.set_hdr_data(_specs)
                 main._dashboard.monitor_fix_requested.connect(self.on_monitor_fix_requested)
                 main._dashboard.monitor_refresh_requested.connect(self.refresh_monitor_card)
                 main._dashboard.seed_dlss_priority(_specs)
@@ -442,6 +443,12 @@ class StartupCoordinator(QObject):
                 main._dashboard.set_monitor_data(specs.get("DisplayCapabilities", []) or [])
             except Exception as exc:
                 self._log.warning("Monitor card rescan failed: %s", exc, exc_info=True)
+        # HDR card (detection-only) -- re-sync alongside display changes.
+        if "HDRStatus" in sections:
+            try:
+                main._dashboard.set_hdr_data(specs)
+            except Exception as exc:
+                self._log.warning("HDR card rescan failed: %s", exc, exc_info=True)
         # NVIDIA: re-show/hide cards + DLSS recommendation, then per-setting findings.
         if "NVIDIA" in sections:
             try:

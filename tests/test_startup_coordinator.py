@@ -457,7 +457,7 @@ def test_sections_for_fixes_maps_known_keys():
     assert _sections_for_fixes(["power_plan"]) == {"PowerPlan"}
     assert _sections_for_fixes(["nvidia_profile"]) == {"NVIDIA", "NVIDIAProfile"}
     assert _sections_for_fixes(["nvidia_dlss_preset"]) == {"NVIDIA", "NVIDIAProfile"}
-    assert _sections_for_fixes(["display", "game_mode"]) == {"DisplayCapabilities", "GameMode"}
+    assert _sections_for_fixes(["display", "game_mode"]) == {"DisplayCapabilities", "HDRStatus", "GameMode"}
     # temp_folders has no card; unknown keys contribute nothing.
     assert _sections_for_fixes(["temp_folders", "bogus"]) == set()
 

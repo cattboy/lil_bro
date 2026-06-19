@@ -888,6 +888,7 @@ class TestNvidiaNpiConstants:
             "gsync_support_indicator", "vsync", "vsync_tear_control",
             "vsync_smooth_afr", "fps_limiter_v3", "rebar_enable",
             "dlss_preset_profile", "dlss_preset_letter", "power_mgmt",
+            "rtx_hdr_enable",
         }
         assert set(SETTING_IDS.keys()) == expected
 

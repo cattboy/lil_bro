@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from src.gui.widgets.game_mode_card import GameModeCard
 from src.gui.widgets.hags_card import HAGSCard
+from src.gui.widgets.hdr_card import HDRCard
 from src.gui.widgets.monitor_refresh_card import MonitorEmptyCard, MonitorRefreshCard
 from src.gui.widgets.mouse_poll_card import MousePollCard
 from src.gui.widgets.nvidia_dlss_card import NvidiaDlssCard
@@ -227,6 +228,15 @@ class Dashboard(QWidget):
         self._hags_card.apply_requested.connect(self.hags_fix_requested)
         self._hags_card.hide()
         outer.addWidget(self._hags_card)
+
+        # ── HDR optimization card (detection-only v1) ────────────────
+        # Pre-allocated like the slots above (dynamic creation during the
+        # splash's nested event loop fails to parent in the bundled exe).
+        # Detection-only: deep-links to native HDR settings, no fix signal.
+        # Hidden until set_hdr_data shows it (HDR-capable display detected).
+        self._hdr_card = HDRCard(parent=content)
+        self._hdr_card.hide()
+        outer.addWidget(self._hdr_card)
 
         # Extras list (slots are separate). Uses indexOf(slot) at insert
         # time rather than a cached index, so it's robust to layout
@@ -657,6 +667,21 @@ class Dashboard(QWidget):
     def set_hags_findings(self, result: dict) -> None:
         """Feed an ``analyze_hags`` finding to the HAGS card."""
         self._hags_card.set_findings(result or {})
+
+    def set_hdr_data(self, specs: dict) -> None:
+        """Populate + show/hide the HDR card from collected specs.
+
+        Detection-only (v1): runs the pure ``analyze_hdr`` over the HDRStatus /
+        NVIDIA / NVIDIAProfile sections, feeds the card, and hides it when HDR
+        capability is undetermined or no HDR-capable panel exists.
+        """
+        from src.agent_tools.hdr import analyze_hdr, hdr_card_visible
+
+        finding = analyze_hdr(specs or {})
+        self._hdr_card.set_hdr_status(finding)
+        visible = hdr_card_visible(finding)
+        self._hdr_card.setVisible(visible)
+        self._log.info("Dashboard.set_hdr_data: state=%s visible=%s", finding.get("state"), visible)
 
     def _nvidia_delta_text(self, current: dict, expected: dict) -> tuple[str, str]:
         """Build per-setting text from analysis dicts for the WARNING state.

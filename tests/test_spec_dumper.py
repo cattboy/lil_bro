@@ -170,10 +170,11 @@ class TestCollectFixSections:
              patch.object(spec_dumper, "get_active_power_plan", return_value=("guid", "High")), \
              patch.object(spec_dumper, "get_game_mode_status", return_value=True), \
              patch.object(spec_dumper, "get_hags_status", return_value={"enabled": True, "supported": True}), \
-             patch.object(spec_dumper, "get_nvidia_profile", return_value={"available": True}) as m_prof:
+             patch.object(spec_dumper, "get_nvidia_profile", return_value={"available": True}) as m_prof, \
+             patch.object(spec_dumper, "get_hdr_status", return_value={"determined": True}):
             sections = spec_dumper.collect_fix_sections()
         assert set(sections) == {
-            "DisplayCapabilities", "NVIDIA", "PowerPlan", "GameMode", "HAGS", "NVIDIAProfile",
+            "DisplayCapabilities", "HDRStatus", "NVIDIA", "PowerPlan", "GameMode", "HAGS", "NVIDIAProfile",
         }
         assert sections["PowerPlan"] == {"guid": "guid", "name": "High"}
         assert sections["GameMode"] == {"enabled": True}
@@ -187,7 +188,8 @@ class TestCollectFixSections:
              patch.object(spec_dumper, "get_active_power_plan", return_value=("g", "Balanced")), \
              patch.object(spec_dumper, "get_game_mode_status", return_value=False), \
              patch.object(spec_dumper, "get_hags_status", return_value={"enabled": False, "supported": True}), \
-             patch.object(spec_dumper, "get_nvidia_profile") as m_prof:
+             patch.object(spec_dumper, "get_nvidia_profile") as m_prof, \
+             patch.object(spec_dumper, "get_hdr_status", return_value={"determined": True}):
             sections = spec_dumper.collect_fix_sections()
         assert "NVIDIAProfile" not in sections
         assert sections["NVIDIA"] == []

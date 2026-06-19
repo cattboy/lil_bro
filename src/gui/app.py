@@ -356,6 +356,7 @@ def run(debug: bool = False) -> int:
         _specs = runtime.get("preloaded_specs", {}) or {}
         try:
             main._dashboard.set_monitor_data(_specs.get("DisplayCapabilities", []))
+            main._dashboard.set_hdr_data(_specs)
             main._dashboard.monitor_fix_requested.connect(startup.on_monitor_fix_requested)
             main._dashboard.monitor_refresh_requested.connect(startup.refresh_monitor_card)
             main._dashboard.seed_dlss_priority(_specs)

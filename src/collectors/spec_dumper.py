@@ -4,6 +4,7 @@ from datetime import datetime
 
 from .sub.amd_smi_dumper import get_amd_smi
 from .sub.dxdiag_dumper import get_dxdiag
+from .sub.hdr_dumper import get_hdr_status
 from .sub.libra_hm_dumper import get_lhm_data
 from .sub.monitor_dumper import get_monitor_refresh_capabilities
 from .sub.nvidia_profile_dumper import get_nvidia_profile
@@ -70,6 +71,8 @@ def collect_fix_sections(sections: set[str] | None = None) -> dict:
     out: dict = {}
     if _want("DisplayCapabilities"):
         out["DisplayCapabilities"] = _safe_collect(get_monitor_refresh_capabilities)
+    if _want("HDRStatus"):
+        out["HDRStatus"] = _safe_collect(get_hdr_status)
     if _want("NVIDIA") or _want("NVIDIAProfile"):
         nvidia = _safe_collect(get_nvidia_smi)
         if _want("NVIDIA"):
@@ -103,6 +106,7 @@ def dump_system_specs(output_path: str | None = None) -> str:
         "AMD": _safe_collect(get_amd_smi),
         "LibreHardwareMonitor": _safe_collect(get_lhm_data),
         "DisplayCapabilities": _safe_collect(get_monitor_refresh_capabilities),
+        "HDRStatus": _safe_collect(get_hdr_status),
         "PowerPlan": _collect_power_plan(),
         "GameMode": _collect_game_mode(),
         "HAGS": _collect_hags(),

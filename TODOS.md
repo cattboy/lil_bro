@@ -7,6 +7,37 @@ Format: Priority | Effort (human / CC) | Context
 
 ## Open
 
+### T-039 — HDR auto-fix: Auto HDR one-click write (Windows registry)
+**Priority:** P2
+**Effort:** M human / M with CC
+**Why:** The HDR Optimization card ships detection-only in v1 (recommend + deep-link). This is the deferred one-click "turn Auto HDR on" write. Saves the zero-think user one trip into Windows Settings, but carries the largest risk surface in the HDR feature, so it was split out for hardware verification + research.
+**Fix:** Add a PURE `set_auto_hdr_token(current: str|None, enabled: bool) -> str` that edits the `AutoHDREnable` token inside `HKCU\Software\Microsoft\DirectX\UserGpuPreferences\DirectXUserGlobalSettings` (a shared semicolon REG_SZ) without disturbing `VRROptimizeEnable`/`SwapEffectUpgradeEnable`/`DXGIEffects`; exhaustively unit-test it (token present/absent/empty/None, other-tokens-preserved, trailing-semicolon). Thin winreg wrapper mocked once. Route the fix through the existing generic `_CardFixWorker("hdr", ...)` → `_apply_card_fix` (manifest + restore point + `execute_fix`) and `@register_fix("hdr")` in `fix_dispatch.py`. Revert payload = FULL prior REG_SZ string, or an "absent" sentinel (never re-introduce a token Windows never had).
+**Research / verify before shipping (outside-voice findings):**
+  - `scripts/probe_hdr.py` must confirm on real Win11 HW: the exact before/after `DirectXUserGlobalSettings` string, whether the Settings toggle sets `SwapEffectUpgradeEnable=1` alongside `AutoHDREnable=1`, and whether a raw `winreg` write is honored live vs next-game-launch vs sign-out (Open Q1). Success copy must match (likely "applies next time you launch a game").
+  - #4 stale-gate race: re-check LIVE `advancedColorEnabled` inside the fix handler — between collection and the click (esp. after deep-linking the user to Settings) HDR may now be off, making the write silently inert.
+  - #8 HKCU hive under elevation: lil_bro runs elevated (restore points). Confirm the write lands in the intended user's hive, not the elevated account's, under any runas/admin split. First per-user HKCU write in the project (all others are HKLM/machine) — no precedent.
+  - Per-app overrides: `UserGpuPreferences` per-exe values override the global; success copy says "set as your global default," never "every game."
+**Blocked by:** `probe_hdr.py` green on real Win11 + HDR hardware. Deferred from /plan-eng-review D11 (detection-only v1).
+**Added:** 2026-06-19 (deferred from /plan-eng-review on the HDR Optimization card plan)
+
+---
+
+### T-040 — HDR auto-fix: RTX HDR one-click enable (NPI driver flags)
+**Priority:** P2
+**Effort:** L human / M with CC
+**Why:** For RTX 20/30/40/50 owners, RTX HDR is the top-priority HDR path (best quality). This is the deferred one-click "enable RTX HDR" write via NVIDIA Profile Inspector driver flags — what the NVIDIA App makes a multi-step manual chore. Highest-risk path in the feature: undocumented flags, reboot-gated, global scope, mutually exclusive with Auto HDR.
+**Fix:** Write the 4 driver flags into the Base Profile via the NPI machinery (`nvidia_npi.py` / `nvidia_profile_setter.py` / `build_optimized_nip`): `0x00DD48FB=1`, `0x00432F84=2or3` (or `0x06` no-deband), `0x00980896=1`, `0x1077A11A=1`; then reboot. Reuse `_CardFixWorker`/`_apply_card_fix`. Mutual exclusivity: enabling RTX HDR must also turn Auto HDR OFF (compound fix), and vice versa. Add the `applied-pending-reboot` card state persisted in `QSettings`.
+**Research / verify before shipping (outside-voice findings):**
+  - #1 inject-vs-toggle: `build_optimized_nip` only MODIFIES setting IDs already present in the export. A box that never enabled RTX HDR has no such nodes — the write must INJECT 4 setting-nodes, unlike the existing DLSS/ReBAR toggles. `SETTING_IDS` in `nvidia_npi.py` is missing 2 of the 4 flags (`0x00980896`, `0x1077A11A`) — add them. Probe must confirm NPI imports injected (not just modified) settings.
+  - #2 compound atomic rollback: the RTX-path fix is NPI write + HKCU Auto-HDR-off write as ONE manifest entry. Define succeed-or-rollback-together semantics; if half fails you land in the exact `Auto HDR ON + RTX HDR ON` conflict the one-card design prevents.
+  - #5 reboot-flag invalidation: a revert (or the NVIDIA App disabling it) makes the flags not-live while the QSettings "awaiting reboot" flag persists → card stuck on "Restart required" forever. Revert must also clear the flag.
+  - NVIDIA App drift: re-derive RTX HDR state from a fresh `NVIDIAProfile` export every scan (never cached); the App can clobber lil_bro's flags. Cross-check repo `NPI_CustomSettingNames.xml` (2 flags) vs the wild NvTrueHDR recipe (4 flags) on real HW.
+  - Global scope: Base Profile applies RTX HDR to EVERY game (double-tonemaps HDR-native titles, ~10-15% FPS cost). Approval copy must disclose this; exclude low-end RTX (xx50/xx60) from "highest priority" or add an FPS-cost note.
+**Blocked by:** T-039 patterns (shared `_apply_card_fix` route, probe) + `probe_hdr.py` confirming the 4 flags against a known-good NVIDIA-App-enabled profile on real RTX hardware.
+**Added:** 2026-06-19 (deferred from /plan-eng-review D11 on the HDR Optimization card plan)
+
+---
+
 ### T-038 — Populate mock OutputView for a real pipeline screenshot
 **Priority:** P3
 **Effort:** M human / S-M with CC
