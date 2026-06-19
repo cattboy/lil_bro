@@ -38,7 +38,7 @@ def analyze_hags(specs: dict) -> dict:
         return {
             "check": "hags",
             "status": "SKIPPED",
-            "message": "Hardware-Accelerated GPU Scheduling is not supported on this GPU/driver.",
+            "message": "(HAGS) Hardware-Accelerated GPU Scheduling is not supported on this GPU/driver.",
             "can_auto_fix": False,
         }
 
@@ -49,7 +49,7 @@ def analyze_hags(specs: dict) -> dict:
             "status": "WARNING",
             "current": False,
             "expected": True,
-            "message": "Hardware-Accelerated GPU Scheduling is DISABLED — lil_bro can flip this on for you.",
+            "message": "(HAGS) Hardware-Accelerated GPU Scheduling is DISABLED — lil_bro can flip this on for you.",
             "can_auto_fix": True,
         }
     return {
@@ -57,7 +57,7 @@ def analyze_hags(specs: dict) -> dict:
         "status": "OK",
         "current": True,
         "expected": True,
-        "message": "Hardware-Accelerated GPU Scheduling is ENABLED.",
+        "message": "(HAGS) Hardware-Accelerated GPU Scheduling is ENABLED.",
         "can_auto_fix": False,
     }
 

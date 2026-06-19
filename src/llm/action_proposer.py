@@ -181,9 +181,9 @@ FALLBACK_PROPOSALS: dict[str, dict] = {
         "finding": "hags",
         "severity": "MEDIUM",
         "explanation": (
-            "Hardware-Accelerated GPU Scheduling lets the GPU manage its own "
+            "(HAGS) Hardware-Accelerated GPU Scheduling lets the GPU manage its own "
             "memory and scheduling, which can lower latency and offload work "
-            "from the CPU in modern games. Requires a reboot to take effect."
+            "from the CPU in modern games. Reboot is required! *SOMETIMES games run better with this off*"
         ),
         "proposed_action": "Enable Hardware-Accelerated GPU Scheduling",
         "can_auto_fix": True,
