@@ -286,6 +286,7 @@ def run(debug: bool = False) -> int:
     # Sidebar revert button navigates to the revert page (wired in _build_sidebar).
     # The in-page revert action button triggers the actual revert run.
     main._revert_view.revert_requested.connect(pipeline.start_revert)
+    main._revert_view.revert_one_requested.connect(pipeline.start_revert_one)
     main._revert_view.system_restore_requested.connect(pipeline.open_system_restore)
 
     app.aboutToQuit.connect(

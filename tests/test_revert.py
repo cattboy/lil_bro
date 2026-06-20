@@ -21,6 +21,8 @@ from src.utils.revert import (
 
     mark_restore_point_created,
 
+    remove_fix_from_manifest,
+
     revert_fix,
 
     start_session_manifest,
@@ -523,3 +525,118 @@ class TestAtomicManifestWrite:
              patch("src.utils.revert.print_warning"):
             append_fix_to_manifest({"fix": "game_mode"})
         assert not (manifest_path.with_name("session_latest.json.tmp")).exists()
+
+
+# ---------------------------------------------------------------------------
+# remove_fix_from_manifest (per-item / "one at a time" revert prune)
+# ---------------------------------------------------------------------------
+
+
+class TestRemoveFixFromManifest:
+
+    def _write(self, path, fixes):
+        path.write_text(json.dumps(
+            {"schema_version": 1, "session_id": "s", "fixes": fixes}
+        ))
+
+    def test_removes_matching_entry_keeps_file_when_others_remain(self, tmp_path):
+        manifest_path = tmp_path / "session_latest.json"
+        self._write(manifest_path, [
+            {"fix": "game_mode", "revertible": True, "applied_at": "2026-06-20T10:00:00.111"},
+            {"fix": "display", "revertible": True, "applied_at": "2026-06-20T10:00:01.222"},
+        ])
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            remove_fix_from_manifest(
+                {"fix": "game_mode", "applied_at": "2026-06-20T10:00:00.111"}
+            )
+        assert manifest_path.exists()
+        data = json.loads(manifest_path.read_text())
+        assert [f["fix"] for f in data["fixes"]] == ["display"]
+
+    def test_deletes_file_only_when_no_entries_remain(self, tmp_path):
+        manifest_path = tmp_path / "session_latest.json"
+        self._write(manifest_path, [
+            {"fix": "display", "revertible": True, "applied_at": "2026-06-20T10:00:01.222"},
+        ])
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            remove_fix_from_manifest(
+                {"fix": "display", "applied_at": "2026-06-20T10:00:01.222"}
+            )
+        assert not manifest_path.exists()
+
+    def test_keeps_file_when_non_revertible_entry_remains(self, tmp_path):
+        """Reverting the last revertible row leaves a temp_folders-only file."""
+        manifest_path = tmp_path / "session_latest.json"
+        self._write(manifest_path, [
+            {"fix": "display", "revertible": True, "applied_at": "2026-06-20T10:00:01.222"},
+            {"fix": "temp_folders", "revertible": False, "applied_at": "2026-06-20T10:00:02.333"},
+        ])
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            remove_fix_from_manifest(
+                {"fix": "display", "applied_at": "2026-06-20T10:00:01.222"}
+            )
+        assert manifest_path.exists()
+        data = json.loads(manifest_path.read_text())
+        assert [f["fix"] for f in data["fixes"]] == ["temp_folders"]
+
+    def test_noop_when_entry_not_found(self, tmp_path):
+        manifest_path = tmp_path / "session_latest.json"
+        self._write(manifest_path, [
+            {"fix": "display", "revertible": True, "applied_at": "2026-06-20T10:00:01.222"},
+        ])
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            remove_fix_from_manifest(
+                {"fix": "game_mode", "applied_at": "2026-06-20T09:00:00.000"}
+            )
+        data = json.loads(manifest_path.read_text())
+        assert [f["fix"] for f in data["fixes"]] == ["display"]
+
+    def test_duplicate_fix_keys_prunes_correct_by_applied_at(self, tmp_path):
+        """Two display devices share fix='display'; prune by matching applied_at."""
+        manifest_path = tmp_path / "session_latest.json"
+        self._write(manifest_path, [
+            {"fix": "display", "applied_at": "2026-06-20T10:00:00.111",
+             "before": {"device": "A"}},
+            {"fix": "display", "applied_at": "2026-06-20T10:00:05.555",
+             "before": {"device": "B"}},
+        ])
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            remove_fix_from_manifest(
+                {"fix": "display", "applied_at": "2026-06-20T10:00:05.555"}
+            )
+        data = json.loads(manifest_path.read_text())
+        assert [f["before"]["device"] for f in data["fixes"]] == ["A"]
+
+    def test_missing_applied_at_skips_and_warns(self, tmp_path):
+        manifest_path = tmp_path / "session_latest.json"
+        self._write(manifest_path, [
+            {"fix": "display", "applied_at": "2026-06-20T10:00:01.222"},
+        ])
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path), \
+             patch("src.utils.revert.print_warning") as mock_warn:
+            remove_fix_from_manifest({"fix": "display"})  # no applied_at
+        mock_warn.assert_called_once()
+        data = json.loads(manifest_path.read_text())
+        assert [f["fix"] for f in data["fixes"]] == ["display"]
+
+    def test_missing_manifest_is_noop(self, tmp_path):
+        manifest_path = tmp_path / "missing.json"
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            remove_fix_from_manifest(
+                {"fix": "display", "applied_at": "2026-06-20T10:00:01.222"}
+            )  # must not raise
+        assert not manifest_path.exists()
+
+    def test_write_failure_warns_no_raise(self, tmp_path):
+        manifest_path = tmp_path / "session_latest.json"
+        self._write(manifest_path, [
+            {"fix": "game_mode", "applied_at": "2026-06-20T10:00:00.111"},
+            {"fix": "display", "applied_at": "2026-06-20T10:00:01.222"},
+        ])
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path), \
+             patch("pathlib.Path.write_text", side_effect=OSError("disk full")), \
+             patch("src.utils.revert.print_warning") as mock_warn:
+            remove_fix_from_manifest(
+                {"fix": "game_mode", "applied_at": "2026-06-20T10:00:00.111"}
+            )  # must not raise
+        mock_warn.assert_called()

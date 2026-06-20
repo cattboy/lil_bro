@@ -136,3 +136,53 @@ class TestStartRevert:
         controller._runtime["revert_thread"] = MagicMock()  # a revert is running
         controller.start_revert()
         controller._main._revert_view.set_reverting.assert_not_called()
+
+
+class TestStartRevertOne:
+    """Per-item revert: guard + busy lock + the dedicated finished/failed slots."""
+
+    def test_happy_path_locks_and_sets_busy_status(self):
+        with patch("src.gui.pipeline_controller.QThread"), \
+                patch("src.gui.worker.RevertOneWorker"), \
+                patch("src.gui.startup_coordinator._sections_for_fixes", return_value=set()):
+            controller = _make_controller()
+            controller.start_revert_one({"fix": "game_mode", "applied_at": "t1"})
+            controller._main._revert_view.set_reverting.assert_called_once_with(True)
+            controller._main.status_bar_widget.set_state.assert_any_call(
+                "run", "Reverting Game Mode…"
+            )
+
+    def test_already_in_flight_does_not_lock(self):
+        controller = _make_controller()
+        controller._runtime["revert_thread"] = MagicMock()  # a revert is running
+        controller.start_revert_one({"fix": "game_mode", "applied_at": "t1"})
+        controller._main._revert_view.set_reverting.assert_not_called()
+        controller._main.status_bar_widget.set_state.assert_called_once_with(
+            "run", "Revert already in progress…"
+        )
+
+    def test_failed_slot_surfaces_real_error_message(self):
+        """Decision 1A: the failed slot shows the real revert_fix error, not a
+        placeholder type."""
+        controller = _make_controller()
+        msg = "display revert validation failed (CDS_TEST returned -2)"
+        controller._on_revert_one_failed(msg)
+        controller._main.status_bar_widget.set_state.assert_called_once_with(
+            "ok", f"Couldn't revert — {msg}"
+        )
+
+    def test_finished_slot_surfaces_warning(self):
+        controller = _make_controller()
+        controller._runtime["_startup_coordinator"] = MagicMock()
+        controller._on_revert_one_finished("display", "reboot required to apply display change")
+        controller._main.status_bar_widget.set_state.assert_called_once_with(
+            "ok", "Reverted Display — reboot required to apply display change"
+        )
+        controller._runtime["_startup_coordinator"].refresh_fix_cards_after_revert.assert_called_once()
+
+    def test_finished_slot_clean_no_warning(self):
+        controller = _make_controller()
+        controller._on_revert_one_finished("game_mode", "")
+        controller._main.status_bar_widget.set_state.assert_called_once_with(
+            "ok", "Revert complete"
+        )

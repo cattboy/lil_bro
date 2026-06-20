@@ -38,9 +38,16 @@ class RevertView(QWidget):
     revert_requested = Signal()
     system_restore_requested = Signal()
 
+    revert_one_requested = Signal(dict)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setAccessibleName("Revert view")
+
+        # Tracks an in-flight revert so set_last_run can re-apply the row-button
+        # disable after a QFileSystemWatcher rebuild (which would otherwise hand
+        # back fresh, ENABLED buttons mid-revert).
+        self._reverting = False
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(20, 16, 20, 20)
@@ -83,6 +90,10 @@ class RevertView(QWidget):
         self._last_run_card = LastRunCard(parent=self)
         self._last_run_card.hide()
         outer.addWidget(self._last_run_card)
+
+        # Re-emit the card's per-row revert request as the page's own signal
+        # (mirrors revert_requested) -- app.py wires it to start_revert_one.
+        self._last_run_card.revert_one_requested.connect(self.revert_one_requested)
 
         # ── No-fixes placeholder ─────────────────────────────────────────
         self._no_fixes_lbl = QLabel("No applied fixes found for this session.")
@@ -163,13 +174,17 @@ class RevertView(QWidget):
     def set_last_run(self, manifest: object) -> None:
         """Feed the session manifest into the Applied Fixes card.
 
-        Shows the card when the manifest has applied fixes to display, hides
-        it otherwise. Toggles the no-fixes placeholder accordingly. Runs on
-        the GUI thread, so direct mutation is safe.
+        Shows the card when the manifest has applied fixes to display, hides it
+        otherwise. Toggles the no-fixes placeholder accordingly. Renders the card
+        in interactive mode (per-row Revert buttons), then re-applies the in-flight
+        disable so a refresh that lands DURING a revert (e.g. the QFileSystemWatcher
+        firing on the manifest write/delete) hands back DISABLED buttons, not fresh
+        enabled ones. Runs on the GUI thread, so direct mutation is safe.
         """
-        visible = self._last_run_card.set_manifest(manifest)
+        visible = self._last_run_card.set_manifest(manifest, interactive=True)
         self._last_run_card.setVisible(visible)
         self._no_fixes_lbl.setVisible(not visible)
+        self._last_run_card.set_revert_buttons_enabled(not self._reverting)
         self._log.debug("RevertView.set_last_run: card visible=%s", visible)
 
     def set_revert_enabled(self, enabled: bool) -> None:
@@ -181,8 +196,12 @@ class RevertView(QWidget):
 
         Mirrors each dashboard fix card's ``set_applying``: reuses the shared
         ``set_apply_busy`` helper so the button disables and reads "Reverting…"
-        while ``PipelineController.start_revert``'s worker runs, then round-trips
-        back to "↩  Revert All Changes (R)" on completion. Button-only — the
-        status bar carries the textual progress, exactly like the cards.
+        while ``PipelineController``'s worker runs, then round-trips back to
+        "↩  Revert All Changes (R)" on completion. Also disables every per-row
+        Revert button on the card, and records ``_reverting`` so ``set_last_run``
+        keeps them disabled across a mid-revert rebuild. Button-only — the status
+        bar carries the textual progress, exactly like the cards.
         """
+        self._reverting = reverting
         set_apply_busy(self._revert_btn, reverting, busy_label="Reverting…")
+        self._last_run_card.set_revert_buttons_enabled(not reverting)

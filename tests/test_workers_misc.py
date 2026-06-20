@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from src.gui.worker import RevertWorker, _MonitorRefreshWorker, _MousePollWorker
+from src.gui.worker import RevertOneWorker, RevertWorker, _MonitorRefreshWorker, _MousePollWorker
 
 
 class TestRevertWorker:
@@ -44,6 +44,61 @@ class TestRevertWorker:
         exc_type, message, _tb = failed_args[0]
         assert exc_type == "RuntimeError"
         assert "revert boom" in message
+
+
+class TestRevertOneWorker:
+    """Single-entry revert worker (GUI per-item revert)."""
+
+    def test_success_clean_prunes_and_finishes(self):
+        worker = RevertOneWorker({"fix": "display", "applied_at": "t1"})
+        finished: list[tuple] = []
+        failed: list[str] = []
+        worker.revert_finished.connect(lambda f, w: finished.append((f, w)))
+        worker.revert_failed.connect(lambda m: failed.append(m))
+        with patch("src.utils.revert.revert_fix", return_value=(True, "")) as rf, \
+             patch("src.utils.revert.remove_fix_from_manifest") as rm:
+            worker.run()
+        rf.assert_called_once()
+        rm.assert_called_once()
+        assert finished == [("display", "")]
+        assert failed == []
+
+    def test_success_warning_passed_through(self):
+        """A display revert returns (True, '<reboot warning>'); carry it through."""
+        worker = RevertOneWorker({"fix": "display", "applied_at": "t1"})
+        finished: list[tuple] = []
+        warn = "reboot required to apply display change"
+        worker.revert_finished.connect(lambda f, w: finished.append((f, w)))
+        with patch("src.utils.revert.revert_fix", return_value=(True, warn)), \
+             patch("src.utils.revert.remove_fix_from_manifest"):
+            worker.run()
+        assert finished == [("display", warn)]
+
+    def test_failure_does_not_prune_and_emits_failed(self):
+        worker = RevertOneWorker({"fix": "power_plan", "applied_at": "t1"})
+        finished: list = []
+        failed: list[str] = []
+        worker.revert_finished.connect(lambda f, w: finished.append((f, w)))
+        worker.revert_failed.connect(lambda m: failed.append(m))
+        with patch("src.utils.revert.revert_fix",
+                   return_value=(False, "power_plan revert: missing before.guid")), \
+             patch("src.utils.revert.remove_fix_from_manifest") as rm:
+            worker.run()
+        rm.assert_not_called()
+        assert not finished
+        assert failed == ["power_plan revert: missing before.guid"]
+
+    def test_exception_emits_failed_with_type(self):
+        worker = RevertOneWorker({"fix": "display", "applied_at": "t1"})
+        finished: list = []
+        failed: list[str] = []
+        worker.revert_finished.connect(lambda f, w: finished.append((f, w)))
+        worker.revert_failed.connect(lambda m: failed.append(m))
+        with patch("src.utils.revert.revert_fix", side_effect=RuntimeError("boom")):
+            worker.run()
+        assert not finished
+        assert len(failed) == 1
+        assert "RuntimeError" in failed[0] and "boom" in failed[0]
 
 
 class TestMonitorRefreshWorker:

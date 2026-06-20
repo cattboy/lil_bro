@@ -7,6 +7,26 @@ Format: Priority | Effort (human / CC) | Context
 
 ## Open
 
+### T-042 — NVIDIA granular (per-item) revert via single-source-of-truth .nip
+**Priority:** P2
+**Effort:** M human / M with CC
+**Why:** The per-item revert page (v1) withholds per-row "Revert" buttons from the two NVIDIA rows (`nvidia_profile`, `nvidia_dlss_preset`) because their reverts are unsafe out of order. Each calls `backup_nvidia_profile()` independently, which writes a fresh timestamped `.nip` right before its own change — so the second NVIDIA fix's backup is a MID-state that already contains the first fix's changes. Reverting them one-by-one with whole-profile re-imports lets a later revert resurrect an earlier reverted change. "Revert All" is safe (reverse-applied order); per-item is not. This TODO makes NVIDIA per-item revert safe so those rows can get buttons too.
+**Fix:** Treat the NVIDIA pair as a unit. Identify the earliest pre-NVIDIA-change `.nip` of the session (oldest `before_backup` by `applied_at` among NVIDIA entries) as the single canonical restore point; reverting either NVIDIA item restores that one pristine snapshot and clears BOTH NVIDIA rows from the manifest. Define the boundary for the dashboard case (the `nvidia_profile_card` / `nvidia_dlss_card` can be triggered minutes apart, each making its own backup) and for fixes spanning multiple pipeline runs in one app session. Then enable the per-row button for NVIDIA rows in `last_run_card._build_row`.
+**Blocked by:** v1 per-item revert (this PR) landing first. Reference: `src/agent_tools/nvidia_profile_setter.py:34` (backup), `src/utils/revert.py:165` (`_revert_nvidia_profile`).
+**Added:** 2026-06-20 (deferred from /plan-eng-review on the per-item revert plan)
+
+---
+
+### T-041 — Consolidate duplicated fix-label maps
+**Priority:** P3
+**Effort:** S human / S with CC
+**Why:** Two separate maps translate internal fix keys → human labels and already disagree: `_FIX_LABELS` in `src/gui/widgets/last_run_card.py:32` ("Temp Folders") vs the `names` dict in `phase_revert._display_name` `src/pipeline/phase_revert.py:162` ("Temp cleanup") for the same `temp_folders` key. Cosmetic today, but they drift independently as fixes are added.
+**Fix:** Consolidate into one shared fix-label map (e.g. a small constant in `src/utils/revert.py` or a tiny constants module) consumed by both the card and the terminal display. Keep the unknown-key title-case fallback.
+**Blocked by:** Nothing. Low priority, do opportunistically.
+**Added:** 2026-06-20 (deferred from /plan-eng-review on the per-item revert plan)
+
+---
+
 ### T-039 — HDR auto-fix: Auto HDR one-click write (Windows registry)
 **Priority:** P2
 **Effort:** M human / M with CC

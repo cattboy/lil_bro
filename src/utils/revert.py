@@ -141,6 +141,66 @@ def load_manifest() -> dict | None:
     return data
 
 
+def remove_fix_from_manifest(entry: dict) -> None:
+    """Remove a single reverted fix entry from the session manifest.
+
+    Used by the GUI per-item revert path after ``revert_fix`` succeeds for one
+    entry. Matches on the ``(fix, applied_at)`` composite key -- ``applied_at`` is
+    written with microsecond precision by ``_record_revertible`` /
+    ``_record_non_revertible``, so it is effectively unique even when the same
+    ``fix`` appears more than once (e.g. two ``display`` devices).
+
+    Delete policy: the manifest *file* is deleted only when no entries of any kind
+    remain. This deliberately differs from the full-revert path
+    (``run_revert_phase``), which unlinks unconditionally -- per-item revert keeps
+    the file alive so non-revertible rows (e.g. ``temp_folders``) and the
+    restore-point line stay visible until every entry is gone.
+
+    Operates on the on-disk manifest only (``_read_raw_manifest``); never the
+    in-memory ``_pending_manifest`` staging copy (which is ``None`` by revert
+    time). Best-effort: logs a warning on failure and never raises, so a prune
+    failure cannot crash the revert worker (matches ``append_fix_to_manifest``).
+    """
+    target_fix = entry.get("fix")
+    target_applied = entry.get("applied_at")
+    if target_applied is None:
+        # applied_at is always written; a missing one is anomalous. Skip rather
+        # than guess via full-dict equality (collision hazard across re-runs).
+        print_warning(
+            f"Revert log prune skipped: entry for '{target_fix}' has no applied_at."
+        )
+        return
+    with _manifest_lock:
+        try:
+            manifest = _read_raw_manifest()
+            if manifest is None:
+                return
+            fixes = manifest.get("fixes")
+            if not isinstance(fixes, list):
+                return
+            removed = False
+            kept: list = []
+            for e in fixes:
+                if (
+                    not removed
+                    and isinstance(e, dict)
+                    and e.get("fix") == target_fix
+                    and e.get("applied_at") == target_applied
+                ):
+                    removed = True
+                    continue
+                kept.append(e)
+            if not removed:
+                return  # nothing matched; leave the manifest untouched
+            if not kept:
+                get_session_backup_path().unlink(missing_ok=True)
+                return
+            manifest["fixes"] = kept
+            _write_manifest(manifest)
+        except Exception as exc:  # noqa: BLE001
+            print_warning(f"Revert log prune failed: {exc}")
+
+
 # ---------------------------------------------------------------------------
 # Revert execution
 # ---------------------------------------------------------------------------

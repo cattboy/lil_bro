@@ -342,6 +342,43 @@ class RevertWorker(QObject):
         self.revert_finished.emit()
 
 
+class RevertOneWorker(QObject):
+    """Reverts a single manifest entry on its own QThread.
+
+    Mirrors ``RevertWorker`` (revert-all) but operates on one fix: ``revert_fix``
+    performs the system change off the GUI thread, then -- only on success --
+    ``remove_fix_from_manifest`` prunes that entry. ``revert_fix`` returns
+    ``(True, "<warning>")`` for some fixes (e.g. a display revert needs a reboot);
+    that warning string is carried through ``revert_finished`` so the controller
+    can surface it. A ``(False, err)`` result prunes nothing and emits
+    ``revert_failed`` with the real error string (not a placeholder type).
+    """
+
+    revert_started = Signal()
+    revert_finished = Signal(str, str)  # (fix key, warning) -- warning="" when clean
+    revert_failed = Signal(str)  # user-facing error message
+
+    def __init__(self, entry: dict) -> None:
+        super().__init__()
+        self._entry = entry
+
+    def run(self) -> None:
+        try:
+            self.revert_started.emit()
+            from src.utils.revert import remove_fix_from_manifest, revert_fix
+            ok, err = revert_fix(self._entry)
+            if not ok:
+                self.revert_failed.emit(err or "revert failed")
+                return
+            remove_fix_from_manifest(self._entry)
+        except Exception as exc:
+            get_debug_logger().error("RevertOneWorker uncaught exception", exc_info=True)
+            self.revert_failed.emit(f"{type(exc).__name__}: {exc}")
+            return
+        # err is a SUCCESS-with-warning string for some fixes (e.g. display reboot).
+        self.revert_finished.emit(self._entry.get("fix", ""), err)
+
+
 class SystemStatsWorker(QObject):
     """Polls system stats at 5-sec cadence on its own QThread.
 
