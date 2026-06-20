@@ -97,24 +97,35 @@ class PipelineWorker(QObject):
 def _apply_card_fix(check_name: str, specs: dict, create_rp: bool) -> bool:
     """Shared apply-path for dashboard card fixes (runs on a worker thread).
 
-    Stages the session manifest, optionally creates a System Restore Point
+    Stages the session manifest, opens an action-log session (so the run gets
+    the same version banner + SESSION START/END boundaries as a full pipeline
+    run -- see PipelineWorker.run), optionally creates a System Restore Point
     (approval already obtained on the GUI thread; ``assume_approved=True`` avoids
     the ``prompt_approval`` deadlock in this event-loop-less worker), then runs
     the fix via ``execute_fix``. Returns the fix result bool.
     """
     from src.pipeline.fix_dispatch import execute_fix
+    from src.utils.action_logger import action_logger
     from src.utils.revert import mark_restore_point_created, start_session_manifest
 
     start_session_manifest(restore_point_created=False)
-    if create_rp:
-        try:
-            from src.bootstrapper import create_restore_point
-            if create_restore_point(assume_approved=True):
-                mark_restore_point_created()
-        except Exception:
-            from src.utils.debug_logger import get_debug_logger
-            get_debug_logger().error("Card-fix restore point creation failed", exc_info=True)
-    return execute_fix(check_name, specs)
+    # Action-log session boundary. Without this, a dashboard card fix wrote
+    # execute_fix's action entries with no SESSION banner (only the pipeline and
+    # terminal paths opened a session). try/finally guarantees END pairs with
+    # START even if the restore point or the fix raises.
+    action_logger.log_session_start()
+    try:
+        if create_rp:
+            try:
+                from src.bootstrapper import create_restore_point
+                if create_restore_point(assume_approved=True):
+                    mark_restore_point_created()
+            except Exception:
+                from src.utils.debug_logger import get_debug_logger
+                get_debug_logger().error("Card-fix restore point creation failed", exc_info=True)
+        return execute_fix(check_name, specs)
+    finally:
+        action_logger.log_session_end()
 
 
 class _MonitorFixWorker(QObject):

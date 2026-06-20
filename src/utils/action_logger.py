@@ -56,11 +56,17 @@ class ActionLogger:
             pass
 
     def log_session_start(self):
-        """Write a === separator block to mark the beginning of a new run."""
+        """Write a separator block marking a new run.
+
+        The top line is a version banner (``==== lil_bro vX.Y.Z.W ====``) so the
+        build is the first thing visible for the session; a timestamped
+        SESSION START line and a plain separator follow.
+        """
         from src._version import __version__
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         separator = "=" * 80
+        banner = f" lil_bro v{__version__} ".center(80, "=")
         header = f"[{timestamp}] SESSION START  |  lil_bro v{__version__}"
 
         try:
@@ -69,7 +75,7 @@ class ActionLogger:
                 if not self._cap_reached:
                     existing = os.path.isfile(self.log_path) and os.path.getsize(self.log_path) > 0
                     leading_newline = "\n" if existing else ""
-                    block = f"{leading_newline}{separator}\n{header}\n{separator}\n"
+                    block = f"{leading_newline}{banner}\n{header}\n{separator}\n"
                     with open(self.log_path, "a", encoding="utf-8") as f:
                         f.write(block)
         except Exception as e:

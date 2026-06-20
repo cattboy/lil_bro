@@ -169,3 +169,50 @@ class TestMousePollWorker:
         assert results[0]["status"] == "ERROR"
         assert results[0]["current_hz"] == 0
         assert "mouse gone" in results[0]["message"]
+
+
+class TestApplyCardFix:
+    """Dashboard card fixes must open an action-log session.
+
+    Regression: a power-plan card fix wrote execute_fix's action entries with no
+    SESSION START banner because _apply_card_fix never called log_session_start.
+    """
+
+    def test_opens_action_log_session_around_fix(self):
+        from unittest.mock import MagicMock, patch
+        from src.gui.worker import _apply_card_fix
+
+        order: list[str] = []
+        fake_logger = MagicMock()
+        fake_logger.log_session_start.side_effect = lambda: order.append("start")
+        fake_logger.log_session_end.side_effect = lambda: order.append("end")
+
+        def _fix(*_a, **_k):
+            order.append("fix")
+            return True
+
+        with patch("src.utils.action_logger.action_logger", fake_logger), \
+             patch("src.utils.revert.start_session_manifest"), \
+             patch("src.pipeline.fix_dispatch.execute_fix", side_effect=_fix):
+            result = _apply_card_fix("power_plan", {"PowerPlan": {}}, create_rp=False)
+
+        assert result is True
+        # SESSION START is written before the fix runs, END after it.
+        assert order == ["start", "fix", "end"]
+
+    def test_closes_session_even_when_fix_raises(self):
+        import pytest
+        from unittest.mock import MagicMock, patch
+        from src.gui.worker import _apply_card_fix
+
+        fake_logger = MagicMock()
+        with patch("src.utils.action_logger.action_logger", fake_logger), \
+             patch("src.utils.revert.start_session_manifest"), \
+             patch("src.pipeline.fix_dispatch.execute_fix",
+                   side_effect=RuntimeError("boom")):
+            with pytest.raises(RuntimeError):
+                _apply_card_fix("power_plan", {}, create_rp=False)
+
+        # finally guarantees the session is closed even on failure.
+        fake_logger.log_session_start.assert_called_once()
+        fake_logger.log_session_end.assert_called_once()

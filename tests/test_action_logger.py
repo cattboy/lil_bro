@@ -19,7 +19,12 @@ def test_session_start_new_file_writes_separator(tmp_path):
         logger.log_session_start()
 
     content = (tmp_path / "lil_bro_actions.log").read_text(encoding="utf-8")
-    assert content.startswith("=" * 80)
+    from src._version import __version__
+    first_line = content.splitlines()[0]
+    # Top line is a version banner: == padding around " lil_bro vX.Y.Z.W ".
+    assert first_line.startswith("=") and first_line.endswith("=")
+    assert len(first_line) == 80
+    assert f"lil_bro v{__version__}" in first_line
     assert "SESSION START" in content
 
 
@@ -61,8 +66,12 @@ def test_session_start_separator_width(tmp_path):
     with patch("src.utils.formatting.print_dim"):
         logger.log_session_start()
 
+    from src._version import __version__
     lines = (tmp_path / "lil_bro_actions.log").read_text(encoding="utf-8").splitlines()
-    assert lines[0] == "=" * 80
+    # Line 0 is the version banner (80 wide, version embedded); line 2 is plain.
+    assert len(lines[0]) == 80
+    assert lines[0].startswith("=") and lines[0].endswith("=")
+    assert f"lil_bro v{__version__}" in lines[0]
     assert lines[2] == "=" * 80
 
 
@@ -101,8 +110,9 @@ def test_full_session_structure(tmp_path):
         logger.log_session_end()
 
     content = (tmp_path / "lil_bro_actions.log").read_text(encoding="utf-8")
+    from src._version import __version__
     lines = content.splitlines()
-    assert lines[0] == "=" * 80
+    assert len(lines[0]) == 80 and f"lil_bro v{__version__}" in lines[0]  # version banner
     assert "SESSION START" in lines[1]
     assert lines[2] == "=" * 80
     assert "PowerCfg" in lines[3]
