@@ -81,14 +81,11 @@ class TestFixTempFolders:
 
     @patch("src.utils.revert.append_fix_to_manifest")
     @patch("src.agent_tools.temp_audit.clean_temp_folders")
-    def test_temp_folders_fix_manifest_entry_captured(self, mock_clean, mock_append):
-        """Manifest entry written with revertible=False for temp_folders fix."""
+    def test_temp_folders_fix_not_recorded_in_manifest(self, mock_clean, mock_append):
+        """Temp cleanup is irreversible -> no manifest entry; only the action log records it."""
         specs = {"TempFolders": {"details": {"/tmp": 1000}}}
         assert execute_fix("temp_folders", specs) is True
-        mock_append.assert_called_once()
-        entry = mock_append.call_args[0][0]
-        assert entry["fix"] == "temp_folders"
-        assert entry["revertible"] is False
+        mock_append.assert_not_called()
 
 
 class TestFixDisplay:
