@@ -70,7 +70,7 @@ lil_bro.exe --terminal
 
 ## Debugging
 
-**GUI mode** always writes `lil_bro_debug.log` (INFO level) to the working directory. Use **Help → Open Debug Log** in the menu bar to open it directly.
+**GUI mode** writes `lil_bro_debug.log` only when something goes wrong: a clean run leaves no file, but an uncaught exception is logged (stamped with the app version) to the working directory. Pass `--debug` for the full verbose log from startup. Open either log from the sidebar — **View Log** (the action audit log) is always shown; **View Debug Log** appears under `--debug`.
 
 **Terminal mode** with `--debug` activates full DEBUG-level logging:
 ```

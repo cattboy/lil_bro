@@ -59,6 +59,61 @@ def test_main_window_actions_wired(qtbot):
             f"missing sidebar button: {attr}"
 
 
+def test_view_log_button_present_debug_button_hidden_by_default(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    # "View Log" (action log) is always present.
+    assert isinstance(window._nav_action_log, QPushButton)
+    assert "View Log" in window._nav_action_log.text()
+    # "View Debug Log" is built + wired but hidden unless --debug. Use
+    # isHidden() (explicit show/hide state) — isVisible() is False offscreen
+    # even when shown (qt-isvisible-offscreen-false).
+    assert window._nav_debug_log.isHidden()
+    assert hasattr(window, "_open_action_log")
+    assert hasattr(window, "_open_log")
+
+
+def test_view_debug_log_button_shown_with_debug_flag(qtbot):
+    window = MainWindow(debug=True)
+    qtbot.addWidget(window)
+    assert not window._nav_debug_log.isHidden()
+
+
+def test_open_action_log_missing_shows_card(qtbot, tmp_path, monkeypatch):
+    """Clicking View Log with no action log shows the info card, not openUrl."""
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    missing = tmp_path / "nope_actions.log"
+    monkeypatch.setattr("src.utils.paths.get_action_log_path", lambda: missing)
+
+    seen = {}
+
+    class _SpyCard:
+        def __init__(self, title, msg, **kwargs):
+            seen["title"] = title
+
+        def exec(self):
+            seen["exec"] = True
+
+    monkeypatch.setattr("src.gui.widgets.dialogs.CardDialog", _SpyCard)
+
+    opened = []
+
+    class _SpyQDS:
+        @staticmethod
+        def openUrl(url):
+            opened.append(url)
+
+    monkeypatch.setattr("src.gui.windows.main_window.QDesktopServices", _SpyQDS)
+
+    window._open_action_log()
+
+    assert seen.get("title") == "No action log found"
+    assert seen.get("exec") is True
+    assert opened == []  # openUrl NOT called on the missing branch
+
+
 def test_main_window_view_toggle(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)

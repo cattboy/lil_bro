@@ -490,6 +490,8 @@ def _smoke_report(driver: MockDriver, name: str) -> None:
         f"chart_offline={d.thermal_chart._offline} "
         f"mouse={d._mouse_poll_card._poll_status.text()!r} "
         f"scroll_overflow={vbar.maximum() > 0} "
+        f"viewlog={'View Log' in driver.main._nav_action_log.text()}/"
+        f"dbg_hidden={driver.main._nav_debug_log.isHidden()} "
         f"hint={d._scroll_hint.isVisibleTo(d._scroll)}"
     )
 

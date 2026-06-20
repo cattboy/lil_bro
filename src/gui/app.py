@@ -36,16 +36,20 @@ from src.utils.action_logger import action_logger
 
 
 def _install_exception_hooks(log) -> None:
-    """Route uncaught main-thread and worker-thread exceptions to the debug log."""
+    """Route uncaught main-thread and worker-thread exceptions to the debug log.
+
+    Records go through log_crash so each carries the app version — in error-only
+    mode the SESSION banner is filtered, so this is the only build identifier on
+    a normal-mode crash log.
+    """
+    from src.utils.debug_logger import log_crash
+
     def _main_excepthook(exc_type, exc_value, exc_tb):
-        log.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_tb))
+        log_crash(log, "uncaught exception", (exc_type, exc_value, exc_tb))
 
     def _thread_excepthook(args):
-        log.error(
-            "Uncaught exception in thread %s",
-            args.thread.name if args.thread else "unknown",
-            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
-        )
+        where = f"uncaught exception in thread {args.thread.name if args.thread else 'unknown'}"
+        log_crash(log, where, (args.exc_type, args.exc_value, args.exc_traceback))
 
     sys.excepthook = _main_excepthook
     threading.excepthook = _thread_excepthook
@@ -160,8 +164,9 @@ def run(debug: bool = False) -> int:
     import secrets
     from src.utils.debug_logger import enable_debug_logging, get_debug_logger
 
-    level = logging.DEBUG if debug else logging.INFO
-    enable_debug_logging(level=level)
+    # Error-only fallback: no file on a clean run; a crash still writes the
+    # traceback to lil_bro_debug.log. --debug gives the full verbose DEBUG log.
+    enable_debug_logging(level=logging.DEBUG if debug else logging.ERROR)
     log = get_debug_logger()
     _install_exception_hooks(log)
 
@@ -211,7 +216,7 @@ def run(debug: bool = False) -> int:
 
     from src.gui.settings import Settings
     settings = Settings()
-    main = MainWindow(settings=settings)
+    main = MainWindow(settings=settings, debug=debug)
 
     # ── Session identity ───────────────────────────────────────────────
     session_id = secrets.token_hex(4)

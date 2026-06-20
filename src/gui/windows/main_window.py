@@ -47,7 +47,8 @@ class MainWindow(QMainWindow):
     stop_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None,
-                 settings: Settings | None = None) -> None:
+                 settings: Settings | None = None,
+                 debug: bool = False) -> None:
         super().__init__(parent)
         self.setWindowTitle("lil_bro")
         self.setMinimumSize(1280, 800)
@@ -55,6 +56,9 @@ class MainWindow(QMainWindow):
         self.setAccessibleDescription("Local AI gaming PC optimizer")
 
         self._settings = settings
+        # Gates the "View Debug Log" sidebar button (visible only under --debug).
+        # Set before _build_sidebar() so it can read self._debug.
+        self._debug = debug
         if self._settings is not None:
             self._settings.restore_geometry(self)
 
@@ -202,14 +206,19 @@ class MainWindow(QMainWindow):
         col.addWidget(divider)
         col.addSpacing(4)
 
-        # Utility nav
-        self._nav_log = self._nav_btn("📄  View Debug Log", state="muted")
+        # Utility nav. "View Log" (the action audit log) is always shown; the
+        # verbose "View Debug Log" is only useful under --debug, so it is added
+        # to the layout but hidden unless self._debug (setVisible, not
+        # conditional layout membership, so the widget never orphans).
+        self._nav_action_log = self._nav_btn("📄  View Log", state="muted")
+        self._nav_debug_log = self._nav_btn("📄  View Debug Log", state="muted")
         self._revert_button = self._nav_btn("↩  Revert Changes (R)", state="warning")
         self._ai_setup_button = self._nav_btn("⚙  AI Setup (A)", state="muted")
         self._help_button = self._nav_btn("❔  Help / FAQ (H)", state="muted")
         self._nav_exit = self._nav_btn("✕  Exit (E)", state="danger")
 
-        col.addWidget(self._nav_log)
+        col.addWidget(self._nav_action_log)
+        col.addWidget(self._nav_debug_log)
         col.addWidget(self._revert_button)
         col.addWidget(self._ai_setup_button)
         col.addWidget(self._help_button)
@@ -219,7 +228,9 @@ class MainWindow(QMainWindow):
         self._nav_dashboard.clicked.connect(self.show_dashboard)
         self._run_button.clicked.connect(self.show_output)
         self._stop_button.clicked.connect(self._on_stop_clicked)
-        self._nav_log.clicked.connect(self._open_debug_log)
+        self._nav_action_log.clicked.connect(self._open_action_log)
+        self._nav_debug_log.clicked.connect(self._open_debug_log)
+        self._nav_debug_log.setVisible(self._debug)
         self._revert_button.clicked.connect(self.show_revert)
         # Help / FAQ replays the first-run coachmark tour on demand.
         self._help_button.clicked.connect(self._on_help_requested)
@@ -385,17 +396,31 @@ class MainWindow(QMainWindow):
 
     def _open_debug_log(self) -> None:
         from src.utils.paths import get_debug_log_path
+        self._open_log(
+            get_debug_log_path(),
+            "No debug log found",
+            "Run lil_bro at least once to generate a log.",
+        )
+
+    def _open_action_log(self) -> None:
+        from src.utils.paths import get_action_log_path
+        self._open_log(
+            get_action_log_path(),
+            "No action log found",
+            "Run an optimization at least once to generate a log.",
+        )
+
+    def _open_log(self, path, missing_title: str, missing_msg: str) -> None:
+        """Open a log file in the default viewer, or show an info card if absent.
+
+        Shared by _open_debug_log (lil_bro_debug.log) and _open_action_log
+        (lil_bro_actions.log) — only the path and the missing-file copy differ.
+        """
         from src.gui.widgets.dialogs import CardDialog
-        path = get_debug_log_path()
         if path.exists():
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
         else:
-            CardDialog(
-                "No debug log found",
-                "Run lil_bro at least once to generate a log.",
-                tone="info",
-                parent=self,
-            ).exec()
+            CardDialog(missing_title, missing_msg, tone="info", parent=self).exec()
 
     # ── Lifecycle ──────────────────────────────────────────────────────
 

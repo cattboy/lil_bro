@@ -82,8 +82,8 @@ class PipelineWorker(QObject):
             from src.pipeline.phases import run_optimization_pipeline
             run_optimization_pipeline(self._lhm, self._llm, preloaded_specs=self._preloaded_specs)
         except Exception as exc:  # pragma: no cover - dispatched to GUI
-            from src.utils.debug_logger import get_debug_logger
-            get_debug_logger().error("PipelineWorker uncaught exception", exc_info=True)
+            from src.utils.debug_logger import get_debug_logger, log_crash
+            log_crash(get_debug_logger(), "PipelineWorker uncaught exception", True)
             self.pipeline_failed.emit(type(exc).__name__, str(exc), traceback.format_exc())
             return
         finally:

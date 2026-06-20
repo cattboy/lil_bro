@@ -138,3 +138,54 @@ def test_logger_uses_rotating_file_handler(tmp_path):
     assert len(rotating) == 1
     assert rotating[0].maxBytes == 50 * 1024 * 1024
     assert rotating[0].backupCount == 1
+
+
+# --- Error-only fallback (normal GUI mode) ---
+
+def test_error_only_no_file_until_crash(tmp_path):
+    """ERROR level + delay=True: no file on a clean run, file on first error."""
+    from src.utils.debug_logger import enable_debug_logging, get_debug_logger
+    from src.utils.paths import get_debug_log_path
+
+    enable_debug_logging(level=logging.ERROR)
+    log = get_debug_logger()
+
+    # The INFO SESSION banner is filtered at ERROR level and delay=True leaves
+    # the handler unopened, so a crash-free run creates nothing.
+    assert log.level == logging.ERROR
+    assert not get_debug_log_path().exists()
+
+    log.error("boom")
+    for h in log.handlers:
+        h.flush()
+
+    log_file = get_debug_log_path()
+    assert log_file.exists()
+    content = log_file.read_text(encoding="utf-8")
+    assert "boom" in content
+    assert "SESSION START" not in content  # banner never fired at ERROR level
+
+
+def test_log_crash_stamps_version(tmp_path):
+    """log_crash writes a version-stamped record with the traceback."""
+    from src.utils.debug_logger import (
+        enable_debug_logging,
+        get_debug_logger,
+        log_crash,
+    )
+    from src.utils.paths import get_debug_log_path
+    from src._version import __version__
+
+    enable_debug_logging(level=logging.ERROR)
+    log = get_debug_logger()
+    try:
+        raise ValueError("kaboom")
+    except ValueError:
+        log_crash(log, "uncaught exception", True)
+    for h in log.handlers:
+        h.flush()
+
+    content = get_debug_log_path().read_text(encoding="utf-8")
+    assert f"lil_bro v{__version__}" in content
+    assert "uncaught exception" in content
+    assert "ValueError" in content  # traceback included via exc_info

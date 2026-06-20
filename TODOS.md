@@ -7,6 +7,16 @@ Format: Priority | Effort (human / CC) | Context
 
 ## Open
 
+### T-043 — faulthandler under --debug for native/Qt crash traces
+**Priority:** P3
+**Effort:** S human / S with CC
+**Why:** The error-only debug log + `sys.excepthook`/`threading.excepthook` only catch Python-level exceptions. A native crash (Qt/C++ access violation, e.g. the cross-test `thermal_chart.paintEvent` segfault, or a driver-layer fault) bypasses Python's hooks entirely and leaves no trace. `faulthandler.enable(file=...)` would capture the C-level traceback.
+**Fix:** In `src/gui/app.py:run()`, when `debug` is True, `faulthandler.enable(file=<open lil_bro_debug.log handle>)`. Gate strictly behind `--debug` only — faulthandler needs a session-long open file handle, so it must never run in normal mode (which must stay file-free on a clean run). Note the GUI build is `console=False` (`sys.stderr` is None), so a real file handle is required, not stderr. Low priority; capture only became relevant if a field native crash is reported.
+**Blocked by:** none. Reference: `src/utils/debug_logger.py` (error-only logging), `src/gui/app.py:_install_exception_hooks`.
+**Added:** 2026-06-20 (deferred from /plan-eng-review on the debug-log gating plan)
+
+---
+
 ### T-042 — NVIDIA granular (per-item) revert via single-source-of-truth .nip
 **Priority:** P2
 **Effort:** M human / M with CC

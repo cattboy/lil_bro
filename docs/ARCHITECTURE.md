@@ -94,7 +94,7 @@ src/
     thermal_monitor.py   — Background LHM temperature polling during benchmarks
   utils/
     action_logger.py     — System-modification audit log → ./lil_bro_actions.log (CWD root, survives cleanup). Outcome-tagged entries ([PASS]/[FAIL]/[APPROVED]/[SKIPPED]); logs system changes only.
-    debug_logger.py      — Process debug log → ./lil_bro_debug.log; always-on in GUI mode (INFO level minimum, DEBUG with --debug); sys.excepthook + threading.excepthook installed at GUI startup.
+    debug_logger.py      — Process debug log → ./lil_bro_debug.log; error-only in GUI mode (no file on a clean run; crash records are version-stamped), full DEBUG with --debug; sys.excepthook + threading.excepthook installed at GUI startup.
     dump_parser.py       — Extracts slim hardware summary from full_specs.json for LLM
     errors.py            — Typed exception hierarchy: LilBroError, AdminRequiredError, ScannerError, RestorePointError, SetterError, NvapiInitError (subclass of SetterError, signals AMD-only-system case)
     nvidia_npi.py        — Single source of truth for NVIDIA Profile Inspector helpers: SETTING_IDS, TARGET_VALUES, DLSS_LETTER_MAP, DLSS_PRESETS, find_npi_exe, calculate_fps_cap, export_current_profile

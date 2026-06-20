@@ -531,6 +531,9 @@ class MockWindow(QMainWindow):
         col.addWidget(divider)
         col.addSpacing(4)
 
+        # "View Log" (action audit log) is always shown; "View Debug Log" is
+        # --debug-only in the real sidebar (hidden by default there).
+        col.addWidget(_nav_btn("📄  View Log", state="muted"))
         col.addWidget(_nav_btn("📄  View Debug Log", state="muted"))
         self._revert_btn = _nav_btn("↩  Revert Changes (R)", state="warning")
         col.addWidget(self._revert_btn)

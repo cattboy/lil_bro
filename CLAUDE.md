@@ -68,7 +68,7 @@ When a fix can be triggered from a Dashboard card button (outside the pipeline `
 - After updating the spec, rebuild with `python -m PyInstaller lil_bro.spec --noconfirm`.
 
 ### Release Versioning
-- **`src/_version.py` (`__version__`) MUST be bumped as part of `document-release` and before any `/ship` completes.** The value is logged at every session start (`SESSION START  |  lil_bro vX.Y.Z` in `lil_bro_debug.log`), so it is the first signal of which build is actually running.
+- **`src/_version.py` (`__version__`) MUST be bumped as part of `document-release` and before any `/ship` completes.** Under `--debug` it is logged at session start (`SESSION START  |  lil_bro vX.Y.Z` in `lil_bro_debug.log`); in normal GUI mode (error-only logging) it is stamped onto each crash record and onto `lil_bro_actions.log`'s SESSION START at pipeline start. It is the first signal of which build is actually running.
 - **Rebuild `dist/lil_bro.exe` from the same source whose version is being shipped** (`python -m PyInstaller lil_bro.spec --noconfirm`) so the logged banner matches the released source.
 
 ---
