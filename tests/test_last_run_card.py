@@ -271,16 +271,20 @@ class TestInteractiveRevertButtons:
             ]))  # interactive defaults to False
         assert card._revert_buttons == []
 
-    def test_no_button_for_nvidia_rows(self, qtbot):
-        """NVIDIA reverts route through Revert All in v1 -- no per-row button."""
+    def test_nvidia_rows_get_button(self, qtbot):
+        """v2: NVIDIA rows now get per-row Revert buttons (group revert via a
+        controller confirm dialog); the card itself stays NVIDIA-agnostic."""
         card = _make_card(qtbot)
+        emitted: list[dict] = []
+        card.revert_one_requested.connect(lambda e: emitted.append(e))
         with patch("src.gui.widgets.last_run_card.repolish"):
             card.set_manifest(self._manifest([
                 {"fix": "nvidia_profile", "revertible": True, "applied_at": "2026-06-20T10:00:01"},
                 {"fix": "nvidia_dlss_preset", "revertible": True, "applied_at": "2026-06-20T10:00:02"},
             ]), interactive=True)
-        assert card._revert_buttons == []
-        assert any("Revert All" in t for t in _texts(card))  # hint shown instead
+        assert len(card._revert_buttons) == 2
+        card._revert_buttons[0].click()  # clicking a NVIDIA row emits that entry
+        assert emitted and emitted[0]["fix"] == "nvidia_profile"
 
     def test_no_button_for_non_revertible(self, qtbot):
         card = _make_card(qtbot)

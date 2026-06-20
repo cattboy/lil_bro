@@ -673,11 +673,12 @@ class TestFixDispatchNvidiaProfile:
         from src.pipeline.fix_dispatch import execute_fix
         assert execute_fix("nvidia_profile", {}) is False
 
+    @patch("src.utils.revert.get_session_nvidia_backup_path", return_value=None)
     @patch("src.utils.revert.append_fix_to_manifest")
     @patch("src.agent_tools.nvidia_profile_setter.fix_nvidia_profile", return_value=True)
     @patch("src.utils.nvidia_npi.find_npi_exe", return_value="npi.exe")
     @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="/backup.nip")
-    def test_dispatch_manifest_entry_captured(self, mock_backup, mock_find, mock_fix, mock_append):
+    def test_dispatch_manifest_entry_captured(self, mock_backup, mock_find, mock_fix, mock_append, _pin):
         """Manifest entry written with backup path after successful dispatch."""
         from src.pipeline.fix_dispatch import execute_fix
         assert execute_fix("nvidia_profile", {}) is True
@@ -686,6 +687,19 @@ class TestFixDispatchNvidiaProfile:
         assert entry["fix"] == "nvidia_profile"
         assert entry["revertible"] is True
         assert entry["before_backup"] == "/backup.nip"
+
+    @patch("src.utils.revert.get_session_nvidia_backup_path", return_value="pinned.nip")
+    @patch("src.utils.revert.append_fix_to_manifest")
+    @patch("src.agent_tools.nvidia_profile_setter.fix_nvidia_profile", return_value=True)
+    @patch("src.utils.nvidia_npi.find_npi_exe", return_value="npi.exe")
+    @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="fresh.nip")
+    def test_dispatch_reuses_pinned_nvidia_backup(self, mock_backup, mock_find, mock_fix, mock_append, _pin):
+        """v2: the profile fix reuses the pinned session backup (no fresh export)."""
+        from src.pipeline.fix_dispatch import execute_fix
+        assert execute_fix("nvidia_profile", {}) is True
+        mock_backup.assert_not_called()
+        entry = mock_append.call_args[0][0]
+        assert entry["before_backup"] == "pinned.nip"
 
 
 # ── 10. LLM fallback template ────────────────────────────────────────────────

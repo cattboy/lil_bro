@@ -29,23 +29,19 @@ from PySide6.QtWidgets import (
 
 from src.gui.theme import repolish
 
-# Human-readable titles for the 5 registered fix checks (the @register_fix keys
+# Human-readable titles for the registered fix checks (the @register_fix keys
 # in src/pipeline/fix_dispatch.py). Unknown checks fall back to a title-cased slug.
 _FIX_LABELS: dict[str, str] = {
     "game_mode": "Game Mode",
     "power_plan": "Power Plan",
     "display": "Display Refresh Rate",
     "nvidia_profile": "NVIDIA Profile",
+    "nvidia_dlss_preset": "NVIDIA DLSS Preset",
     "temp_folders": "Temp Folders",
 }
 
 # Non-revertible reasons longer than this are elided in the row (full text on hover).
 _MAX_REASON_LEN = 64
-
-# Fixes whose per-item revert is unsafe out of order (whole-profile .nip re-import,
-# stacked backups) -- they get no per-row Revert button in v1 and route through
-# "Revert All" instead. Granular NVIDIA revert is tracked in TODOS (T-042).
-_NVIDIA_FIXES = frozenset({"nvidia_profile", "nvidia_dlss_preset"})
 
 
 def _fix_label(fix: str) -> str:
@@ -238,7 +234,7 @@ class LastRunCard(QFrame):
         h.addStretch()
 
         # Right column: revert-status badge, the inline reason when non-revertible,
-        # and (interactive mode) a per-row Revert action for eligible fixes.
+        # and (interactive mode) a per-row Revert button.
         right = QVBoxLayout()
         right.setSpacing(2)
         badge = QLabel("Revertible" if revertible else "Not revertible")
@@ -256,29 +252,21 @@ class LastRunCard(QFrame):
                 reason_lbl.setToolTip(reason)
                 right.addWidget(reason_lbl, alignment=Qt.AlignmentFlag.AlignRight)
         elif interactive:
-            if fix in _NVIDIA_FIXES:
-                # NVIDIA reverts re-import a whole-profile snapshot and are unsafe
-                # to undo one-at-a-time out of order (the two cards' backups are
-                # stacked, not independent). v1 routes them through "Revert All"
-                # only; granular NVIDIA revert is tracked in TODOS (T-042).
-                hint = QLabel("Undo via Revert All")
-                hint.setObjectName("pollStatus")
-                hint.setToolTip(
-                    "NVIDIA changes are reverted together by “Revert All Changes”."
-                )
-                right.addWidget(hint, alignment=Qt.AlignmentFlag.AlignRight)
-            else:
-                btn = QPushButton("↩  Revert")
-                btn.setObjectName("rowRevertBtn")
-                btn.setProperty("navRole", "nav")
-                btn.setProperty("navState", "warning")
-                btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                # Bind the entry explicitly: a bare lambda in this loop would
-                # capture the loop variable, so every button would emit the LAST
-                # row's entry. partial freezes THIS entry.
-                btn.clicked.connect(partial(self.revert_one_requested.emit, entry))
-                self._revert_buttons.append(btn)
-                right.addWidget(btn, alignment=Qt.AlignmentFlag.AlignRight)
+            # Every revertible row gets a one-click Revert button -- NVIDIA rows
+            # included. Reverting either NVIDIA row restores the pinned pristine
+            # profile and undoes both NVIDIA fixes; the controller shows a confirm
+            # dialog for that group effect (start_revert_one), so the card stays
+            # NVIDIA-agnostic here.
+            btn = QPushButton("↩  Revert")
+            btn.setObjectName("rowRevertBtn")
+            btn.setProperty("navRole", "nav")
+            btn.setProperty("navState", "warning")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            # Bind the entry explicitly: a bare lambda in this loop would capture
+            # the loop variable, so every button would emit the LAST row's entry.
+            btn.clicked.connect(partial(self.revert_one_requested.emit, entry))
+            self._revert_buttons.append(btn)
+            right.addWidget(btn, alignment=Qt.AlignmentFlag.AlignRight)
         h.addLayout(right)
 
         self._rows_box.addWidget(row)

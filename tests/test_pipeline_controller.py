@@ -186,3 +186,30 @@ class TestStartRevertOne:
         controller._main.status_bar_widget.set_state.assert_called_once_with(
             "ok", "Revert complete"
         )
+
+    def test_nvidia_revert_confirm_accepted_launches(self):
+        """v2: an NVIDIA per-row revert confirms first, then launches on accept."""
+        with patch("src.gui.pipeline_controller.QThread"), \
+                patch("src.gui.worker.RevertOneWorker"), \
+                patch("src.gui.startup_coordinator._sections_for_fixes", return_value=set()), \
+                patch("src.gui.widgets.dialogs.CardDialog") as CardDialog:
+            CardDialog.return_value.exec.return_value = QDialog.DialogCode.Accepted
+            controller = _make_controller()
+            controller.start_revert_one({"fix": "nvidia_profile", "applied_at": "t1"})
+            assert CardDialog.call_count == 1
+            controller._main._revert_view.set_reverting.assert_called_once_with(True)
+
+    def test_nvidia_revert_confirm_rejected_does_not_launch(self):
+        with patch("src.gui.widgets.dialogs.CardDialog") as CardDialog:
+            CardDialog.return_value.exec.return_value = QDialog.DialogCode.Rejected
+            controller = _make_controller()
+            controller.start_revert_one({"fix": "nvidia_dlss_preset", "applied_at": "t1"})
+            controller._main._revert_view.set_reverting.assert_not_called()
+
+    def test_finished_slot_nvidia_status(self):
+        controller = _make_controller()
+        controller._runtime["_startup_coordinator"] = MagicMock()
+        controller._on_revert_one_finished("nvidia_profile", "")
+        controller._main.status_bar_widget.set_state.assert_called_once_with(
+            "ok", "Reverted all NVIDIA settings to original"
+        )

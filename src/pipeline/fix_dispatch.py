@@ -277,11 +277,17 @@ def _fix_nvidia_profile(specs: dict) -> bool:
     npi_exe = find_npi_exe()
     backup_path: str | None = None
     if npi_exe is not None:
-        try:
-            backup_path = backup_nvidia_profile(npi_exe)
-        except Exception as e:
-            print_warning(f"[nvidia_profile] Backup failed ({e}) — fix will not be revertible.")
-            backup_path = None
+        # Reuse the session's pinned pristine backup if an earlier NVIDIA fix
+        # already made one, so both NVIDIA fixes share ONE pre-NVIDIA snapshot
+        # (the revert source of truth). Only the first NVIDIA fix exports fresh.
+        from src.utils.revert import get_session_nvidia_backup_path
+        backup_path = get_session_nvidia_backup_path()
+        if backup_path is None:
+            try:
+                backup_path = backup_nvidia_profile(npi_exe)
+            except Exception as e:
+                print_warning(f"[nvidia_profile] Backup failed ({e}) — fix will not be revertible.")
+                backup_path = None
     else:
         print_warning("[nvidia_profile] NPI.exe not found — fix will not be revertible.")
 
@@ -321,11 +327,16 @@ def _fix_nvidia_dlss_preset(specs: dict) -> bool:
         print_error("[nvidia_dlss_preset] NPI.exe not found — cannot apply fix.")
         return False
 
-    backup_path: str | None = None
-    try:
-        backup_path = backup_nvidia_profile(npi_exe)
-    except Exception as e:
-        print_warning(f"[nvidia_dlss_preset] Backup failed ({e}) — fix will not be revertible.")
+    # Reuse the session's pinned pristine backup if an earlier NVIDIA fix already
+    # made one (both NVIDIA fixes share ONE pre-NVIDIA snapshot, so revert lands
+    # on the pre-NVIDIA profile regardless of which card applied first).
+    from src.utils.revert import get_session_nvidia_backup_path
+    backup_path: str | None = get_session_nvidia_backup_path()
+    if backup_path is None:
+        try:
+            backup_path = backup_nvidia_profile(npi_exe)
+        except Exception as e:
+            print_warning(f"[nvidia_dlss_preset] Backup failed ({e}) — fix will not be revertible.")
 
     try:
         fix_nvidia_dlss_preset(specs, pre_backup_path=backup_path)

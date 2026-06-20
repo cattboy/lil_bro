@@ -314,9 +314,30 @@ class PipelineController(QObject):
         if runtime.get("revert_thread") is not None:
             main.status_bar_widget.set_state("run", "Revert already in progress…")
             return
+        from src.utils.revert import NVIDIA_REVERT_FIXES
+        fix = entry.get("fix", "")
+        if fix in NVIDIA_REVERT_FIXES:
+            # Reverting either NVIDIA card restores the pristine pre-lil_bro profile,
+            # undoing BOTH the Profile and DLSS fixes. Confirm the group effect (this
+            # reverts more than the clicked row) before proceeding -- the project's
+            # "no silent changes" contract.
+            from PySide6.QtWidgets import QDialog
+
+            from src.gui.widgets.dialogs import CardDialog
+            confirm = CardDialog(
+                "Revert all NVIDIA settings?",
+                "This restores your NVIDIA profile to before lil_bro — undoing BOTH "
+                "the Profile and DLSS changes. Re-apply either from the dashboard if "
+                "you want it back.",
+                tone="warning",
+                primary_label="Revert NVIDIA",
+                secondary_label="Cancel",
+                parent=main,
+            )
+            if confirm.exec() != QDialog.DialogCode.Accepted:
+                return
         from src.gui.startup_coordinator import _sections_for_fixes
         from src.gui.worker import RevertOneWorker
-        fix = entry.get("fix", "")
         label = fix.replace("_", " ").title() if fix else "change"
         self._launch_revert_worker(
             RevertOneWorker(entry),
@@ -356,9 +377,13 @@ class PipelineController(QObject):
         # is the success-with-caveat string from revert_fix (e.g. a display revert
         # that needs a reboot) -- this is the per-item path's home for it (the
         # terminal path surfaces these at phase_revert.py:70-73).
-        label = fix.replace("_", " ").title() if fix else "change"
+        from src.utils.revert import NVIDIA_REVERT_FIXES
+        nvidia = fix in NVIDIA_REVERT_FIXES
+        label = "all NVIDIA settings" if nvidia else (fix.replace("_", " ").title() if fix else "change")
         if warning:
             self._main.status_bar_widget.set_state("ok", f"Reverted {label} — {warning}")
+        elif nvidia:
+            self._main.status_bar_widget.set_state("ok", "Reverted all NVIDIA settings to original")
         else:
             self._main.status_bar_widget.set_state("ok", "Revert complete")
         startup = self._runtime.get("_startup_coordinator")

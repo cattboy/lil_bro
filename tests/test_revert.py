@@ -17,6 +17,8 @@ from src.utils.revert import (
 
     append_fix_to_manifest,
 
+    get_session_nvidia_backup_path,
+
     load_manifest,
 
     mark_restore_point_created,
@@ -640,3 +642,81 @@ class TestRemoveFixFromManifest:
                 {"fix": "game_mode", "applied_at": "2026-06-20T10:00:00.111"}
             )  # must not raise
         mock_warn.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# v2: NVIDIA pinned-backup + group revert
+# ---------------------------------------------------------------------------
+
+
+class TestNvidiaGroupRevertAndBackup:
+    def _write(self, path, fixes):
+        path.write_text(json.dumps(
+            {"schema_version": 1, "session_id": "s", "fixes": fixes}
+        ))
+
+    # ── get_session_nvidia_backup_path ──────────────────────────────────
+    def test_returns_first_nvidia_before_backup(self, tmp_path):
+        manifest_path = tmp_path / "session_latest.json"
+        self._write(manifest_path, [
+            {"fix": "game_mode", "applied_at": "t0"},
+            {"fix": "nvidia_profile", "applied_at": "t1", "before_backup": "pristine.nip"},
+            {"fix": "nvidia_dlss_preset", "applied_at": "t2", "before_backup": "pristine.nip"},
+        ])
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            assert get_session_nvidia_backup_path() == "pristine.nip"
+
+    def test_returns_none_when_no_nvidia_entry(self, tmp_path):
+        manifest_path = tmp_path / "session_latest.json"
+        self._write(manifest_path, [{"fix": "game_mode", "applied_at": "t0"}])
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            assert get_session_nvidia_backup_path() is None
+
+    def test_reads_pending_manifest_when_staged(self, tmp_path):
+        revert_mod._pending_manifest = {
+            "schema_version": 1,
+            "fixes": [
+                {"fix": "nvidia_dlss_preset", "applied_at": "t1", "before_backup": "p.nip"},
+            ],
+        }
+        try:
+            missing = tmp_path / "nope.json"
+            with patch("src.utils.revert.get_session_backup_path", return_value=missing):
+                assert get_session_nvidia_backup_path() == "p.nip"
+        finally:
+            revert_mod._pending_manifest = None
+
+    # ── remove_fix_from_manifest group prune ────────────────────────────
+    def test_nvidia_revert_removes_both_nvidia_entries(self, tmp_path):
+        manifest_path = tmp_path / "session_latest.json"
+        self._write(manifest_path, [
+            {"fix": "game_mode", "applied_at": "t0"},
+            {"fix": "nvidia_profile", "applied_at": "t1", "before_backup": "p.nip"},
+            {"fix": "nvidia_dlss_preset", "applied_at": "t2", "before_backup": "p.nip"},
+        ])
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            # revert the DLSS row -> BOTH NVIDIA entries drop, game_mode stays
+            remove_fix_from_manifest({"fix": "nvidia_dlss_preset", "applied_at": "t2"})
+        data = json.loads(manifest_path.read_text())
+        assert [f["fix"] for f in data["fixes"]] == ["game_mode"]
+
+    def test_nvidia_revert_deletes_file_when_only_nvidia(self, tmp_path):
+        manifest_path = tmp_path / "session_latest.json"
+        self._write(manifest_path, [
+            {"fix": "nvidia_profile", "applied_at": "t1", "before_backup": "p.nip"},
+            {"fix": "nvidia_dlss_preset", "applied_at": "t2", "before_backup": "p.nip"},
+        ])
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            remove_fix_from_manifest({"fix": "nvidia_profile", "applied_at": "t1"})
+        assert not manifest_path.exists()
+
+    def test_nvidia_group_matches_by_fix_without_applied_at(self, tmp_path):
+        """NVIDIA prune matches by fix, so a missing applied_at still groups."""
+        manifest_path = tmp_path / "session_latest.json"
+        self._write(manifest_path, [
+            {"fix": "nvidia_profile", "applied_at": "t1", "before_backup": "p.nip"},
+            {"fix": "nvidia_dlss_preset", "applied_at": "t2", "before_backup": "p.nip"},
+        ])
+        with patch("src.utils.revert.get_session_backup_path", return_value=manifest_path):
+            remove_fix_from_manifest({"fix": "nvidia_profile"})  # no applied_at
+        assert not manifest_path.exists()

@@ -93,3 +93,22 @@ class TestRunRevertPhase:
              patch("src.pipeline.phase_revert.revert_fix", return_value=(False, "error")):
             run_revert_phase()  # must not raise
 
+    def test_nvidia_group_reverted_once(self):
+        """v2: both NVIDIA fixes share one pristine backup, so all-revert imports
+        it once -- revert_fix is called a single time for the NVIDIA pair."""
+        manifest = {
+            "session_id": "s", "session_date": "2026-04-14T12:00:00",
+            "restore_point_created": True,
+            "fixes": [
+                {"fix": "nvidia_profile", "revertible": True, "before_backup": "p.nip",
+                 "applied_at": "2026-04-14T12:01:00"},
+                {"fix": "nvidia_dlss_preset", "revertible": True, "before_backup": "p.nip",
+                 "applied_at": "2026-04-14T12:02:00"},
+            ],
+        }
+        with patch("src.pipeline.phase_revert.load_manifest", return_value=manifest), \
+             patch("src.pipeline.phase_revert.prompt_approval", return_value=True), \
+             patch("src.pipeline.phase_revert.revert_fix", return_value=(True, "")) as mock_revert:
+            run_revert_phase()
+        assert mock_revert.call_count == 1
+
