@@ -230,22 +230,27 @@ class _ThermalRetryWorker(QObject):
         self.reason: str = ""
 
     def run(self) -> None:
-        try:
-            from src.collectors.sub.lhm_sidecar import LHMSidecar
-            if self._old_lhm is not None:
-                try:
-                    self._old_lhm.stop()
-                except Exception:
-                    pass  # safe: best-effort teardown before relaunch
-            self.new_lhm = LHMSidecar()
-            self.available = self.new_lhm.start()
-            if not self.available:
-                from src.agent_tools.thermal_guidance import describe_sidecar_failure
-                self.reason = describe_sidecar_failure(self.new_lhm)
-        except Exception:
-            from src.utils.debug_logger import get_debug_logger
-            get_debug_logger().error("ThermalRetryWorker uncaught exception", exc_info=True)
-        self.finished.emit()
+        from src.utils.action_logger import action_logger
+        # Lazy action-log session: a sidecar relaunch only logs when it installs
+        # the PawnIO kernel driver, so the banner flushes only on that (rare)
+        # path -- a no-op relaunch (PawnIO already present) writes nothing.
+        with action_logger.session():
+            try:
+                from src.collectors.sub.lhm_sidecar import LHMSidecar
+                if self._old_lhm is not None:
+                    try:
+                        self._old_lhm.stop()
+                    except Exception:
+                        pass  # safe: best-effort teardown before relaunch
+                self.new_lhm = LHMSidecar()
+                self.available = self.new_lhm.start()
+                if not self.available:
+                    from src.agent_tools.thermal_guidance import describe_sidecar_failure
+                    self.reason = describe_sidecar_failure(self.new_lhm)
+            except Exception:
+                from src.utils.debug_logger import get_debug_logger
+                get_debug_logger().error("ThermalRetryWorker uncaught exception", exc_info=True)
+            self.finished.emit()
 
 
 class _MonitorRefreshWorker(QObject):
@@ -341,16 +346,22 @@ class RevertWorker(QObject):
     revert_failed = Signal(str, str, str)  # exc_type, message, traceback
 
     def run(self) -> None:
-        try:
-            self.revert_started.emit()
-            from src.pipeline.phase_revert import run_revert_phase
-            run_revert_phase()
-        except Exception as exc:
-            from src.utils.debug_logger import get_debug_logger
-            get_debug_logger().error("RevertWorker uncaught exception", exc_info=True)
-            self.revert_failed.emit(type(exc).__name__, str(exc), traceback.format_exc())
-            return
-        self.revert_finished.emit()
+        from src.utils.action_logger import action_logger
+        # Action-log session boundary (lazy): revert entries land inside a
+        # banner-stamped SESSION block, same as PipelineWorker.run / _apply_card_fix.
+        # GUI revert runs outside any session otherwise (terminal revert is covered
+        # by main()'s session). The banner flushes on the first [Revert] entry.
+        with action_logger.session():
+            try:
+                self.revert_started.emit()
+                from src.pipeline.phase_revert import run_revert_phase
+                run_revert_phase()
+            except Exception as exc:
+                from src.utils.debug_logger import get_debug_logger
+                get_debug_logger().error("RevertWorker uncaught exception", exc_info=True)
+                self.revert_failed.emit(type(exc).__name__, str(exc), traceback.format_exc())
+                return
+            self.revert_finished.emit()
 
 
 class RevertOneWorker(QObject):
@@ -374,20 +385,25 @@ class RevertOneWorker(QObject):
         self._entry = entry
 
     def run(self) -> None:
-        try:
-            self.revert_started.emit()
-            from src.utils.revert import remove_fix_from_manifest, revert_fix
-            ok, err = revert_fix(self._entry)
-            if not ok:
-                self.revert_failed.emit(err or "revert failed")
+        from src.utils.action_logger import action_logger
+        # Lazy action-log session so the per-item revert's entries are bracketed
+        # (see RevertWorker.run). revert_fix logs [Revert]/[PowerCfg]/etc.; the
+        # banner flushes on that first entry.
+        with action_logger.session():
+            try:
+                self.revert_started.emit()
+                from src.utils.revert import remove_fix_from_manifest, revert_fix
+                ok, err = revert_fix(self._entry)
+                if not ok:
+                    self.revert_failed.emit(err or "revert failed")
+                    return
+                remove_fix_from_manifest(self._entry)
+            except Exception as exc:
+                get_debug_logger().error("RevertOneWorker uncaught exception", exc_info=True)
+                self.revert_failed.emit(f"{type(exc).__name__}: {exc}")
                 return
-            remove_fix_from_manifest(self._entry)
-        except Exception as exc:
-            get_debug_logger().error("RevertOneWorker uncaught exception", exc_info=True)
-            self.revert_failed.emit(f"{type(exc).__name__}: {exc}")
-            return
-        # err is a SUCCESS-with-warning string for some fixes (e.g. display reboot).
-        self.revert_finished.emit(self._entry.get("fix", ""), err)
+            # err is a SUCCESS-with-warning string for some fixes (e.g. display reboot).
+            self.revert_finished.emit(self._entry.get("fix", ""), err)
 
 
 class SystemStatsWorker(QObject):

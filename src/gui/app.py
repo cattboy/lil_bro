@@ -145,10 +145,15 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
         pass  # safe: polling worker may already be stopped or never started
     try:
         from src.pipeline.post_run_cleanup import post_run_cleanup
-        post_run_cleanup(
-            runtime["lhm"],
-            pawnio_was_preinstalled=pawnio_was_preinstalled,
-        )
+        from src.utils.action_logger import action_logger
+        # Lazy action-log session: shutdown cleanup ([PawnIO] uninstall + temp/
+        # _MEI removal) lands inside a banner-stamped SESSION block. GUI shutdown
+        # has no app-level session like terminal main().
+        with action_logger.session():
+            post_run_cleanup(
+                runtime["lhm"],
+                pawnio_was_preinstalled=pawnio_was_preinstalled,
+            )
     except Exception:
         pass  # safe: cleanup is best-effort on quit; failures should not block shutdown
     try:
@@ -175,7 +180,11 @@ def run(debug: bool = False) -> int:
     # which is unloggable in-process). Record it now, on the next launch, then
     # delete it. No-op in dev mode (no _MEI*).
     from src.pipeline.post_run_cleanup import cleanup_orphaned_mei_at_startup
-    cleanup_orphaned_mei_at_startup()
+    from src.utils.action_logger import action_logger
+    # Lazy action-log session so a [Cleanup] of a stale _MEI* dir from a prior
+    # crash is bracketed by a banner. Usually no-op at boot -> writes nothing.
+    with action_logger.session():
+        cleanup_orphaned_mei_at_startup()
 
     log.debug("GUI Startup: app.run() entry")
 

@@ -357,6 +357,9 @@ def _revert_power_plan(entry: dict) -> tuple[bool, str]:
         return False, "power_plan revert: missing before.guid"
     try:
         set_active_plan(guid)
+        # set_active_plan logs a [PowerCfg] line; add an explicit [Revert] line too
+        # so the action log labels this as a revert, matching _revert_game_mode/_hags.
+        action_logger.log_action("Revert", f"Power plan restored to {guid}", "powercfg /setactive")
         return True, ""
     except Exception as exc:  # noqa: BLE001
         return False, str(exc)

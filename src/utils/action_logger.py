@@ -1,6 +1,7 @@
 import os
 import threading
 from collections.abc import Callable
+from contextlib import contextmanager
 from datetime import datetime
 from typing import Optional
 
@@ -15,6 +16,10 @@ class ActionLogger:
         else:
             self.log_path = str(get_action_log_path())
         self._lock = threading.Lock()
+        # Per-thread lazy-session state (session_pending / session_open) backing session().
+        # Thread-local so a lazy session armed on one worker thread can't make another
+        # thread's log_action flush a spurious SESSION banner mid-run. See session().
+        self._tls = threading.local()
         self._echo_fn = echo_fn
         self._gui_notify_fn = gui_notify_fn  # set in GUI mode; emits a Qt signal (see CapNotifier)
         self._cap_reached: bool = False
@@ -55,12 +60,12 @@ class ActionLogger:
         except OSError:
             pass
 
-    def log_session_start(self):
-        """Write a separator block marking a new run.
+    def _write_session_start_locked(self) -> str:
+        """Write the version banner + SESSION START block and return the header line.
 
-        The top line is a version banner (``==== lil_bro vX.Y.Z.W ====``) so the
-        build is the first thing visible for the session; a timestamped
-        SESSION START line and a plain separator follow.
+        Caller MUST hold ``self._lock`` and MUST have already checked
+        ``not self._cap_reached`` (this does neither). Shared by the eager
+        ``log_session_start`` and the lazy banner flush inside ``log_action``.
         """
         from src._version import __version__
 
@@ -68,20 +73,30 @@ class ActionLogger:
         separator = "=" * 80
         banner = f" lil_bro v{__version__} ".center(80, "=")
         header = f"[{timestamp}] SESSION START  |  lil_bro v{__version__}"
+        existing = os.path.isfile(self.log_path) and os.path.getsize(self.log_path) > 0
+        leading_newline = "\n" if existing else ""
+        block = f"{leading_newline}{banner}\n{header}\n{separator}\n"
+        with open(self.log_path, "a", encoding="utf-8") as f:
+            f.write(block)
+        return header
 
+    def log_session_start(self):
+        """Write a separator block marking a new run.
+
+        The top line is a version banner (``==== lil_bro vX.Y.Z.W ====``) so the
+        build is the first thing visible for the session; a timestamped
+        SESSION START line and a plain separator follow.
+        """
+        header = None
         try:
             with self._lock:
                 self._rotate_if_needed()
                 if not self._cap_reached:
-                    existing = os.path.isfile(self.log_path) and os.path.getsize(self.log_path) > 0
-                    leading_newline = "\n" if existing else ""
-                    block = f"{leading_newline}{banner}\n{header}\n{separator}\n"
-                    with open(self.log_path, "a", encoding="utf-8") as f:
-                        f.write(block)
+                    header = self._write_session_start_locked()
         except Exception as e:
             print(f"Failed to write session start to action log: {e}")
 
-        if self._echo_fn:
+        if self._echo_fn and header is not None:
             self._echo_fn(f"  {header}")
 
     def log_session_end(self):
@@ -109,6 +124,10 @@ class ActionLogger:
             [timestamp] [OUTCOME] [component] action | details
         When omitted (backward-compat):
             [timestamp] [component] action | details
+
+        If a lazy ``session()`` is armed on this thread, the SESSION banner is
+        flushed (once) immediately before the first entry, so the entry lands
+        inside a SESSION block instead of orphaned above one.
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -119,10 +138,15 @@ class ActionLogger:
         if details:
             log_entry += f" | {details}"
 
+        session_header = None
         try:
             with self._lock:
                 self._rotate_if_needed()
                 if not self._cap_reached:
+                    if getattr(self._tls, "session_pending", False):
+                        session_header = self._write_session_start_locked()
+                        self._tls.session_open = True
+                        self._tls.session_pending = False
                     with open(self.log_path, "a", encoding="utf-8") as f:
                         f.write(log_entry + "\n")
         except Exception as e:
@@ -130,6 +154,8 @@ class ActionLogger:
             print(f"Failed to write to action log: {e}")
 
         if self._echo_fn:
+            if session_header is not None:
+                self._echo_fn(f"  {session_header}")
             self._echo_fn(f"  {log_entry}")
 
     def log_fix_dispatch(self, check: str) -> None:
@@ -149,6 +175,34 @@ class ActionLogger:
             self.log_action("Approval", f"User skipped: {', '.join(skipped)}", outcome="SKIPPED")
         if not approved and not skipped:
             self.log_action("Approval", "User skipped all fixes", outcome="SKIPPED")
+
+    @contextmanager
+    def session(self):
+        """Bracket a unit of work in a SESSION block, emitted lazily.
+
+        The version banner + SESSION START is written only when the first action
+        is logged inside the block (tracked per-thread), so a no-op pass — e.g. a
+        sidecar boot that installs nothing, or a cleanup with nothing to remove —
+        writes nothing at all. SESSION END is written only if a START was emitted.
+
+        Use this (instead of the eager ``log_session_start``/``log_session_end``)
+        for GUI worker / lifecycle paths that mutate the system outside the
+        pipeline or a card fix: reverts, the thermal-sidecar relaunch, startup
+        sidecar boot, and startup/shutdown cleanup.
+        """
+        tls = self._tls
+        owns = not (getattr(tls, "session_pending", False) or getattr(tls, "session_open", False))
+        if owns:
+            tls.session_pending = True
+            tls.session_open = False
+        try:
+            yield
+        finally:
+            if owns:
+                if getattr(tls, "session_open", False):
+                    self.log_session_end()
+                tls.session_pending = False
+                tls.session_open = False
 
 
 # Global singleton instance

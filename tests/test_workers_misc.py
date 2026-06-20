@@ -216,3 +216,64 @@ class TestApplyCardFix:
         # finally guarantees the session is closed even on failure.
         fake_logger.log_session_start.assert_called_once()
         fake_logger.log_session_end.assert_called_once()
+
+
+class TestWorkerSessionBracketing:
+    """GUI revert + thermal-retry workers must bracket their action entries in a
+    lazy action-log SESSION (action_logger.session()), like _apply_card_fix.
+
+    Mirrors TestApplyCardFix but for the session() context-manager paths: the
+    session must ENTER before the system-touching work and EXIT after it.
+    """
+
+    @staticmethod
+    def _tracking_logger(order: list[str]):
+        from unittest.mock import MagicMock
+        fake_logger = MagicMock()
+        fake_logger.session.return_value.__enter__.side_effect = lambda: order.append("enter")
+        fake_logger.session.return_value.__exit__.side_effect = lambda *a: order.append("exit")
+        return fake_logger
+
+    def test_revert_all_wraps_work_in_session(self):
+        from unittest.mock import patch
+        order: list[str] = []
+        fake_logger = self._tracking_logger(order)
+
+        worker = RevertWorker()
+        with patch("src.utils.action_logger.action_logger", fake_logger), \
+             patch("src.pipeline.phase_revert.run_revert_phase",
+                   side_effect=lambda: order.append("revert")):
+            worker.run()
+
+        # run_revert_phase runs strictly between session enter and exit.
+        assert order == ["enter", "revert", "exit"]
+
+    def test_revert_one_wraps_work_in_session(self):
+        from unittest.mock import patch
+        order: list[str] = []
+        fake_logger = self._tracking_logger(order)
+
+        worker = RevertOneWorker({"fix": "display", "applied_at": "t1"})
+        with patch("src.utils.action_logger.action_logger", fake_logger), \
+             patch("src.utils.revert.revert_fix",
+                   side_effect=lambda _e: (order.append("revert"), (True, ""))[1]), \
+             patch("src.utils.revert.remove_fix_from_manifest"):
+            worker.run()
+
+        assert order == ["enter", "revert", "exit"]
+
+    def test_thermal_retry_wraps_work_in_session(self):
+        from unittest.mock import MagicMock, patch
+        from src.gui.worker import _ThermalRetryWorker
+        order: list[str] = []
+        fake_logger = self._tracking_logger(order)
+
+        fake_sidecar = MagicMock()
+        fake_sidecar.start.side_effect = lambda: (order.append("start"), True)[1]
+
+        worker = _ThermalRetryWorker(old_lhm=None)
+        with patch("src.utils.action_logger.action_logger", fake_logger), \
+             patch("src.collectors.sub.lhm_sidecar.LHMSidecar", return_value=fake_sidecar):
+            worker.run()
+
+        assert order == ["enter", "start", "exit"]

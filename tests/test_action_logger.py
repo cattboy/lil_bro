@@ -293,3 +293,131 @@ def test_cap_logs_to_debug_logger(tmp_path):
         logger.log_action("Test", "triggers cap")
     dbg.error.assert_called_once()
     assert "100 MB cap" in str(dbg.error.call_args)
+
+
+# ---------------------------------------------------------------------------
+# session() — lazy session context manager
+# ---------------------------------------------------------------------------
+
+def test_session_no_writes_emits_nothing(tmp_path):
+    """A no-op pass inside session() writes no banner / START / END."""
+    log_path = tmp_path / "lil_bro_actions.log"
+    logger = ActionLogger(log_path=str(log_path))
+    with logger.session():
+        pass
+    content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    assert content == ""
+
+
+def test_session_lazy_banner_before_first_action(tmp_path):
+    """Banner + SESSION START flush before the first entry; SESSION END after."""
+    log_path = tmp_path / "lil_bro_actions.log"
+    logger = ActionLogger(log_path=str(log_path))
+    with logger.session():
+        logger.log_action("PowerCfg", "Switched plan", "guid-abc")
+    from src._version import __version__
+    lines = log_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines[0]) == 80 and f"lil_bro v{__version__}" in lines[0]  # version banner
+    assert "SESSION START" in lines[1]
+    assert lines[2] == "=" * 80
+    assert "PowerCfg" in lines[3]
+    assert "SESSION END" in lines[4]
+
+
+def test_session_no_end_when_no_start(tmp_path):
+    """No START flushed -> no SESSION END line either (no empty block)."""
+    log_path = tmp_path / "lil_bro_actions.log"
+    logger = ActionLogger(log_path=str(log_path))
+    with logger.session():
+        pass
+    content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    assert "SESSION END" not in content
+
+
+def test_session_emits_end_on_exception_after_write(tmp_path):
+    """An exception after a logged action still closes the session (finally)."""
+    log_path = tmp_path / "lil_bro_actions.log"
+    logger = ActionLogger(log_path=str(log_path))
+    try:
+        with logger.session():
+            logger.log_action("Revert", "Game Mode restored")
+            raise RuntimeError("boom")
+    except RuntimeError:
+        pass
+    content = log_path.read_text(encoding="utf-8")
+    assert "SESSION START" in content
+    assert "Revert" in content
+    assert "SESSION END" in content
+
+
+def test_session_no_block_on_exception_before_write(tmp_path):
+    """An exception before any write leaves nothing (no empty session block)."""
+    log_path = tmp_path / "lil_bro_actions.log"
+    logger = ActionLogger(log_path=str(log_path))
+    try:
+        with logger.session():
+            raise RuntimeError("boom")
+    except RuntimeError:
+        pass
+    content = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    assert content == ""
+
+
+def test_session_flush_triggered_by_fix_dispatch(tmp_path):
+    """log_fix_dispatch / log_fix_result (which call log_action) flush the banner."""
+    log_path = tmp_path / "lil_bro_actions.log"
+    logger = ActionLogger(log_path=str(log_path))
+    with logger.session():
+        logger.log_fix_dispatch("power_plan")
+        logger.log_fix_result("power_plan", True)
+    content = log_path.read_text(encoding="utf-8")
+    assert "SESSION START" in content
+    assert "Dispatching fix: power_plan" in content
+    assert "Fix complete: power_plan" in content
+    assert "SESSION END" in content
+
+
+def test_session_thread_isolation(tmp_path):
+    """A session armed on one thread must NOT make another thread's log_action
+    flush a banner. Regression guard for the thread-local session state."""
+    import threading
+
+    log_path = tmp_path / "lil_bro_actions.log"
+    logger = ActionLogger(log_path=str(log_path))
+
+    armed = threading.Event()
+    release = threading.Event()
+
+    def hold_session():
+        with logger.session():
+            armed.set()
+            release.wait(2.0)  # keep the session armed on THIS thread only
+
+    t = threading.Thread(target=hold_session)
+    t.start()
+    armed.wait(2.0)
+    # Log from the main thread while the worker's session is armed.
+    logger.log_action("Other", "main-thread entry")
+    release.set()
+    t.join(2.0)
+
+    content = log_path.read_text(encoding="utf-8")
+    first_line = content.splitlines()[0]
+    # The main-thread entry must NOT have a banner in front of it: the worker's
+    # armed session is thread-local and must not bleed across threads.
+    assert "SESSION START" not in first_line
+    assert "lil_bro v" not in first_line
+    assert "main-thread entry" in content
+
+
+def test_session_echo_parity(tmp_path):
+    """With an echo fn set, the banner header is echoed before the first entry."""
+    echoed: list[str] = []
+    log_path = tmp_path / "lil_bro_actions.log"
+    logger = ActionLogger(log_path=str(log_path), echo_fn=echoed.append)
+    with logger.session():
+        logger.log_action("Revert", "Display restored")
+    assert any("SESSION START" in e for e in echoed)
+    start_idx = next(i for i, e in enumerate(echoed) if "SESSION START" in e)
+    entry_idx = next(i for i, e in enumerate(echoed) if "Display restored" in e)
+    assert start_idx < entry_idx
