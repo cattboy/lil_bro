@@ -111,9 +111,12 @@ class TestUninstallPawnio:
     def test_skips_when_not_admin(self):
         from src.pipeline.post_run_cleanup import _uninstall_pawnio
         with patch("src.pipeline.post_run_cleanup.is_admin", return_value=False), \
+             patch("src.pipeline.post_run_cleanup.action_logger") as mock_log, \
              patch("subprocess.run") as mock_run:
             _uninstall_pawnio()
             mock_run.assert_not_called()
+            # The skip is now logged instead of returning silently.
+            assert mock_log.log_action.called
 
     def test_skips_when_nothing_to_clean(self):
         from src.pipeline.post_run_cleanup import _uninstall_pawnio
@@ -121,10 +124,54 @@ class TestUninstallPawnio:
         with patch("src.pipeline.post_run_cleanup.is_admin", return_value=True), \
              patch("src.pipeline.post_run_cleanup._find_pawnio_setup_exe", return_value=None), \
              patch("src.pipeline.post_run_cleanup._find_pawnio_oem_inf", return_value=None), \
+             patch("src.pipeline.post_run_cleanup.clear_pawnio_owned_marker") as mock_clear, \
+             patch("src.pipeline.post_run_cleanup.action_logger"), \
              patch("subprocess.run", return_value=sc_not_found) as mock_run:
             _uninstall_pawnio()
             # Only _pawnio_service_exists() should be called (returns not-found -> early exit)
             assert mock_run.call_count == 1
+            # A stale ownership marker is dropped when nothing is installed.
+            mock_clear.assert_called_once()
+
+    def test_skips_third_party_when_preinstalled_no_marker(self):
+        """was_preinstalled + no current-boot marker -> leave driver, log skip, no removal."""
+        from src.pipeline.post_run_cleanup import _uninstall_pawnio
+        sc_found = self._make_sc_result(0, "STATE              : 4  RUNNING")
+        with patch("src.pipeline.post_run_cleanup.is_admin", return_value=True), \
+             patch("src.pipeline.post_run_cleanup.marker_is_current_boot", return_value=False), \
+             patch("src.pipeline.post_run_cleanup.clear_pawnio_owned_marker"), \
+             patch("src.pipeline.post_run_cleanup.action_logger") as mock_log, \
+             patch("subprocess.run", return_value=sc_found) as mock_run:
+            _uninstall_pawnio(was_preinstalled=True)
+            # Only the existence probe runs; no stop / -uninstall / delete.
+            assert mock_run.call_count == 1
+            logged = " ".join(str(c.args) for c in mock_log.log_action.call_args_list)
+            assert "not installed by lil_bro" in logged
+
+    def test_removes_when_preinstalled_but_current_boot_marker(self):
+        """was_preinstalled + same-boot marker -> our leftover -> proceed to removal."""
+        from src.pipeline.post_run_cleanup import _uninstall_pawnio
+        sc_found = self._make_sc_result(0, "STATE              : 1  STOPPED")
+        setup_ok = self._make_sc_result(0)
+
+        def side_effect(*args, **kwargs):
+            cmd = args[0]
+            if "pawnio_setup" in str(cmd[0]):
+                return setup_ok
+            return sc_found
+
+        with patch("src.pipeline.post_run_cleanup.is_admin", return_value=True), \
+             patch("src.pipeline.post_run_cleanup.marker_is_current_boot", return_value=True), \
+             patch("src.pipeline.post_run_cleanup._find_pawnio_setup_exe",
+                   return_value="C:/fake/pawnio_setup.exe"), \
+             patch("src.pipeline.post_run_cleanup._find_pawnio_oem_inf", return_value=None), \
+             patch("src.pipeline.post_run_cleanup.clear_pawnio_owned_marker") as mock_clear, \
+             patch("src.pipeline.post_run_cleanup.action_logger"), \
+             patch("subprocess.run", side_effect=side_effect), \
+             patch("time.sleep"):
+            _uninstall_pawnio(was_preinstalled=True)
+            # Fully removed (sc delete rc 0) -> marker cleared.
+            mock_clear.assert_called_once()
 
     def test_stops_service_before_uninstall(self):
         """sc stop must precede the pawnio_setup.exe -uninstall call."""
@@ -146,6 +193,8 @@ class TestUninstallPawnio:
              patch("src.pipeline.post_run_cleanup._find_pawnio_setup_exe",
                    return_value="C:/fake/pawnio_setup.exe"), \
              patch("src.pipeline.post_run_cleanup._find_pawnio_oem_inf", return_value=None), \
+             patch("src.pipeline.post_run_cleanup.clear_pawnio_owned_marker"), \
+             patch("src.pipeline.post_run_cleanup.action_logger"), \
              patch("subprocess.run", side_effect=side_effect), \
              patch("time.sleep"):
             _uninstall_pawnio()
@@ -154,6 +203,90 @@ class TestUninstallPawnio:
         assert "-uninstall" in call_order, "pawnio_setup.exe -uninstall was not called"
         assert call_order.index("stop") < call_order.index("-uninstall"), \
             "sc stop must precede -uninstall"
+
+    def test_marked_for_deletion_retains_marker(self):
+        """sc delete 1072 (pending reboot) must NOT clear the ownership marker."""
+        from src.pipeline.post_run_cleanup import _uninstall_pawnio
+        sc_found = self._make_sc_result(0, "STATE              : 1  STOPPED")
+        sc_delete_1072 = self._make_sc_result(1072)
+        setup_fail = self._make_sc_result(1)
+
+        def side_effect(*args, **kwargs):
+            cmd = args[0]
+            if "pawnio_setup" in str(cmd[0]):
+                return setup_fail
+            if len(cmd) > 1 and cmd[1] == "delete":
+                return sc_delete_1072
+            return sc_found
+
+        with patch("src.pipeline.post_run_cleanup.is_admin", return_value=True), \
+             patch("src.pipeline.post_run_cleanup._find_pawnio_setup_exe",
+                   return_value="C:/fake/pawnio_setup.exe"), \
+             patch("src.pipeline.post_run_cleanup._find_pawnio_oem_inf", return_value="oem99.inf"), \
+             patch("src.pipeline.post_run_cleanup._run_pnputil", return_value=True), \
+             patch("src.pipeline.post_run_cleanup.clear_pawnio_owned_marker") as mock_clear, \
+             patch("src.pipeline.post_run_cleanup.action_logger"), \
+             patch("subprocess.run", side_effect=side_effect), \
+             patch("time.sleep"):
+            _uninstall_pawnio()
+            mock_clear.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# pawnio_ownership — cross-run ownership marker + boot-session gating
+# ---------------------------------------------------------------------------
+
+class TestPawnioOwnership:
+
+    def test_mark_read_clear_roundtrip(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        from src.utils.pawnio_ownership import (
+            mark_pawnio_owned, read_pawnio_owned_marker, clear_pawnio_owned_marker,
+        )
+        assert read_pawnio_owned_marker() is None
+        mark_pawnio_owned()
+        marker = read_pawnio_owned_marker()
+        assert marker is not None
+        assert marker["installed_by"] == "lil_bro"
+        assert "installed_at" in marker
+        clear_pawnio_owned_marker()
+        assert read_pawnio_owned_marker() is None
+
+    def test_clear_is_noop_when_absent(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        from src.utils.pawnio_ownership import clear_pawnio_owned_marker
+        clear_pawnio_owned_marker()  # must not raise
+
+    def test_read_returns_none_on_garbage(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        from src.utils.pawnio_ownership import (
+            read_pawnio_owned_marker, get_pawnio_owned_marker_path,
+        )
+        get_pawnio_owned_marker_path().write_text("not json{", encoding="utf-8")
+        assert read_pawnio_owned_marker() is None
+
+    def test_current_boot_true_when_marker_after_boot(self, tmp_path, monkeypatch):
+        from datetime import datetime, timedelta
+        monkeypatch.chdir(tmp_path)
+        import src.utils.pawnio_ownership as po
+        po.mark_pawnio_owned()
+        # Boot was an hour ago; marker written 'now' -> current boot.
+        monkeypatch.setattr(po, "_last_boot_time", lambda: datetime.now() - timedelta(hours=1))
+        assert po.marker_is_current_boot() is True
+
+    def test_current_boot_false_when_marker_predates_boot(self, tmp_path, monkeypatch):
+        from datetime import datetime, timedelta
+        monkeypatch.chdir(tmp_path)
+        import src.utils.pawnio_ownership as po
+        po.mark_pawnio_owned()
+        # Boot is in the future relative to the marker -> stale -> not current boot.
+        monkeypatch.setattr(po, "_last_boot_time", lambda: datetime.now() + timedelta(hours=1))
+        assert po.marker_is_current_boot() is False
+
+    def test_current_boot_false_when_absent(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        import src.utils.pawnio_ownership as po
+        assert po.marker_is_current_boot() is False
 
 
 # ---------------------------------------------------------------------------
@@ -412,3 +545,33 @@ class TestPostRunCleanup:
              patch("src.pipeline.post_run_cleanup.print_dim"):
             post_run_cleanup(lhm=mock_lhm)
         mock_lhm.stop.assert_called_once()
+
+    def test_mei_handoff_note_logged_when_frozen(self, monkeypatch):
+        """Frozen build: shutdown logs the _MEI hand-off note (honest — not 'removed')."""
+        import sys
+        from src.pipeline import post_run_cleanup as prc
+        monkeypatch.setattr(sys, "_MEIPASS", "C:/fake/_MEI123456", raising=False)
+        with patch.object(prc, "_uninstall_pawnio"), \
+             patch.object(prc, "_cleanup_cwd_tempdir"), \
+             patch.object(prc, "_cleanup_stale_mei"), \
+             patch.object(prc, "action_logger") as mock_log, \
+             patch.object(prc, "print_info"), \
+             patch.object(prc, "print_dim"):
+            prc.post_run_cleanup(lhm=None)
+        logged = " ".join(str(c.args) for c in mock_log.log_action.call_args_list)
+        assert "handed to bootloader for removal on exit" in logged
+
+    def test_mei_handoff_note_absent_in_dev_mode(self, monkeypatch):
+        """Dev mode (no _MEIPASS): no hand-off note — nothing to hand off."""
+        import sys
+        from src.pipeline import post_run_cleanup as prc
+        monkeypatch.delattr(sys, "_MEIPASS", raising=False)
+        with patch.object(prc, "_uninstall_pawnio"), \
+             patch.object(prc, "_cleanup_cwd_tempdir"), \
+             patch.object(prc, "_cleanup_stale_mei"), \
+             patch.object(prc, "action_logger") as mock_log, \
+             patch.object(prc, "print_info"), \
+             patch.object(prc, "print_dim"):
+            prc.post_run_cleanup(lhm=None)
+        logged = " ".join(str(c.args) for c in mock_log.log_action.call_args_list)
+        assert "handed to bootloader" not in logged

@@ -77,3 +77,14 @@ def get_session_backup_path() -> Path:
     easy to find next to the .exe.
     """
     return Path.cwd() / "lil_bro_session_manifest.json"
+
+
+def get_pawnio_owned_marker_path() -> Path:
+    """Return the PawnIO ownership marker path: ``./lil_bro_pawnio_owned.json`` (CWD root).
+
+    Records that lil_bro installed PawnIO so cleanup can remove its own leftover across
+    a same-boot re-run. Lives at the CWD root beside the logs so it survives the
+    ``./lil_bro/`` cleanup; it is deleted once PawnIO is fully removed (see
+    ``src/utils/pawnio_ownership.py``).
+    """
+    return Path.cwd() / "lil_bro_pawnio_owned.json"

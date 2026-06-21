@@ -159,6 +159,21 @@ def game_mode(key: str) -> dict:
     return copy.deepcopy(GAME_MODES[key])
 
 
+# ── HAGS spec entries (consumed by set_hags_data + the REAL analyze_hags) ────
+# Single registry toggle (HKLM HwSchMode). "unsupported"/"missing" hide the card.
+HAGS_STATES: dict[str, dict] = {
+    "enabled": {"enabled": True, "supported": True},
+    "disabled": {"enabled": False, "supported": True},
+    "unsupported": {"enabled": False, "supported": False},  # card hidden (no HwSchMode value)
+    "missing": {"error": "registry read failed (mock)"},     # card hidden
+}
+
+
+def hags(key: str) -> dict:
+    """Deep copy so appliers can mutate without corrupting fixtures."""
+    return copy.deepcopy(HAGS_STATES[key])
+
+
 # ── NVIDIA specs (consumed by set_nvidia_data + the REAL analyze_nvidia_profile)
 
 
@@ -232,26 +247,67 @@ def nvidia_specs(state: str) -> dict:
 DLSS_PRIORITIES: list[str] = list(_VALID_PRIORITIES)
 
 
+# ── HDRStatus fixtures (consumed by set_hdr_data + the REAL analyze_hdr) ──────
+# Detection-only card: the spec sections the analyzer reads (HDRStatus +
+# NVIDIA + NVIDIAProfile). State names map to the card's rendered states.
+HDR_SPEC_STATES: list[str] = [
+    "rtx_off", "auto_off", "hdr_off", "rtx_on", "auto_on", "no_panel", "undetermined",
+]
+
+
+def _hdr_displays(capable: bool = True, enabled: bool = True) -> list[dict]:
+    return [{"device": r"\.\DISPLAY1", "is_primary": True,
+             "hdr_capable": capable, "hdr_enabled": enabled, "source": "displayconfig"}]
+
+
+def hdr_specs(state: str) -> dict:
+    """Full specs for one HDR scenario (mock).
+
+    State -> card render: rtx_off/auto_off/hdr_off -> suboptimal (visible),
+    rtx_on/auto_on -> optimal (visible), no_panel/undetermined -> hidden.
+    """
+    if state == "undetermined":
+        return {"HDRStatus": {"determined": False,
+                              "error": "DisplayConfig returned no data (mock)", "displays": []}}
+    if state == "no_panel":
+        return {"HDRStatus": {"determined": True, "is_win11": True, "auto_hdr_enabled": None,
+                              "displays": _hdr_displays(capable=False, enabled=False)}}
+    if state == "hdr_off":
+        return {"HDRStatus": {"determined": True, "is_win11": True, "auto_hdr_enabled": None,
+                              "displays": _hdr_displays(capable=True, enabled=False)}}
+    status = {"determined": True, "is_win11": True, "auto_hdr_enabled": (state == "auto_on"),
+              "displays": _hdr_displays(capable=True, enabled=True)}
+    if state in ("rtx_on", "rtx_off"):
+        return {"HDRStatus": status,
+                "NVIDIA": [{"GPU": "NVIDIA GeForce RTX 4080"}],
+                "NVIDIAProfile": {"available": True, "rtx_hdr_enabled": state == "rtx_on"}}
+    return {"HDRStatus": status}  # auto_on / auto_off (no RTX)
+
+
 # ── Whole-dashboard scenario presets ────────────────────────────────────────
 SCENARIOS: dict[str, dict] = {
     "All optimal": {
         "stats": "normal", "thermal": "normal", "mouse": "ok_1000",
         "monitors": "optimal", "nvidia": "ok", "dlss": "quality",
-        "power": "high_perf", "game": "enabled", "animate": True,
+        "power": "high_perf", "game": "enabled", "hags": "enabled",
+        "hdr": "rtx_on", "animate": True,
     },
     "Mixed issues": {
         "stats": "normal", "thermal": "warning", "mouse": "warn_500",
         "monitors": "suboptimal", "nvidia": "warning", "dlss": "fps",
-        "power": "balanced", "game": "disabled", "animate": False,
+        "power": "balanced", "game": "disabled", "hags": "disabled",
+        "hdr": "auto_off", "animate": False,
     },
     "Everything broken": {
         "stats": "hot", "thermal": "critical", "mouse": "low_125",
         "monitors": "wmi", "nvidia": "warning", "dlss": "fps",
-        "power": "power_saver", "game": "disabled", "animate": False,
+        "power": "power_saver", "game": "disabled", "hags": "disabled",
+        "hdr": "hdr_off", "animate": False,
     },
     "Fresh install": {
         "stats": "missing", "thermal": "offline", "mouse": "not_measured",
         "monitors": "empty", "nvidia": "no_gpu", "dlss": "quality",
-        "power": "missing", "game": "missing", "animate": False,
+        "power": "missing", "game": "missing", "hags": "missing",
+        "hdr": "no_panel", "animate": False,
     },
 }

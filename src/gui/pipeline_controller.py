@@ -249,7 +249,6 @@ class PipelineController(QObject):
     def start_revert(self) -> None:
         runtime = self._runtime
         main = self._main
-        log = self._log
         if runtime.get("revert_thread") is not None:
             return
         from src.utils.revert import load_manifest
@@ -259,57 +258,106 @@ class PipelineController(QObject):
             return
 
         # Capture which sections the to-be-reverted fixes touch BEFORE the worker
-        # runs -- a successful revert deletes the manifest, so refresh_fix_cards_
-        # after_revert can no longer read it. This scopes the post-revert live
-        # re-collect to just the affected cards.
+        # runs -- a successful revert deletes the manifest, so the post-revert live
+        # re-collect can no longer read it. Scopes the refresh to the affected cards.
         from src.gui.startup_coordinator import _sections_for_fixes
-        runtime["_revert_refresh_scope"] = _sections_for_fixes(
-            e.get("fix", "") for e in manifest.get("fixes", [])
+        scope = _sections_for_fixes(e.get("fix", "") for e in manifest.get("fixes", []))
+
+        self._launch_revert_worker(
+            RevertWorker(),
+            scope,
+            "Reverting session…",
+            self._on_revert_finished,
+            self._on_revert_failed,
         )
 
+    def _launch_revert_worker(self, worker, refresh_scope, busy_msg, on_finished, on_failed) -> None:
+        """Shared QThread lifecycle for both revert-all and revert-one.
+
+        Owns the mechanical parts both paths share: scope capture, flow-control
+        lockout, the busy status + button cue, and the QThread/worker wiring +
+        teardown hook. The two public entry points (``start_revert``,
+        ``start_revert_one``) supply what differs: the worker, the refresh scope,
+        the busy label, and the finished/failed slots. Those slots are
+        QObject-anchored ``@Slot`` methods on this controller, so a worker-thread
+        signal is delivered queued on the GUI thread (no off-thread widget access).
+        """
+        runtime = self._runtime
+        main = self._main
+        runtime["_revert_refresh_scope"] = refresh_scope
         self.set_flow_controls(False)
-        main.status_bar_widget.set_state("run", "Reverting session…")
-        # Lock the in-page revert button with a "Reverting…" busy label, mirroring
-        # the dashboard cards' "Applying…" cue. Placed after the early-return
-        # guards above so a "nothing to revert" click never flashes a busy button.
-        # Reset on thread-finished (below), for both success and failure.
+        main.status_bar_widget.set_state("run", busy_msg)
         main._revert_view.set_reverting(True)
 
         revert_thread = QThread()
-        revert_worker = RevertWorker()
-        revert_worker.moveToThread(revert_thread)
-        revert_thread.started.connect(revert_worker.run)
-
-        # The three handlers below are @Slot() methods on this QObject controller
-        # (GUI-thread affinity), NOT local closures. A worker-thread signal
-        # (revert_finished / revert_failed / thread.finished) delivered to a
-        # GUI-thread QObject slot runs queued on the GUI thread, so the button +
-        # status-bar resets they perform never mutate widgets off-thread. (Local
-        # closures here would run on the worker thread -- see the routing note
-        # below for why dashboard refresh already goes through StartupCoordinator.)
-        revert_worker.revert_finished.connect(self._on_revert_finished)
-        revert_worker.revert_failed.connect(self._on_revert_failed)
+        worker.moveToThread(revert_thread)
+        revert_thread.started.connect(worker.run)
+        worker.revert_finished.connect(on_finished)
+        worker.revert_failed.connect(on_failed)
         revert_thread.finished.connect(self._on_revert_thread_done)
 
-        # Re-scan the Dashboard fix cards once the revert succeeds, so the NVIDIA /
-        # monitor cards drop the optimistic "applied" state set at apply time. Routed
-        # through StartupCoordinator (also a QObject on the GUI thread) for the same
-        # reason as the handlers above: a worker-thread signal to a QObject receiver
-        # is a QueuedConnection, so the re-scan runs on the GUI thread.
-        startup = runtime.get("_startup_coordinator")
-        if startup is not None:
-            revert_worker.revert_finished.connect(startup.refresh_fix_cards_after_revert)
-
         runtime["revert_thread"] = revert_thread
-        runtime["revert_worker"] = revert_worker
+        runtime["revert_worker"] = worker
         revert_thread.start()
+
+    def start_revert_one(self, entry: dict) -> None:
+        """Revert a single applied fix (per-row Revert button on the Revert page).
+
+        Mutually exclusive with revert-all via the shared ``revert_thread`` slot;
+        a click while a revert is already running is a no-op with a status cue.
+        The row buttons are disabled mid-revert (``set_reverting``), but the guard
+        makes the race safe even if the file-watcher rebuild momentarily slips one
+        back in.
+        """
+        runtime = self._runtime
+        main = self._main
+        if runtime.get("revert_thread") is not None:
+            main.status_bar_widget.set_state("run", "Revert already in progress…")
+            return
+        from src.utils.revert import NVIDIA_REVERT_FIXES
+        fix = entry.get("fix", "")
+        if fix in NVIDIA_REVERT_FIXES:
+            # Reverting either NVIDIA card restores the pristine pre-lil_bro profile,
+            # undoing BOTH the Profile and DLSS fixes. Confirm the group effect (this
+            # reverts more than the clicked row) before proceeding -- the project's
+            # "no silent changes" contract.
+            from PySide6.QtWidgets import QDialog
+
+            from src.gui.widgets.dialogs import CardDialog
+            confirm = CardDialog(
+                "Revert all NVIDIA settings?",
+                "This restores your NVIDIA profile to before lil_bro — undoing BOTH "
+                "the Profile and DLSS changes. Re-apply either from the dashboard if "
+                "you want it back.",
+                tone="warning",
+                primary_label="Revert NVIDIA",
+                secondary_label="Cancel",
+                parent=main,
+            )
+            if confirm.exec() != QDialog.DialogCode.Accepted:
+                return
+        from src.gui.startup_coordinator import _sections_for_fixes
+        from src.gui.worker import RevertOneWorker
+        label = fix.replace("_", " ").title() if fix else "change"
+        self._launch_revert_worker(
+            RevertOneWorker(entry),
+            _sections_for_fixes([fix]),
+            f"Reverting {label}…",
+            self._on_revert_one_finished,
+            self._on_revert_one_failed,
+        )
 
     @Slot()
     def _on_revert_finished(self) -> None:
         # revert_worker emits this from the worker thread; as a @Slot() bound to
         # this GUI-thread QObject the call is delivered queued on the GUI thread,
-        # so touching the status bar is safe. quit() is itself thread-safe.
+        # so touching the status bar + dashboard cards is safe. quit() is itself
+        # thread-safe. The dashboard re-collect is folded in here (rather than a
+        # second signal connection) so _launch_revert_worker's wiring stays uniform.
         self._main.status_bar_widget.set_state("ok", "Revert complete")
+        startup = self._runtime.get("_startup_coordinator")
+        if startup is not None:
+            startup.refresh_fix_cards_after_revert()
         revert_thread = self._runtime.get("revert_thread")
         if revert_thread is not None:
             revert_thread.quit()
@@ -322,19 +370,62 @@ class PipelineController(QObject):
         if revert_thread is not None:
             revert_thread.quit()
 
+    @Slot(str, str)
+    def _on_revert_one_finished(self, fix: str, warning: str) -> None:
+        # RevertOneWorker emits (fix, warning) from the worker thread; as a @Slot
+        # on this GUI-thread QObject it runs queued on the GUI thread. The warning
+        # is the success-with-caveat string from revert_fix (e.g. a display revert
+        # that needs a reboot) -- this is the per-item path's home for it (the
+        # terminal path surfaces these at phase_revert.py:70-73).
+        from src.utils.revert import NVIDIA_REVERT_FIXES
+        nvidia = fix in NVIDIA_REVERT_FIXES
+        label = "all NVIDIA settings" if nvidia else (fix.replace("_", " ").title() if fix else "change")
+        if warning:
+            self._main.status_bar_widget.set_state("ok", f"Reverted {label} — {warning}")
+        elif nvidia:
+            self._main.status_bar_widget.set_state("ok", "Reverted all NVIDIA settings to original")
+        else:
+            self._main.status_bar_widget.set_state("ok", "Revert complete")
+        startup = self._runtime.get("_startup_coordinator")
+        if startup is not None:
+            startup.refresh_fix_cards_after_revert()
+        revert_thread = self._runtime.get("revert_thread")
+        if revert_thread is not None:
+            revert_thread.quit()
+
+    @Slot(str)
+    def _on_revert_one_failed(self, msg: str) -> None:
+        # revert_fix returned (False, msg): the manifest was NOT pruned, so the
+        # row stays for a retry. Surface the real reason, not a placeholder type.
+        self._log.error("Revert: GUI single-revert failed -- %s", msg)
+        self._main.status_bar_widget.set_state("ok", f"Couldn't revert — {msg}")
+        revert_thread = self._runtime.get("revert_thread")
+        if revert_thread is not None:
+            revert_thread.quit()
+
     @Slot()
     def _on_revert_thread_done(self) -> None:
         # revert_thread.finished fires on the worker thread for both success and
         # failure; this @Slot() on the GUI-thread QObject runs queued on the GUI
-        # thread, so the button + flow-control resets below never mutate widgets
-        # off-thread (the bug 7228cd8 fixed for the dashboard card paths). The
-        # set_reverting reset is best-effort so a widget teardown during app-close
-        # can't propagate out of the finished handler.
+        # thread, so the resets below never mutate widgets off-thread (the bug
+        # 7228cd8 fixed for the dashboard card paths). The set_reverting / reload
+        # calls are best-effort so a widget teardown during app-close can't
+        # propagate out of the finished handler.
         self.set_flow_controls(True)
         try:
             self._main._revert_view.set_reverting(False)
         except Exception:
             pass
+        # Authoritative Revert-page card refresh. The QFileSystemWatcher also fires
+        # on the manifest write/delete, but its timing is coalesced and a file
+        # delete can be missed, so reload here deterministically. Harmless double:
+        # set_manifest just rebuilds the rows, and _reverting is now False.
+        startup = self._runtime.get("_startup_coordinator")
+        if startup is not None:
+            try:
+                startup._reload_last_run()
+            except Exception:
+                pass
         runtime = self._runtime
         revert_worker = runtime.get("revert_worker")
         revert_thread = runtime.get("revert_thread")

@@ -246,3 +246,79 @@ class TestRevertViewSetLastRun:
             view.system_restore_requested.connect(lambda: fired.append(True))
             view._restore_btn.click()
             assert fired == [True]
+
+
+# ── interactive per-row Revert buttons (GUI "one at a time") ─────────────────
+class TestInteractiveRevertButtons:
+    def _manifest(self, fixes):
+        return {"schema_version": 1, "session_date": "2026-06-20T10:00:00",
+                "restore_point_created": True, "fixes": fixes}
+
+    def test_button_on_revertible_non_nvidia_row(self, qtbot):
+        card = _make_card(qtbot)
+        with patch("src.gui.widgets.last_run_card.repolish"):
+            card.set_manifest(self._manifest([
+                {"fix": "game_mode", "revertible": True, "applied_at": "2026-06-20T10:00:01"},
+            ]), interactive=True)
+        assert len(card._revert_buttons) == 1
+        assert "Revert" in card._revert_buttons[0].text()
+
+    def test_no_button_when_not_interactive(self, qtbot):
+        card = _make_card(qtbot)
+        with patch("src.gui.widgets.last_run_card.repolish"):
+            card.set_manifest(self._manifest([
+                {"fix": "game_mode", "revertible": True, "applied_at": "2026-06-20T10:00:01"},
+            ]))  # interactive defaults to False
+        assert card._revert_buttons == []
+
+    def test_nvidia_rows_get_button(self, qtbot):
+        """v2: NVIDIA rows now get per-row Revert buttons (group revert via a
+        controller confirm dialog); the card itself stays NVIDIA-agnostic."""
+        card = _make_card(qtbot)
+        emitted: list[dict] = []
+        card.revert_one_requested.connect(lambda e: emitted.append(e))
+        with patch("src.gui.widgets.last_run_card.repolish"):
+            card.set_manifest(self._manifest([
+                {"fix": "nvidia_profile", "revertible": True, "applied_at": "2026-06-20T10:00:01"},
+                {"fix": "nvidia_dlss_preset", "revertible": True, "applied_at": "2026-06-20T10:00:02"},
+            ]), interactive=True)
+        assert len(card._revert_buttons) == 2
+        card._revert_buttons[0].click()  # clicking a NVIDIA row emits that entry
+        assert emitted and emitted[0]["fix"] == "nvidia_profile"
+
+    def test_no_button_for_non_revertible(self, qtbot):
+        card = _make_card(qtbot)
+        with patch("src.gui.widgets.last_run_card.repolish"):
+            card.set_manifest(self._manifest([
+                {"fix": "temp_folders", "revertible": False,
+                 "applied_at": "2026-06-20T10:00:01", "reason": "gone"},
+            ]), interactive=True)
+        assert card._revert_buttons == []
+
+    def test_click_emits_that_rows_entry(self, qtbot):
+        """Loop-closure guard: clicking the SECOND button emits the SECOND entry."""
+        card = _make_card(qtbot)
+        emitted: list[dict] = []
+        card.revert_one_requested.connect(lambda e: emitted.append(e))
+        rows = [
+            {"fix": "game_mode", "revertible": True, "applied_at": "2026-06-20T10:00:01"},
+            {"fix": "display", "revertible": True, "applied_at": "2026-06-20T10:00:02"},
+        ]
+        with patch("src.gui.widgets.last_run_card.repolish"):
+            card.set_manifest(self._manifest(rows), interactive=True)
+        card._revert_buttons[1].click()
+        assert len(emitted) == 1
+        assert emitted[0]["fix"] == "display"
+        assert emitted[0]["applied_at"] == "2026-06-20T10:00:02"
+
+    def test_set_revert_buttons_enabled_toggles_all(self, qtbot):
+        card = _make_card(qtbot)
+        with patch("src.gui.widgets.last_run_card.repolish"):
+            card.set_manifest(self._manifest([
+                {"fix": "game_mode", "revertible": True, "applied_at": "2026-06-20T10:00:01"},
+                {"fix": "display", "revertible": True, "applied_at": "2026-06-20T10:00:02"},
+            ]), interactive=True)
+        card.set_revert_buttons_enabled(False)
+        assert all(not b.isEnabled() for b in card._revert_buttons)
+        card.set_revert_buttons_enabled(True)
+        assert all(b.isEnabled() for b in card._revert_buttons)

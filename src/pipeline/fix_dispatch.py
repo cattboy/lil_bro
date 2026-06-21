@@ -193,7 +193,13 @@ def _fix_power_plan(specs: dict) -> bool:
 
 @register_fix("temp_folders")
 def _fix_temp_folders(specs: dict) -> bool:
-    """Cleans temporary file directories."""
+    """Cleans temporary file directories.
+
+    Deleted temp files can never be restored, so this fix is intentionally NOT
+    recorded in the session manifest (it would only ever be a dead, non-revertible
+    row). The cleanup is recorded in the action log instead -- see
+    ``clean_temp_folders`` -> ``action_logger.log_action`` in temp_audit.py.
+    """
     from src.agent_tools.temp_audit import clean_temp_folders
 
     details = specs.get("TempFolders", {}).get("details", {})
@@ -203,13 +209,6 @@ def _fix_temp_folders(specs: dict) -> bool:
     except Exception as e:
         print_error(f"[temp_folders] Cleanup failed: {e}")
         return False
-
-    _record_non_revertible(
-        "temp_folders",
-        "Deleted temp files cannot be restored",
-        warn=False,
-        display="temp files deleted — files gone",
-    )
 
     return True
 
@@ -241,6 +240,33 @@ def _fix_game_mode(specs: dict) -> bool:
     return True
 
 
+@register_fix("hags")
+def _fix_hags(specs: dict) -> bool:
+    """Enables Hardware-Accelerated GPU Scheduling via registry (HKLM HwSchMode)."""
+    from src.agent_tools.hags import set_hags
+
+    hags_spec = specs.get("HAGS", {})
+    before_enabled = hags_spec.get("enabled")
+
+    try:
+        set_hags(enabled=True)
+    except Exception as e:
+        print_error(f"[hags] Failed: {e}")
+        return False
+
+    if before_enabled is not None:
+        _record_revertible(
+            "hags",
+            before={"HwSchMode": 2 if before_enabled else 1},
+            after={"HwSchMode": 2},
+        )
+    else:
+        _record_non_revertible("hags", "Before-state not available in specs")
+
+    print_success("[hags] Hardware-Accelerated GPU Scheduling enabled — restart to apply.")
+    return True
+
+
 @register_fix("nvidia_profile")
 def _fix_nvidia_profile(specs: dict) -> bool:
     """Applies optimized NVIDIA driver profile via NPI (DLSS excluded)."""
@@ -250,11 +276,17 @@ def _fix_nvidia_profile(specs: dict) -> bool:
     npi_exe = find_npi_exe()
     backup_path: str | None = None
     if npi_exe is not None:
-        try:
-            backup_path = backup_nvidia_profile(npi_exe)
-        except Exception as e:
-            print_warning(f"[nvidia_profile] Backup failed ({e}) — fix will not be revertible.")
-            backup_path = None
+        # Reuse the session's pinned pristine backup if an earlier NVIDIA fix
+        # already made one, so both NVIDIA fixes share ONE pre-NVIDIA snapshot
+        # (the revert source of truth). Only the first NVIDIA fix exports fresh.
+        from src.utils.revert import get_session_nvidia_backup_path
+        backup_path = get_session_nvidia_backup_path()
+        if backup_path is None:
+            try:
+                backup_path = backup_nvidia_profile(npi_exe)
+            except Exception as e:
+                print_warning(f"[nvidia_profile] Backup failed ({e}) — fix will not be revertible.")
+                backup_path = None
     else:
         print_warning("[nvidia_profile] NPI.exe not found — fix will not be revertible.")
 
@@ -294,11 +326,16 @@ def _fix_nvidia_dlss_preset(specs: dict) -> bool:
         print_error("[nvidia_dlss_preset] NPI.exe not found — cannot apply fix.")
         return False
 
-    backup_path: str | None = None
-    try:
-        backup_path = backup_nvidia_profile(npi_exe)
-    except Exception as e:
-        print_warning(f"[nvidia_dlss_preset] Backup failed ({e}) — fix will not be revertible.")
+    # Reuse the session's pinned pristine backup if an earlier NVIDIA fix already
+    # made one (both NVIDIA fixes share ONE pre-NVIDIA snapshot, so revert lands
+    # on the pre-NVIDIA profile regardless of which card applied first).
+    from src.utils.revert import get_session_nvidia_backup_path
+    backup_path: str | None = get_session_nvidia_backup_path()
+    if backup_path is None:
+        try:
+            backup_path = backup_nvidia_profile(npi_exe)
+        except Exception as e:
+            print_warning(f"[nvidia_dlss_preset] Backup failed ({e}) — fix will not be revertible.")
 
     try:
         fix_nvidia_dlss_preset(specs, pre_backup_path=backup_path)

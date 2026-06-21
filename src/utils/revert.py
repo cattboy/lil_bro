@@ -44,6 +44,12 @@ _DISP_CHANGE_SUCCESSFUL = 0
 
 _pending_manifest: dict | None = None
 
+# The two NVIDIA fixes both revert by re-importing a whole-profile .nip snapshot,
+# so they share one pinned pristine backup and revert as a unit (see
+# get_session_nvidia_backup_path + remove_fix_from_manifest). Imported by
+# fix_dispatch (apply-time pin reuse) and pipeline_controller (confirm + status).
+NVIDIA_REVERT_FIXES = frozenset({"nvidia_profile", "nvidia_dlss_preset"})
+
 # Serializes every read-modify-write of the manifest. The pipeline runs on a
 # QThread and a dashboard monitor-fix runs on its own QThread; both append to
 # the same manifest, so the read-modify-write must not interleave.
@@ -141,6 +147,109 @@ def load_manifest() -> dict | None:
     return data
 
 
+def remove_fix_from_manifest(entry: dict) -> None:
+    """Remove a reverted fix entry (or the whole NVIDIA group) from the manifest.
+
+    Used by the GUI per-item revert path after ``revert_fix`` succeeds. Normally
+    matches on the ``(fix, applied_at)`` composite key -- ``applied_at`` is written
+    with microsecond precision by ``_record_revertible`` / ``_record_non_revertible``,
+    so it is effectively unique even when the same ``fix`` appears more than once
+    (e.g. two ``display`` devices).
+
+    **NVIDIA group:** reverting either NVIDIA fix restores the single pristine
+    profile snapshot, so it undoes BOTH ``nvidia_profile`` and ``nvidia_dlss_preset``.
+    When ``entry["fix"]`` is an NVIDIA fix, every NVIDIA entry is dropped, not just
+    the matched row.
+
+    Delete policy: the manifest *file* is deleted only when no entries of any kind
+    remain. This deliberately differs from the full-revert path
+    (``run_revert_phase``), which unlinks unconditionally -- per-item revert keeps
+    the file alive so non-revertible rows (e.g. ``temp_folders``) and the
+    restore-point line stay visible until every entry is gone.
+
+    Operates on the on-disk manifest only (``_read_raw_manifest``); never the
+    in-memory ``_pending_manifest`` staging copy (which is ``None`` by revert
+    time). Best-effort: logs a warning on failure and never raises, so a prune
+    failure cannot crash the revert worker (matches ``append_fix_to_manifest``).
+    """
+    target_fix = entry.get("fix")
+    target_applied = entry.get("applied_at")
+    group = target_fix in NVIDIA_REVERT_FIXES
+    if not group and target_applied is None:
+        # applied_at is always written; a missing one is anomalous. Skip rather
+        # than guess via full-dict equality (collision hazard across re-runs).
+        print_warning(
+            f"Revert log prune skipped: entry for '{target_fix}' has no applied_at."
+        )
+        return
+    with _manifest_lock:
+        try:
+            manifest = _read_raw_manifest()
+            if manifest is None:
+                return
+            fixes = manifest.get("fixes")
+            if not isinstance(fixes, list):
+                return
+            if group:
+                # NVIDIA reverts as a unit -- drop every NVIDIA entry (filter, not
+                # the single-match walk, which would leave the sibling behind).
+                kept = [
+                    e for e in fixes
+                    if not (isinstance(e, dict) and e.get("fix") in NVIDIA_REVERT_FIXES)
+                ]
+                removed = len(kept) != len(fixes)
+            else:
+                removed = False
+                kept = []
+                for e in fixes:
+                    if (
+                        not removed
+                        and isinstance(e, dict)
+                        and e.get("fix") == target_fix
+                        and e.get("applied_at") == target_applied
+                    ):
+                        removed = True
+                        continue
+                    kept.append(e)
+            if not removed:
+                return  # nothing matched; leave the manifest untouched
+            if not kept:
+                get_session_backup_path().unlink(missing_ok=True)
+                return
+            manifest["fixes"] = kept
+            _write_manifest(manifest)
+        except Exception as exc:  # noqa: BLE001
+            print_warning(f"Revert log prune failed: {exc}")
+
+
+def get_session_nvidia_backup_path() -> str | None:
+    """Return the session's pinned pre-NVIDIA (pristine) backup path, or None.
+
+    The FIRST NVIDIA fix of a session creates a whole-profile ``.nip`` backup of
+    the pristine (pre-lil_bro) profile; every NVIDIA fix records it as its
+    ``before_backup``. This returns that pinned path so a *subsequent* NVIDIA fix
+    reuses it instead of backing up a mid-state -- making NVIDIA revert always land
+    on the pre-NVIDIA profile, regardless of which card applied or in what order.
+
+    Reads the active manifest (``_pending_manifest`` if staged in memory, else the
+    on-disk copy), so the pin survives across pipeline runs and an app restart (it
+    lives in the manifest entries, not a process-global). Returns None when no
+    NVIDIA fix has run yet this session.
+    """
+    with _manifest_lock:
+        manifest = _pending_manifest if _pending_manifest is not None else _read_raw_manifest()
+        if not isinstance(manifest, dict):
+            return None
+        for e in manifest.get("fixes", []):
+            if (
+                isinstance(e, dict)
+                and e.get("fix") in NVIDIA_REVERT_FIXES
+                and e.get("before_backup")
+            ):
+                return e["before_backup"]
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Revert execution
 # ---------------------------------------------------------------------------
@@ -157,6 +266,8 @@ def revert_fix(entry: dict) -> tuple[bool, str]:
             return _revert_power_plan(entry)
         if fix_key == "game_mode":
             return _revert_game_mode(entry)
+        if fix_key == "hags":
+            return _revert_hags(entry)
         # nvidia_dlss_preset shares the whole-profile .nip restore: its
         # before_backup is a full profile snapshot, so re-importing it undoes
         # the DLSS preset change (along with anything else in that snapshot).
@@ -246,6 +357,9 @@ def _revert_power_plan(entry: dict) -> tuple[bool, str]:
         return False, "power_plan revert: missing before.guid"
     try:
         set_active_plan(guid)
+        # set_active_plan logs a [PowerCfg] line; add an explicit [Revert] line too
+        # so the action log labels this as a revert, matching _revert_game_mode/_hags.
+        action_logger.log_action("Revert", f"Power plan restored to {guid}", "powercfg /setactive")
         return True, ""
     except Exception as exc:  # noqa: BLE001
         return False, str(exc)
@@ -264,6 +378,25 @@ def _revert_game_mode(entry: dict) -> tuple[bool, str]:
             "Revert",
             f"Game Mode restored to AutoGameModeEnabled={value}",
             r"HKCU\SOFTWARE\Microsoft\GameBar",
+        )
+        return True, ""
+    except Exception as exc:  # noqa: BLE001
+        return False, str(exc)
+
+
+def _revert_hags(entry: dict) -> tuple[bool, str]:
+    from src.agent_tools.hags import set_hags
+
+    before = entry.get("before", {})
+    value = before.get("HwSchMode")
+    if value is None:
+        return False, "hags revert: missing before.HwSchMode"
+    try:
+        set_hags(enabled=(value == 2))
+        action_logger.log_action(
+            "Revert",
+            f"HAGS restored to HwSchMode={value} (restart to apply)",
+            r"HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
         )
         return True, ""
     except Exception as exc:  # noqa: BLE001

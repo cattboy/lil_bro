@@ -42,6 +42,17 @@ def _qss_base(c: dict[str, str]) -> str:
     QFrame#phaseCard[phaseStatus="failed"] {{
         border: 1px solid {c["error"]};
     }}
+
+    /* --- Tooltips / hover flyouts ------------------------------------ */
+    /* Global tooltip chrome so every setToolTip() flyout (incl. the "?"
+     * info markers) matches DESIGN.md instead of the OS default balloon. */
+    QToolTip {{
+        background-color: {c["surface"]};
+        color: {c["text_primary"]};
+        border: 1px solid {c["border_default"]};
+        border-radius: 6px;
+        padding: 8px 10px;
+    }}
 """
 
 

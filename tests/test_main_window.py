@@ -59,6 +59,61 @@ def test_main_window_actions_wired(qtbot):
             f"missing sidebar button: {attr}"
 
 
+def test_view_log_button_present_debug_button_hidden_by_default(qtbot):
+    window = MainWindow()
+    qtbot.addWidget(window)
+    # "View Log" (action log) is always present.
+    assert isinstance(window._nav_action_log, QPushButton)
+    assert "View Log" in window._nav_action_log.text()
+    # "View Debug Log" is built + wired but hidden unless --debug. Use
+    # isHidden() (explicit show/hide state) — isVisible() is False offscreen
+    # even when shown (qt-isvisible-offscreen-false).
+    assert window._nav_debug_log.isHidden()
+    assert hasattr(window, "_open_action_log")
+    assert hasattr(window, "_open_log")
+
+
+def test_view_debug_log_button_shown_with_debug_flag(qtbot):
+    window = MainWindow(debug=True)
+    qtbot.addWidget(window)
+    assert not window._nav_debug_log.isHidden()
+
+
+def test_open_action_log_missing_shows_card(qtbot, tmp_path, monkeypatch):
+    """Clicking View Log with no action log shows the info card, not openUrl."""
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    missing = tmp_path / "nope_actions.log"
+    monkeypatch.setattr("src.utils.paths.get_action_log_path", lambda: missing)
+
+    seen = {}
+
+    class _SpyCard:
+        def __init__(self, title, msg, **kwargs):
+            seen["title"] = title
+
+        def exec(self):
+            seen["exec"] = True
+
+    monkeypatch.setattr("src.gui.widgets.dialogs.CardDialog", _SpyCard)
+
+    opened = []
+
+    class _SpyQDS:
+        @staticmethod
+        def openUrl(url):
+            opened.append(url)
+
+    monkeypatch.setattr("src.gui.windows.main_window.QDesktopServices", _SpyQDS)
+
+    window._open_action_log()
+
+    assert seen.get("title") == "No action log found"
+    assert seen.get("exec") is True
+    assert opened == []  # openUrl NOT called on the missing branch
+
+
 def test_main_window_view_toggle(qtbot):
     window = MainWindow()
     qtbot.addWidget(window)
@@ -327,21 +382,21 @@ def test_nav_buttons_show_number_hints(qtbot):
 
 
 def test_action_shortcuts_use_window_scope(qtbot):
-    """R/E/A are bound with WindowShortcut scope so modals keep those letters."""
+    """R/E/A/H are bound with WindowShortcut scope so modals keep those letters."""
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QKeySequence
 
     window = MainWindow()
     qtbot.addWidget(window)
 
-    assert len(window._action_shortcuts) == 3
+    assert len(window._action_shortcuts) == 4
     bound = set()
     for shortcut in window._action_shortcuts:
         assert shortcut.context() == Qt.ShortcutContext.WindowShortcut
-        for key in (Qt.Key.Key_R, Qt.Key.Key_E, Qt.Key.Key_A):
+        for key in (Qt.Key.Key_R, Qt.Key.Key_E, Qt.Key.Key_A, Qt.Key.Key_H):
             if shortcut.key().matches(QKeySequence(key)) == QKeySequence.SequenceMatch.ExactMatch:
                 bound.add(key)
-    assert bound == {Qt.Key.Key_R, Qt.Key.Key_E, Qt.Key.Key_A}
+    assert bound == {Qt.Key.Key_R, Qt.Key.Key_E, Qt.Key.Key_A, Qt.Key.Key_H}
 
 
 def test_action_buttons_show_letter_hints(qtbot):

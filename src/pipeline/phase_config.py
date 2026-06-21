@@ -3,6 +3,7 @@
 from src.pipeline.base import PipelineAborted, PipelineContext, PhaseResult
 from src.agent_tools.display import analyze_display
 from src.agent_tools.game_mode import analyze_game_mode
+from src.agent_tools.hags import analyze_hags
 from src.agent_tools.power_plan import analyze_power_plan
 from src.agent_tools.xmp_check import analyze_xmp
 from src.agent_tools.nvidia_profile import analyze_nvidia_dlss_preset, analyze_nvidia_profile
@@ -53,6 +54,13 @@ class ConfigPhase:
             dlss_finding = analyze_nvidia_dlss_preset(ctx.specs)
             if dlss_finding["status"] != "SKIPPED":
                 findings.append(dlss_finding)
+
+            # HAGS surfaced only when supported (SKIPPED on pre-WDDM-2.7 GPUs);
+            # propose_actions further filters to WARNING, so an already-enabled
+            # HAGS never reaches the batch dialog.
+            hags_finding = analyze_hags(ctx.specs)
+            if hags_finding["status"] != "SKIPPED":
+                findings.append(hags_finding)
 
             if ctx.peak_temps:
                 thermal_finding = analyze_thermals(

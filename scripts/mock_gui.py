@@ -8,7 +8,8 @@ card between its visual states and applies whole scenarios.
 Run from the repo root (venv active):
 
     python scripts/mock_gui.py
-    python scripts/mock_gui.py --smoke   # headless-friendly auto-cycle + exit
+    python scripts/mock_gui.py --smoke        # headless-friendly auto-cycle + exit
+    python scripts/mock_gui.py --screenshots  # render docs/screenshots/*.png + exit
 
 Monkeypatches (script-level only; production code untouched):
   * src.utils.nvidia_npi.find_npi_exe — canned path/None so the NVIDIA cards
@@ -61,6 +62,7 @@ from PySide6.QtWidgets import (
 
 from scripts import mock_fixtures as fx
 from src.agent_tools.game_mode import analyze_game_mode
+from src.agent_tools.hags import analyze_hags
 from src.agent_tools.nvidia_profile import analyze_nvidia_profile
 from src.agent_tools.power_plan import analyze_power_plan
 from src.gui import theme
@@ -117,6 +119,8 @@ class MockDriver:
         self._displays: list[dict] = fx.displays("optimal")
         self._power_key = "high_perf"
         self._game_key = "enabled"
+        self._hags_key = "enabled"
+        self._hdr_key = "rtx_off"
         self._dlss_key = "quality"
         self._anim_base = fx.ANIM_BASES["normal"]
         self._anim_phase = 0
@@ -130,6 +134,7 @@ class MockDriver:
         d.nvidia_fix_requested.connect(self._on_nvidia_fix)
         d.power_plan_fix_requested.connect(self._on_power_plan_fix)
         d.game_mode_fix_requested.connect(self._on_game_mode_fix)
+        d.hags_fix_requested.connect(self._on_hags_fix)
         d.thermal_retry_requested.connect(self._on_thermal_retry)
 
     # ── State appliers ──────────────────────────────────────────────────
@@ -195,17 +200,28 @@ class MockDriver:
         self._game_key = key
         self._apply_settings()
 
+    def apply_hags(self, key: str) -> None:
+        self._hags_key = key
+        self._apply_settings()
+
+    def apply_hdr(self, key: str) -> None:
+        self._hdr_key = key
+        self.dashboard.set_hdr_data(fx.hdr_specs(key))
+
     def _apply_settings(self) -> None:
         # Order mirrors app.py run(): visibility (set_*_data) then findings
         # via the REAL analyzers over the fixture specs.
         specs = {
             "PowerPlan": fx.power_plan(self._power_key),
             "GameMode": fx.game_mode(self._game_key),
+            "HAGS": fx.hags(self._hags_key),
         }
         self.dashboard.set_power_plan_data(specs.get("PowerPlan"))
         self.dashboard.set_game_mode_data(specs.get("GameMode"))
+        self.dashboard.set_hags_data(specs.get("HAGS"))
         self.dashboard.set_power_plan_findings(analyze_power_plan(specs))
         self.dashboard.set_game_mode_findings(analyze_game_mode(specs))
+        self.dashboard.set_hags_findings(analyze_hags(specs))
 
     def apply_scenario(self, name: str) -> None:
         sc = fx.SCENARIOS[name]
@@ -217,6 +233,8 @@ class MockDriver:
         self.apply_dlss_priority(sc["dlss"])
         self.apply_power(sc["power"])
         self.apply_game(sc["game"])
+        self.apply_hags(sc["hags"])
+        self.apply_hdr(sc["hdr"])
         self.set_animation(sc["animate"])
 
     def set_animation(self, on: bool) -> None:
@@ -312,6 +330,16 @@ class MockDriver:
 
         QTimer.singleShot(800, _done)
 
+    def _on_hags_fix(self) -> None:
+        print("[mock] hags fix requested — flipping to applied in 800 ms")
+        self.dashboard.set_fix_card_applying("hags", True)
+
+        def _done() -> None:
+            self.dashboard.set_hags_findings({"status": "OK"})
+            self.dashboard.set_fix_card_applying("hags", False)
+
+        QTimer.singleShot(800, _done)
+
     def _on_thermal_retry(self) -> None:
         print("[mock] thermal retry — simulating a successful sidecar relaunch")
         if self.panel is not None:
@@ -374,6 +402,8 @@ class MockControls(QWidget):
         )
         self._power = self._combo(root, "Power Plan", list(fx.POWER_PLANS), driver.apply_power)
         self._game = self._combo(root, "Game Mode", list(fx.GAME_MODES), driver.apply_game)
+        self._hags = self._combo(root, "HAGS", list(fx.HAGS_STATES), driver.apply_hags)
+        self._hdr = self._combo(root, "HDR", list(fx.HDR_SPEC_STATES), driver.apply_hdr)
 
         # Toggles
         self._animate = QCheckBox("Animate stats/thermal (1 Hz)")
@@ -405,7 +435,8 @@ class MockControls(QWidget):
         for box, key in (
             (self._stats, "stats"), (self._thermal, "thermal"), (self._mouse, "mouse"),
             (self._monitors, "monitors"), (self._nvidia, "nvidia"), (self._dlss, "dlss"),
-            (self._power, "power"), (self._game, "game"),
+            (self._power, "power"), (self._game, "game"), (self._hags, "hags"),
+            (self._hdr, "hdr"),
         ):
             self._set_silently(box, sc[key])
         self.driver.apply_scenario(name)
@@ -454,9 +485,13 @@ def _smoke_report(driver: MockDriver, name: str) -> None:
         f"nvidia_dlss={dlss_card.isVisibleTo(d)}/{dlss_priority} "
         f"power={d._power_plan_card.isVisibleTo(d)}/{d._power_plan_card._status_lbl.text()!r} "
         f"game={d._game_mode_card.isVisibleTo(d)}/{d._game_mode_card._status_lbl.text()!r} "
+        f"hags={d._hags_card.isVisibleTo(d)}/{d._hags_card._status_lbl.text()!r} "
+        f"hdr={d._hdr_card.isVisibleTo(d)}/{d._hdr_card._status_lbl.text()!r} "
         f"chart_offline={d.thermal_chart._offline} "
         f"mouse={d._mouse_poll_card._poll_status.text()!r} "
         f"scroll_overflow={vbar.maximum() > 0} "
+        f"viewlog={'View Log' in driver.main._nav_action_log.text()}/"
+        f"dbg_hidden={driver.main._nav_debug_log.isHidden()} "
         f"hint={d._scroll_hint.isVisibleTo(d._scroll)}"
     )
 
@@ -477,6 +512,20 @@ def _run_smoke(app: QApplication, driver: MockDriver) -> None:
             busy_reset = d._nvidia_full_card._apply_btn.isEnabled()
             print(f"[smoke] busy-cue: lock={busy_lock} reset={busy_reset}")
             assert busy_lock and busy_reset, "set_fix_card_applying not wired"
+
+            # Coachmark tour: anchors to the run button, makes its Next button the
+            # sole default (W=proceed via the WASD filter), and restores defaults
+            # on dismiss (the C-reuse determinism guard).
+            m = driver.main
+            ctrl = m._coachmark_controller
+            ctrl.start()
+            cm_anchored = ctrl._overlay._active is m._run_button
+            cm_sole = [b for b in m.findChildren(QPushButton) if b.isDefault()] == [ctrl._bubble.next_btn]
+            ctrl.dismiss()
+            cm_restored = not any(b.isDefault() for b in m.findChildren(QPushButton))
+            print(f"[smoke] coachmark: anchored={cm_anchored} sole_default={cm_sole} restored={cm_restored}")
+            assert cm_anchored and cm_sole and cm_restored, "coachmark tour not wired"
+
             driver.set_animation(False)
             print("[smoke] OK")
             app.quit()
@@ -488,11 +537,52 @@ def _run_smoke(app: QApplication, driver: MockDriver) -> None:
     QTimer.singleShot(0, lambda: step(0))
 
 
+def _run_screenshots(app: QApplication, main_win: MainWindow, driver: MockDriver) -> None:
+    """Render annotated Dashboard PNGs for the README into docs/screenshots/.
+
+    Drives the REAL Dashboard + coachmark controller over fixture data, so the
+    images always reflect the live widgets. Offscreen-safe — QWidget.grab()
+    renders without a display.
+    """
+    out = ROOT / "docs" / "screenshots"
+    out.mkdir(parents=True, exist_ok=True)
+    main_win.resize(1320, 860)
+
+    def _grab(name: str) -> None:
+        for _ in range(3):
+            app.processEvents()
+        main_win.grab().save(str(out / name))
+        print(f"[screenshots] wrote {(out / name).as_posix()}")
+
+    ctrl = main_win._coachmark_controller
+
+    # Hero: issues present + the first-run coachmark pointing at Start Optimization.
+    driver.apply_scenario("Mixed issues")
+    app.processEvents()
+    ctrl.start()
+    _grab("dashboard.png")
+
+    # The quick-fix beat (arrow on a live Fix Now card).
+    ctrl.next()
+    _grab("dashboard-coachmark-fix.png")
+    ctrl.dismiss()
+
+    # All-green success state (no issues, no coachmark).
+    driver.apply_scenario("All optimal")
+    _grab("dashboard-optimal.png")
+
+    print("[screenshots] OK")
+
+
 # ── Entry ───────────────────────────────────────────────────────────────────
 
 
 def main() -> int:
     smoke = "--smoke" in sys.argv
+    screenshots = "--screenshots" in sys.argv
+    if screenshots:
+        # grab() renders without a real display; no visible window needed.
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
     QApplication.setApplicationName("lil_bro")
     QApplication.setOrganizationName("lil_bro")
@@ -511,6 +601,10 @@ def main() -> int:
     panel = MockControls(driver)
 
     main_win.show()  # before set_monitor_data — mirrors app.py ordering
+
+    if screenshots:
+        _run_screenshots(app, main_win, driver)
+        return 0
 
     if smoke:
         _run_smoke(app, driver)

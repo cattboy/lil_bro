@@ -19,6 +19,7 @@ from src.gui.theme.stylesheet_interactive import (
 from src.gui.theme.stylesheet_monitoring import (
     _qss_chart,
     _qss_dashboard_scroll,
+    _qss_info_marker,
     _qss_phase_row,
     _qss_poll,
     _qss_stat_cards,
@@ -42,6 +43,7 @@ def build_stylesheet() -> str:
         _qss_chrome(c),
         _qss_sidebar(c),
         _qss_stat_cards(c),
+        _qss_info_marker(c),
         _qss_chart(c),
         _qss_poll(c),
         _qss_dashboard_scroll(c),

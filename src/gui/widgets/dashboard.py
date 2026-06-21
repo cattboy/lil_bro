@@ -28,6 +28,8 @@ from PySide6.QtWidgets import (
 )
 
 from src.gui.widgets.game_mode_card import GameModeCard
+from src.gui.widgets.hags_card import HAGSCard
+from src.gui.widgets.hdr_card import HDRCard
 from src.gui.widgets.monitor_refresh_card import MonitorEmptyCard, MonitorRefreshCard
 from src.gui.widgets.mouse_poll_card import MousePollCard
 from src.gui.widgets.nvidia_dlss_card import NvidiaDlssCard
@@ -40,6 +42,23 @@ from src.utils.debug_logger import get_debug_logger
 
 _NPI_RED = "#FF6B6B"
 _NPI_GREEN = "#4ADE80"
+
+# Hover "?" flyout copy for the temperature stat tiles (idle vs under-load
+# guidance). Numbers mirror src/agent_tools/thermal_guidance.py thresholds
+# (CPU warn 85 / idle-warn 75 / throttle ~95-100; GPU warn 90 / idle-warn 80
+# / throttle ~93-100).
+_CPU_TEMP_HELP = (
+    "CPU Temperature",
+    "Idle: 30–50°C is healthy. Under load: up to ~80°C is normal, 85°C+ "
+    "runs hot, and 95–100°C forces thermal throttling (lost FPS). Above "
+    "75°C at rest signals weak cooling — clean fans, check airflow/paste.",
+)
+_GPU_TEMP_HELP = (
+    "GPU Temperature",
+    "Idle: 30–50°C is healthy. Under gaming load: up to ~83°C is normal, "
+    "90°C+ runs hot, and 93–100°C forces throttling. Above 80°C at rest "
+    "signals poor case airflow.",
+)
 
 class Dashboard(QWidget):
     """V2 dashboard: 4-col stat grid + temperature chart + USB polling widget."""
@@ -62,6 +81,8 @@ class Dashboard(QWidget):
     # StartupCoordinator.on_power_plan_fix_requested / on_game_mode_fix_requested.
     power_plan_fix_requested = Signal()
     game_mode_fix_requested = Signal()
+    # Single registry toggle (HKLM HwSchMode); reboot required to take effect.
+    hags_fix_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -95,6 +116,11 @@ class Dashboard(QWidget):
             card = StatCard(label, tone)
             self._cards[key] = card
             grid.addWidget(card, 0, col)
+
+        # Hover "?" info markers on the temperature tiles only — idle/load
+        # guidance flyout. Dashboard-only; LiveStatRow stays marker-free.
+        self._cards["cpu_temp"].set_info(*_CPU_TEMP_HELP)
+        self._cards["gpu_temp"].set_info(*_GPU_TEMP_HELP)
 
         outer.addWidget(grid_frame)
 
@@ -197,6 +223,20 @@ class Dashboard(QWidget):
         self._game_mode_card.apply_requested.connect(self.game_mode_fix_requested)
         self._game_mode_card.hide()
         outer.addWidget(self._game_mode_card)
+
+        self._hags_card = HAGSCard(parent=content)
+        self._hags_card.apply_requested.connect(self.hags_fix_requested)
+        self._hags_card.hide()
+        outer.addWidget(self._hags_card)
+
+        # ── HDR optimization card (detection-only v1) ────────────────
+        # Pre-allocated like the slots above (dynamic creation during the
+        # splash's nested event loop fails to parent in the bundled exe).
+        # Detection-only: deep-links to native HDR settings, no fix signal.
+        # Hidden until set_hdr_data shows it (HDR-capable display detected).
+        self._hdr_card = HDRCard(parent=content)
+        self._hdr_card.hide()
+        outer.addWidget(self._hdr_card)
 
         # Extras list (slots are separate). Uses indexOf(slot) at insert
         # time rather than a cached index, so it's robust to layout
@@ -572,6 +612,7 @@ class Dashboard(QWidget):
             "nvidia_profile": self._nvidia_full_card,
             "power_plan": self._power_plan_card,
             "game_mode": self._game_mode_card,
+            "hags": self._hags_card,
         }.get(check_name)
         if card is not None:
             card.set_applying(applying)
@@ -606,6 +647,41 @@ class Dashboard(QWidget):
     def set_game_mode_findings(self, result: dict) -> None:
         """Feed an ``analyze_game_mode`` finding to the Game Mode card."""
         self._game_mode_card.set_findings(result or {})
+
+    def set_hags_data(self, hags) -> None:
+        """Show/hide the HAGS card based on the ``HAGS`` spec entry.
+
+        Same gate as set_game_mode_data (missing entry / collection error ->
+        non-revertible fix), PLUS a ``supported`` gate: when the GPU/driver does
+        not expose HwSchMode the card hides rather than offer a no-op fix.
+        """
+        visible = (
+            isinstance(hags, dict)
+            and bool(hags)
+            and "error" not in hags
+            and bool(hags.get("supported", False))
+        )
+        self._log.info("Dashboard.set_hags_data: visible=%s", visible)
+        self._hags_card.setVisible(visible)
+
+    def set_hags_findings(self, result: dict) -> None:
+        """Feed an ``analyze_hags`` finding to the HAGS card."""
+        self._hags_card.set_findings(result or {})
+
+    def set_hdr_data(self, specs: dict) -> None:
+        """Populate + show/hide the HDR card from collected specs.
+
+        Detection-only (v1): runs the pure ``analyze_hdr`` over the HDRStatus /
+        NVIDIA / NVIDIAProfile sections, feeds the card, and hides it when HDR
+        capability is undetermined or no HDR-capable panel exists.
+        """
+        from src.agent_tools.hdr import analyze_hdr, hdr_card_visible
+
+        finding = analyze_hdr(specs or {})
+        self._hdr_card.set_hdr_status(finding)
+        visible = hdr_card_visible(finding)
+        self._hdr_card.setVisible(visible)
+        self._log.info("Dashboard.set_hdr_data: state=%s visible=%s", finding.get("state"), visible)
 
     def _nvidia_delta_text(self, current: dict, expected: dict) -> tuple[str, str]:
         """Build per-setting text from analysis dicts for the WARNING state.
@@ -678,3 +754,49 @@ class Dashboard(QWidget):
         if not items:
             return f"<span style='color:{_NPI_GREEN}'>✓ All settings optimal</span>"
         return " · ".join(items)
+
+    # ── Coachmark targets (first-run onboarding tour) ──────────────────
+
+    def coachmark_fix_target(self):
+        """First visible quick-fix action button, for the coachmark "fix" beat.
+
+        Returns the ``primary`` QPushButton of the first visible fix card (power /
+        game mode / NVIDIA / monitor), or ``None`` when every card is hidden or
+        already-optimal — the coachmark controller then falls back to a stat tile.
+        """
+        cards = [
+            self._power_plan_card, self._game_mode_card, self._hags_card,
+            self._nvidia_full_card, self._nvidia_dlss_card,
+            self._monitor_card_slot, *self._monitor_cards,
+        ]
+        for card in cards:
+            if not card.isVisibleTo(self):
+                continue
+            for btn in card.findChildren(QPushButton):
+                if btn.objectName() == "primary" and btn.isVisibleTo(card):
+                    return btn
+        return None
+
+    def coachmark_fix_fallback(self):
+        """Always-present fallback anchor for the coachmark "fix" beat.
+
+        When no fix card has an actionable button (a fully-optimal PC), the beat
+        anchors here -- the always-visible Mouse Polling card, a real per-card
+        action -- instead of a stat tile that has no Fix button (which made the
+        "Hit Fix Now" copy point at nothing). The mouse card's button is
+        ``objectName="secondary"``, so ``coachmark_fix_target`` never selects it,
+        which is exactly why it is the reliable fallback here.
+        """
+        return self._mouse_poll_card
+
+    def is_coachmark_ready(self) -> bool:
+        """True once monitor wiring has run (polled by the coachmark controller).
+
+        ``set_monitor_data`` shows exactly one of the monitor slots; both are
+        hidden before wiring. The first-run coachmark "fix" beat polls this so it
+        waits for live quick-fix cards on the slow startup path before anchoring.
+        """
+        return (
+            self._monitor_card_slot.isVisibleTo(self)
+            or self._monitor_empty_slot.isVisibleTo(self)
+        )

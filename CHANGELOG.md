@@ -2,6 +2,23 @@
 
 All notable changes to lil_bro are documented here.
 
+## [0.5.1.0] - 2026-06-21
+
+### Added
+- **HDR Optimization Dashboard card** — detects your display's HDR state (RTX HDR, Windows Auto HDR, or base HDR, in that priority) and surfaces it on the Dashboard. This release is detection-only; a guided enable/disable path is planned.
+- **Hardware-Accelerated GPU Scheduling (HAGS) card** — a one-click card that turns on Windows HAGS when it's off (registry `HwSchMode`). Approval-gated and revertible like the other fix cards, with a "restart to apply" note in the approval dialog and on the card.
+- **First-run tutorial coachmarks + FAQ** — guided hint overlays walk new users through the Dashboard, backed by a FAQ in the README/tutorial.
+- **Hoverable "?" info markers** — small info markers next to thermals and mouse-polling stats open a styled flyout explaining good vs bad temps (idle vs under load) and recommended polling rates.
+- **Sidebar "View Log" / "View Debug Log" buttons** — open `lil_bro_actions.log` in your default editor anytime (shows a friendly "no action log found" dialog if none exists); the debug-log button appears only under `--debug`.
+
+### Changed
+- **action_logger now records one session per app run** — a single `SESSION START` banner per launch (GUI and terminal) instead of noisy per-operation sessions, with the running version stamped into the banner. Debug logging is toggled by a command-line argument.
+- **Safer NVIDIA profile revert** — NVIDIA Profile Inspector (NPI) backups are no longer stacked per item (which made per-item revert unsafe). Both NVIDIA fixes now share one pinned pristine backup per session with a single group revert and a confirmation dialog, and individual lines can be reverted.
+
+### Fixed
+- **PawnIO driver uninstall only removes what lil_bro installed** — ownership is tracked via a boot-session-gated marker rather than a driver fingerprint, so lil_bro won't uninstall a PawnIO driver it didn't install. Every uninstall skip branch now logs, and post-run cleanup logging was expanded.
+- **Clean-temp-folders is no longer offered as a revertable action** — reverting a temp-folder cleanup made no sense, so it's been removed from the revert set.
+
 ## [0.5.0.1] - 2026-06-17
 
 ### Added

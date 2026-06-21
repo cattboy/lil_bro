@@ -33,11 +33,12 @@ class StartupCompleter(QObject):
 # spec sections its card reads. Used to scope the post-apply dashboard re-collect to
 # only what changed this session. Any NEW dashboard fix card must extend this map.
 _FIX_TO_SECTIONS: dict[str, set[str]] = {
-    "display": {"DisplayCapabilities"},
+    "display": {"DisplayCapabilities", "HDRStatus"},
     "nvidia_profile": {"NVIDIA", "NVIDIAProfile"},
     "nvidia_dlss_preset": {"NVIDIA", "NVIDIAProfile"},
     "power_plan": {"PowerPlan"},
     "game_mode": {"GameMode"},
+    "hags": {"HAGS"},
     # temp_folders has no dashboard card -> no section to refresh.
 }
 
@@ -280,6 +281,7 @@ class StartupCoordinator(QObject):
             try:
                 _specs = runtime.get("preloaded_specs", {}) or {}
                 main._dashboard.set_monitor_data(_specs.get("DisplayCapabilities", []))
+                main._dashboard.set_hdr_data(_specs)
                 main._dashboard.monitor_fix_requested.connect(self.on_monitor_fix_requested)
                 main._dashboard.monitor_refresh_requested.connect(self.refresh_monitor_card)
                 main._dashboard.seed_dlss_priority(_specs)
@@ -290,13 +292,17 @@ class StartupCoordinator(QObject):
                 main._dashboard.set_nvidia_profile_findings(analyze_nvidia_profile(_specs))
                 main._dashboard.nvidia_fix_requested.connect(self.on_nvidia_fix_requested)
                 from src.agent_tools.game_mode import analyze_game_mode
+                from src.agent_tools.hags import analyze_hags
                 from src.agent_tools.power_plan import analyze_power_plan
                 main._dashboard.set_power_plan_data(_specs.get("PowerPlan"))
                 main._dashboard.set_game_mode_data(_specs.get("GameMode"))
+                main._dashboard.set_hags_data(_specs.get("HAGS"))
                 main._dashboard.set_power_plan_findings(analyze_power_plan(_specs))
                 main._dashboard.set_game_mode_findings(analyze_game_mode(_specs))
+                main._dashboard.set_hags_findings(analyze_hags(_specs))
                 main._dashboard.power_plan_fix_requested.connect(self.on_power_plan_fix_requested)
                 main._dashboard.game_mode_fix_requested.connect(self.on_game_mode_fix_requested)
+                main._dashboard.hags_fix_requested.connect(self.on_hags_fix_requested)
                 runtime["_monitor_wired"] = True
                 log.info("GUI Startup: monitor + NVIDIA + power/game cards wired (late-fire path)")
             except Exception as exc:
@@ -437,6 +443,12 @@ class StartupCoordinator(QObject):
                 main._dashboard.set_monitor_data(specs.get("DisplayCapabilities", []) or [])
             except Exception as exc:
                 self._log.warning("Monitor card rescan failed: %s", exc, exc_info=True)
+        # HDR card (detection-only) -- re-sync alongside display changes.
+        if "HDRStatus" in sections:
+            try:
+                main._dashboard.set_hdr_data(specs)
+            except Exception as exc:
+                self._log.warning("HDR card rescan failed: %s", exc, exc_info=True)
         # NVIDIA: re-show/hide cards + DLSS recommendation, then per-setting findings.
         if "NVIDIA" in sections:
             try:
@@ -461,6 +473,14 @@ class StartupCoordinator(QObject):
                 main._dashboard.set_game_mode_findings(analyze_game_mode(specs))
             except Exception as exc:
                 self._log.warning("Game Mode card rescan failed: %s", exc, exc_info=True)
+        # HAGS card.
+        if "HAGS" in sections:
+            try:
+                from src.agent_tools.hags import analyze_hags
+                main._dashboard.set_hags_data(specs.get("HAGS"))
+                main._dashboard.set_hags_findings(analyze_hags(specs))
+            except Exception as exc:
+                self._log.warning("HAGS card rescan failed: %s", exc, exc_info=True)
 
     @Slot(str)
     def _on_dashboard_rescan_failed(self, exc_str: str) -> None:
@@ -792,6 +812,9 @@ class StartupCoordinator(QObject):
 
     def on_game_mode_fix_requested(self) -> None:
         self._start_setting_fix("game_mode", "GameMode", "GAME MODE")
+
+    def on_hags_fix_requested(self) -> None:
+        self._start_setting_fix("hags", "HAGS", "HAGS")
 
     def _start_setting_fix(self, check_name: str, spec_key: str, tag: str) -> None:
         """Shared approval + worker spawn for the Power Plan / Game Mode cards.

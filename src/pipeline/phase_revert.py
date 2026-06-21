@@ -14,7 +14,12 @@ from src.utils.formatting import (
     print_warning,
     prompt_approval,
 )
-from src.utils.revert import load_manifest, revert_fix, trigger_system_restore
+from src.utils.revert import (
+    NVIDIA_REVERT_FIXES,
+    load_manifest,
+    revert_fix,
+    trigger_system_restore,
+)
 
 
 def run_revert_phase() -> None:
@@ -52,10 +57,18 @@ def run_revert_phase() -> None:
     results: list[tuple[dict, bool, str]] = []
 
     print_info("\nReverting session changes...\n")
+    nvidia_reverted = False
     for entry in reversed(ordered):
-        fix_name = _display_name(entry.get("fix", ""))
-        print_step(fix_name)
-        ok, err = revert_fix(entry)
+        fix = entry.get("fix", "")
+        print_step(_display_name(fix))
+        if fix in NVIDIA_REVERT_FIXES and nvidia_reverted:
+            # Both NVIDIA fixes share one pristine backup, so reverting the first
+            # already restored it -- skip the redundant second NPI import.
+            ok, err = True, ""
+        else:
+            ok, err = revert_fix(entry)
+            if ok and fix in NVIDIA_REVERT_FIXES:
+                nvidia_reverted = True
         print_step_done(success=ok)
         results.append((entry, ok, err))
 
@@ -163,6 +176,7 @@ def _display_name(fix_key: str) -> str:
         "power_plan": "Power Plan",
         "game_mode": "Game Mode",
         "nvidia_profile": "NVIDIA Profile",
+        "nvidia_dlss_preset": "NVIDIA DLSS Preset",
         "display": "Display",
         "temp_folders": "Temp cleanup",
     }

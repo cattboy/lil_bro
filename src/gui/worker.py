@@ -71,24 +71,21 @@ class PipelineWorker(QObject):
 
     def run(self) -> None:
         from src.pipeline import _state
-        from src.utils.action_logger import action_logger
         _state.set_cancel_check(self._cancel_event.is_set)
-        # Session boundaries live here (not at app boot) so a "session" maps to a
-        # pipeline run, and the real try/finally guarantees END pairs with START
-        # even on exception or cooperative cancel.
-        action_logger.log_session_start()
+        # The action-log SESSION boundary is owned by the GUI app run (app.run,
+        # mirroring terminal main()); a pipeline run logs into that single
+        # per-launch session rather than opening its own.
         try:
             self.pipeline_started.emit()
             from src.pipeline.phases import run_optimization_pipeline
             run_optimization_pipeline(self._lhm, self._llm, preloaded_specs=self._preloaded_specs)
         except Exception as exc:  # pragma: no cover - dispatched to GUI
-            from src.utils.debug_logger import get_debug_logger
-            get_debug_logger().error("PipelineWorker uncaught exception", exc_info=True)
+            from src.utils.debug_logger import get_debug_logger, log_crash
+            log_crash(get_debug_logger(), "PipelineWorker uncaught exception", True)
             self.pipeline_failed.emit(type(exc).__name__, str(exc), traceback.format_exc())
             return
         finally:
             _state.set_cancel_check(None)
-            action_logger.log_session_end()
 
         self.pipeline_finished.emit()
 
@@ -101,6 +98,10 @@ def _apply_card_fix(check_name: str, specs: dict, create_rp: bool) -> bool:
     (approval already obtained on the GUI thread; ``assume_approved=True`` avoids
     the ``prompt_approval`` deadlock in this event-loop-less worker), then runs
     the fix via ``execute_fix``. Returns the fix result bool.
+
+    The action-log SESSION boundary is owned by the GUI app run (``app.run``,
+    mirroring terminal ``main()``) -- a card fix logs into that single per-launch
+    session rather than opening its own.
     """
     from src.pipeline.fix_dispatch import execute_fix
     from src.utils.revert import mark_restore_point_created, start_session_manifest
@@ -340,6 +341,43 @@ class RevertWorker(QObject):
             self.revert_failed.emit(type(exc).__name__, str(exc), traceback.format_exc())
             return
         self.revert_finished.emit()
+
+
+class RevertOneWorker(QObject):
+    """Reverts a single manifest entry on its own QThread.
+
+    Mirrors ``RevertWorker`` (revert-all) but operates on one fix: ``revert_fix``
+    performs the system change off the GUI thread, then -- only on success --
+    ``remove_fix_from_manifest`` prunes that entry. ``revert_fix`` returns
+    ``(True, "<warning>")`` for some fixes (e.g. a display revert needs a reboot);
+    that warning string is carried through ``revert_finished`` so the controller
+    can surface it. A ``(False, err)`` result prunes nothing and emits
+    ``revert_failed`` with the real error string (not a placeholder type).
+    """
+
+    revert_started = Signal()
+    revert_finished = Signal(str, str)  # (fix key, warning) -- warning="" when clean
+    revert_failed = Signal(str)  # user-facing error message
+
+    def __init__(self, entry: dict) -> None:
+        super().__init__()
+        self._entry = entry
+
+    def run(self) -> None:
+        try:
+            self.revert_started.emit()
+            from src.utils.revert import remove_fix_from_manifest, revert_fix
+            ok, err = revert_fix(self._entry)
+            if not ok:
+                self.revert_failed.emit(err or "revert failed")
+                return
+            remove_fix_from_manifest(self._entry)
+        except Exception as exc:
+            get_debug_logger().error("RevertOneWorker uncaught exception", exc_info=True)
+            self.revert_failed.emit(f"{type(exc).__name__}: {exc}")
+            return
+        # err is a SUCCESS-with-warning string for some fixes (e.g. display reboot).
+        self.revert_finished.emit(self._entry.get("fix", ""), err)
 
 
 class SystemStatsWorker(QObject):

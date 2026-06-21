@@ -48,6 +48,7 @@ SETTING_IDS: dict[str, int] = {
     "dlss_preset_profile":      0x00634291,  # DLSS - Forced Model Preset Profile
     "dlss_preset_letter":       0x10E41DF3,  # DLSS - Forced Preset Letter
     "power_mgmt":               0x1057EB71,  # Power Management - Mode
+    "rtx_hdr_enable":           0x00DD48FB,  # RTX HDR - Enable (read-only in v1; write flags are TODO T-040)
 }
 
 # Target values for optimal gaming configuration.

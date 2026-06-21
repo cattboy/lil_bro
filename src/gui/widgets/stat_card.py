@@ -9,7 +9,9 @@ source of truth shared by ``Dashboard`` and ``LiveStatRow``.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
+
+from src.gui.widgets.info_marker import InfoMarker
 
 
 STAT_CARDS = (
@@ -33,9 +35,17 @@ class StatCard(QFrame):
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(4)
 
+        # Header row: the small uppercase label, with room for an optional
+        # "?" info marker mounted later via set_info() (temp tiles only).
+        self._header = QHBoxLayout()
+        self._header.setContentsMargins(0, 0, 0, 0)
+        self._header.setSpacing(6)
         self._label = QLabel(label)
         self._label.setObjectName("cardLabel")
-        layout.addWidget(self._label)
+        self._header.addWidget(self._label)
+        self._header.addStretch()
+        layout.addLayout(self._header)
+        self._info_marker: InfoMarker | None = None
 
         self._value = QLabel("—")
         self._value.setObjectName("cardValue")
@@ -45,3 +55,18 @@ class StatCard(QFrame):
 
     def set_value(self, text: str) -> None:
         self._value.setText(text)
+
+    def set_info(self, title: str, body: str) -> None:
+        """Attach (or update) a hover "?" info marker on the header row.
+
+        The marker shows ``title``/``body`` as a styled tooltip flyout on
+        hover. The dashboard calls this for the CPU/GPU temperature tiles
+        only; other tiles (and the LiveStatRow) never call it, so they stay
+        marker-free.
+        """
+        if self._info_marker is None:
+            self._info_marker = InfoMarker(title, body, parent=self)
+            # Header order: index 0 = label, then marker, then the stretch.
+            self._header.insertWidget(1, self._info_marker)
+        else:
+            self._info_marker.set_help(title, body)

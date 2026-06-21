@@ -24,6 +24,7 @@ from typing import Optional
 from ...utils.action_logger import action_logger
 from ...utils.debug_logger import get_debug_logger
 from ...utils.formatting import print_dim, print_info, print_step, print_step_done, print_warning
+from ...utils.pawnio_ownership import mark_pawnio_owned
 from ...utils.platform import is_admin
 from ...utils.subprocess_utils import CREATE_NO_WINDOW
 from .lhm_discovery import _LHM_SEARCH_PATHS, _PROJECT_ROOT, find_lhm_executable
@@ -149,6 +150,9 @@ class LHMSidecar:
                 # Not admin -- lhm-server.exe needs admin to install PawnIO on
                 # first run.  Elevate via ShellExecuteW so the UAC prompt appears
                 # on behalf of lhm-server.exe specifically.
+                # NOTE: the elevated process has no captured stdout, so PawnIO
+                # install detection below (and its ownership marker) never fires on
+                # this path -- the non-admin install-logging gap tracked in TODOS.
                 extra_args = " ".join(parent_flag)
                 ret = ctypes.windll.shell32.ShellExecuteW(
                     None,        # hwnd
@@ -182,14 +186,20 @@ class LHMSidecar:
                 pid_str = str(self._process.pid) if self._process else "elevated"
                 log.info("LHM Sidecar: Launched (PID %s) Port %s", pid_str, LHM_PORT)
                 time.sleep(0.3)  # brief flush window for drain threads
-                # Log PawnIO install outcome from lhm-server stdout
+                # Log PawnIO install outcome from lhm-server stdout. Mark lil_bro as
+                # the PawnIO owner on either terminal outcome -- the Driver Store
+                # entry exists even when the service failed to start -- so cleanup
+                # removes our own leftover on a same-boot re-run (covers the fast
+                # path where readiness beat the "installing pawnio" line below).
                 for line in self._stdout_lines:
                     if "pawnio installed and running" in line.lower():
+                        mark_pawnio_owned()
                         action_logger.log_action(
                             "PawnIO", "Driver installed via Driver Store", outcome="PASS"
                         )
                         break
                     if "pawnio installed but service did not start" in line.lower():
+                        mark_pawnio_owned()
                         action_logger.log_action(
                             "PawnIO", "Driver installed but service failed", outcome="FAIL"
                         )
@@ -208,6 +218,11 @@ class LHMSidecar:
                     if "installing pawnio" in line.lower():
                         print()  # end the open "Launching sidecar" step line
                         print_step("Installing PawnIO kernel driver")
+                        # Claim ownership as early as the install starts so a crash
+                        # before cleanup still leaves a same-boot breadcrumb; a
+                        # failed/empty install self-corrects (cleanup's
+                        # nothing-to-clean branch clears the marker).
+                        mark_pawnio_owned()
                         action_logger.log_action("PawnIO", "Driver Store installation started")
                         _pawnio_step_shown = True
                         break

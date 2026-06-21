@@ -21,6 +21,7 @@ from src.collectors.sub.lhm_sidecar import LHMSidecar
 from src.utils.formatting import print_info, print_dim
 from src.utils.action_logger import action_logger
 from src.utils.debug_logger import get_debug_logger
+from src.utils.pawnio_ownership import clear_pawnio_owned_marker, marker_is_current_boot
 from src.utils.platform import is_admin
 from src.utils.subprocess_utils import CREATE_NO_WINDOW
 
@@ -140,17 +141,23 @@ def _find_pawnio_setup_exe() -> "str | None":
 def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
     """Stop and remove the PawnIO kernel driver via its official uninstaller.
 
-    Requires admin privileges -- skips silently if not elevated, since PawnIO
-    would not have been installed without admin in the first place.
+    Requires admin privileges. lil_bro removes PawnIO only when it owns the driver:
+    either it installed PawnIO this run (``was_preinstalled`` is False) or a same-boot
+    ownership marker proves the driver is our leftover (see
+    ``src/utils/pawnio_ownership.py``). A PawnIO present before launch with no
+    current-boot marker belongs to the user or another app (HWiNFO,
+    LibreHardwareMonitor) and is left untouched.
 
-    If was_preinstalled is True the driver was present before lil_bro launched
-    (i.e. the user installed it via pawnio_setup.exe) and must not be touched.
+    Every exit path logs its disposition, so the action log always records why PawnIO
+    was or was not removed -- silent early returns were the reason a deliberate skip
+    (or a removal) left no trace in lil_bro_actions.log.
     """
     from src.utils.formatting import print_step, print_step_done
 
     if not is_admin():
-        return
-    if was_preinstalled:
+        action_logger.log_action(
+            "PawnIO", "Uninstall skipped — not elevated", outcome="SKIP"
+        )
         return
 
     pawnio_exists = _pawnio_service_exists()
@@ -162,7 +169,27 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
     if not pawnio_exists:
         oem_inf = _find_pawnio_oem_inf()
         if not oem_inf:
-            return  # nothing to clean
+            # Nothing installed anywhere -- drop any stale ownership marker (e.g. an
+            # install that produced nothing, or a prior removal already completed).
+            clear_pawnio_owned_marker()
+            action_logger.log_action(
+                "PawnIO", "No PawnIO driver found — nothing to remove", outcome="SKIP"
+            )
+            return
+
+    # PawnIO is present. Decide ownership: either we installed it this run, or a
+    # same-boot marker proves it is our leftover. A pre-boot marker is stale (its
+    # pending deletion completed at the reboot) and confers no ownership -- so a
+    # third-party PawnIO that appears after a reboot is never removed.
+    owned = (not was_preinstalled) or marker_is_current_boot()
+    if not owned:
+        clear_pawnio_owned_marker()  # stale pre-boot marker is now known-irrelevant
+        action_logger.log_action(
+            "PawnIO",
+            "Present before launch and not installed by lil_bro — leaving existing driver intact",
+            outcome="SKIP",
+        )
+        return
 
     print_step("Removing PawnIO kernel driver")
     action_logger.log_action("PawnIO", "Uninstalling kernel driver")
@@ -211,6 +238,7 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
     #    handle is still open (rare once the LHM sidecar has shut down
     #    gracefully) the service is marked for deletion and finishes at the
     #    next reboot — surface that so the user knows.
+    service_fully_removed = False
     try:
         delete_result = subprocess.run(
             ["sc", "delete", _PAWNIO_SERVICE],
@@ -219,12 +247,14 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
         )
         if delete_result.returncode == 0:
             action_logger.log_action("Cleanup", "PawnIO service entry removed (sc delete)")
+            service_fully_removed = True
         elif delete_result.returncode == 1060:
-            pass  # Service already gone — no-op.
+            service_fully_removed = True  # Service already gone — no-op.
         elif delete_result.returncode == 1072:
             action_logger.log_action(
                 "Cleanup",
-                "PawnIO marked for deletion — will complete at next reboot",
+                "PawnIO marked for deletion — will complete at next reboot; "
+                "ownership marker retained for same-boot retry",
             )
         else:
             action_logger.log_action(
@@ -233,8 +263,19 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
     except Exception as e:
         action_logger.log_action("Cleanup", f"sc delete PawnIO failed ({e})")
 
+    # Drop the ownership marker only once the service is truly gone. If it is merely
+    # marked-for-deletion (1072) keep the marker so a same-boot re-run knows the
+    # leftover is still ours and retries the removal.
+    if service_fully_removed:
+        clear_pawnio_owned_marker()
+
     print_step_done(True)
-    action_logger.log_action("PawnIO", "Kernel driver removed", outcome="PASS")
+    if service_fully_removed:
+        action_logger.log_action("PawnIO", "Kernel driver removed", outcome="PASS")
+    else:
+        action_logger.log_action(
+            "PawnIO", "Kernel driver removal pending reboot", outcome="WARN"
+        )
 
 
 def _cleanup_cwd_tempdir() -> None:
@@ -355,5 +396,23 @@ def post_run_cleanup(lhm: Optional[LHMSidecar], pawnio_was_preinstalled: bool = 
         _cleanup_stale_mei()
     except Exception:
         get_debug_logger().warning("Stale _MEI cleanup failed during cleanup", exc_info=True)
+
+    # 5. Record the hand-off of our OWN _MEI* extraction dir. _cleanup_stale_mei
+    #    skips it on purpose (its files are in use while we run), and the PyInstaller
+    #    bootloader removes it only after the interpreter exits -- which is unloggable
+    #    in-process. Note it here so the action log accounts for the dir; a FAILURE to
+    #    remove it still surfaces as the WARN on the next startup
+    #    (cleanup_orphaned_mei_at_startup). Frozen-build only -- no _MEI* in dev mode.
+    try:
+        import sys as _sys
+        current_mei = getattr(_sys, "_MEIPASS", None)
+        if current_mei:
+            action_logger.log_action(
+                "Cleanup",
+                "PyInstaller temp dir handed to bootloader for removal on exit",
+                str(current_mei),
+            )
+    except Exception:
+        get_debug_logger().warning("MEI hand-off note failed during cleanup", exc_info=True)
 
     print_dim("  Cleanup complete. lil_bro leaves no trace, just like a true bro should.")

@@ -15,25 +15,28 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from functools import partial
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from src.gui.theme import repolish
 
-# Human-readable titles for the 5 registered fix checks (the @register_fix keys
+# Human-readable titles for the registered fix checks (the @register_fix keys
 # in src/pipeline/fix_dispatch.py). Unknown checks fall back to a title-cased slug.
 _FIX_LABELS: dict[str, str] = {
     "game_mode": "Game Mode",
     "power_plan": "Power Plan",
     "display": "Display Refresh Rate",
     "nvidia_profile": "NVIDIA Profile",
+    "nvidia_dlss_preset": "NVIDIA DLSS Preset",
     "temp_folders": "Temp Folders",
 }
 
@@ -121,6 +124,8 @@ def _format_transition(entry: dict) -> str:
 class LastRunCard(QFrame):
     """Read-only list of applied fixes. Populated via ``set_manifest``."""
 
+    revert_one_requested = Signal(dict)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("lastRunCard")
@@ -148,10 +153,16 @@ class LastRunCard(QFrame):
         # deleteLater on each refresh (mirrors Dashboard._rebuild_monitor_cards).
         self._rows: list[QWidget] = []
 
+        # Per-row "Revert" buttons (interactive mode only), tracked so an
+        # in-flight revert can disable them all (set_revert_buttons_enabled).
+        self._revert_buttons: list[QPushButton] = []
+
     # ── public API ──────────────────────────────────────────────────────
-    def set_manifest(self, manifest: object) -> bool:
+    def set_manifest(self, manifest: object, interactive: bool = False) -> bool:
         """Render the manifest. Returns True if the card has content to show.
 
+        ``interactive`` adds a per-row "↩ Revert" button on each *eligible*
+        revertible row (the Revert page passes True; read-only callers omit it).
         Defensive against raw on-disk data: a non-dict, an unknown
         ``schema_version``, or an empty/absent ``fixes`` list all render nothing
         and return False (the caller then hides the card).
@@ -178,7 +189,7 @@ class LastRunCard(QFrame):
 
         for entry in fixes:
             if isinstance(entry, dict):
-                self._rows.append(self._build_row(entry))
+                self._rows.append(self._build_row(entry, interactive))
         return True
 
     # ── internals ───────────────────────────────────────────────────────
@@ -187,9 +198,13 @@ class LastRunCard(QFrame):
             self._rows_box.removeWidget(row)
             row.deleteLater()
         self._rows = []
+        # Buttons live inside the rows above (parented to them), so they are torn
+        # down with their row; just drop our tracking references.
+        self._revert_buttons = []
 
-    def _build_row(self, entry: dict) -> QWidget:
+    def _build_row(self, entry: dict, interactive: bool = False) -> QWidget:
         revertible = bool(entry.get("revertible"))
+        fix = str(entry.get("fix", ""))
 
         row = QWidget(self)
         row.setObjectName("lastRunRow")
@@ -200,7 +215,7 @@ class LastRunCard(QFrame):
         # Left column: fix name (primary), then a muted time + transition sub-line.
         left = QVBoxLayout()
         left.setSpacing(2)
-        name_lbl = QLabel(_fix_label(str(entry.get("fix", ""))))
+        name_lbl = QLabel(_fix_label(fix))
         left.addWidget(name_lbl)
 
         sub_parts: list[str] = []
@@ -218,7 +233,8 @@ class LastRunCard(QFrame):
 
         h.addStretch()
 
-        # Right column: revert-status badge, plus the inline reason when non-revertible.
+        # Right column: revert-status badge, the inline reason when non-revertible,
+        # and (interactive mode) a per-row Revert button.
         right = QVBoxLayout()
         right.setSpacing(2)
         badge = QLabel("Revertible" if revertible else "Not revertible")
@@ -235,7 +251,33 @@ class LastRunCard(QFrame):
                 reason_lbl.setObjectName("pollStatus")
                 reason_lbl.setToolTip(reason)
                 right.addWidget(reason_lbl, alignment=Qt.AlignmentFlag.AlignRight)
+        elif interactive:
+            # Every revertible row gets a one-click Revert button -- NVIDIA rows
+            # included. Reverting either NVIDIA row restores the pinned pristine
+            # profile and undoes both NVIDIA fixes; the controller shows a confirm
+            # dialog for that group effect (start_revert_one), so the card stays
+            # NVIDIA-agnostic here.
+            btn = QPushButton("↩  Revert")
+            btn.setObjectName("rowRevertBtn")
+            btn.setProperty("navRole", "nav")
+            btn.setProperty("navState", "warning")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            # Bind the entry explicitly: a bare lambda in this loop would capture
+            # the loop variable, so every button would emit the LAST row's entry.
+            btn.clicked.connect(partial(self.revert_one_requested.emit, entry))
+            self._revert_buttons.append(btn)
+            right.addWidget(btn, alignment=Qt.AlignmentFlag.AlignRight)
         h.addLayout(right)
 
         self._rows_box.addWidget(row)
         return row
+
+    def set_revert_buttons_enabled(self, enabled: bool) -> None:
+        """Enable/disable every per-row Revert button.
+
+        Called by ``RevertView`` so an in-flight revert (all or one) greys the row
+        buttons -- and, crucially, so that state survives a QFileSystemWatcher
+        rebuild, since RevertView re-applies it after every ``set_manifest``.
+        """
+        for btn in self._revert_buttons:
+            btn.setEnabled(enabled)

@@ -47,7 +47,8 @@ class MainWindow(QMainWindow):
     stop_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None,
-                 settings: Settings | None = None) -> None:
+                 settings: Settings | None = None,
+                 debug: bool = False) -> None:
         super().__init__(parent)
         self.setWindowTitle("lil_bro")
         self.setMinimumSize(1280, 800)
@@ -55,6 +56,9 @@ class MainWindow(QMainWindow):
         self.setAccessibleDescription("Local AI gaming PC optimizer")
 
         self._settings = settings
+        # Gates the "View Debug Log" sidebar button (visible only under --debug).
+        # Set before _build_sidebar() so it can read self._debug.
+        self._debug = debug
         if self._settings is not None:
             self._settings.restore_geometry(self)
 
@@ -126,21 +130,30 @@ class MainWindow(QMainWindow):
             shortcut.activated.connect(button.click)
             self._nav_shortcuts.append(shortcut)
 
-        # Sidebar action hotkeys: R -> Revert, E -> Exit, A -> AI Setup. Same
-        # WindowShortcut scope as the nav hotkeys above, so they stay inert
-        # while a modal dialog (e.g. the confirm dialogs these open) holds
-        # focus. R and E route through handlers; A drives the AI Setup button
-        # directly, mirroring the nav hotkeys' "click the existing button"
-        # approach.
+        # Sidebar action hotkeys: R -> Revert, E -> Exit, A -> AI Setup,
+        # H -> Help / FAQ (replay the coachmark tour). Same WindowShortcut scope
+        # as the nav hotkeys above, so they stay inert while a modal dialog (e.g.
+        # the confirm dialogs these open) holds focus. R and E route through
+        # handlers; A and H drive their sidebar buttons directly, mirroring the
+        # nav hotkeys' "click the existing button" approach.
         self._action_shortcuts = []
         for key, slot in (
             (Qt.Key.Key_R, self._on_revert_hotkey),
             (Qt.Key.Key_E, self._on_exit_requested),
             (Qt.Key.Key_A, self._ai_setup_button.click),
+            (Qt.Key.Key_H, self._help_button.click),
         ):
             shortcut = QShortcut(QKeySequence(key), self)
             shortcut.activated.connect(slot)
             self._action_shortcuts.append(shortcut)
+
+        # First-run coachmark tour controller. Pre-allocated here (like the
+        # dashboard cards) so it parents correctly in the bundled exe; the
+        # one-time first-run show is scheduled later from app.run()'s post-show
+        # tail / StartupCoordinator.on_finished (both inside app.exec()).
+        # Replayed on demand via the Help / FAQ (H) button.
+        from src.gui.widgets.coachmarks import CoachmarkController
+        self._coachmark_controller = CoachmarkController(self, self._settings)
 
     def _inject_status_bar(self, widget) -> None:
         """Pin the custom status bar widget to the bottom of the main window."""
@@ -193,23 +206,34 @@ class MainWindow(QMainWindow):
         col.addWidget(divider)
         col.addSpacing(4)
 
-        # Utility nav
-        self._nav_log = self._nav_btn("📄  View Debug Log", state="muted")
+        # Utility nav. "View Log" (the action audit log) is always shown; the
+        # verbose "View Debug Log" is only useful under --debug, so it is added
+        # to the layout but hidden unless self._debug (setVisible, not
+        # conditional layout membership, so the widget never orphans).
+        self._nav_action_log = self._nav_btn("📄  View Log", state="muted")
+        self._nav_debug_log = self._nav_btn("📄  View Debug Log", state="muted")
         self._revert_button = self._nav_btn("↩  Revert Changes (R)", state="warning")
         self._ai_setup_button = self._nav_btn("⚙  AI Setup (A)", state="muted")
+        self._help_button = self._nav_btn("❔  Help / FAQ (H)", state="muted")
         self._nav_exit = self._nav_btn("✕  Exit (E)", state="danger")
 
-        col.addWidget(self._nav_log)
+        col.addWidget(self._nav_action_log)
+        col.addWidget(self._nav_debug_log)
         col.addWidget(self._revert_button)
         col.addWidget(self._ai_setup_button)
+        col.addWidget(self._help_button)
         col.addWidget(self._nav_exit)
 
         # Wire built-in nav actions
         self._nav_dashboard.clicked.connect(self.show_dashboard)
         self._run_button.clicked.connect(self.show_output)
         self._stop_button.clicked.connect(self._on_stop_clicked)
-        self._nav_log.clicked.connect(self._open_debug_log)
+        self._nav_action_log.clicked.connect(self._open_action_log)
+        self._nav_debug_log.clicked.connect(self._open_debug_log)
+        self._nav_debug_log.setVisible(self._debug)
         self._revert_button.clicked.connect(self.show_revert)
+        # Help / FAQ replays the first-run coachmark tour on demand.
+        self._help_button.clicked.connect(self._on_help_requested)
         # Exit routes through a W/S confirm dialog rather than closing directly.
         self._nav_exit.clicked.connect(self._on_exit_requested)
 
@@ -357,21 +381,46 @@ class MainWindow(QMainWindow):
         if dlg.exec():
             self.close()
 
+    def _on_help_requested(self) -> None:
+        """H / sidebar Help: replay the first-run coachmark tour on demand.
+
+        Switches to the Dashboard first so the tour's targets (the quick-fix
+        cards) exist, then restarts the controller regardless of the seen-flag.
+        """
+        self.show_dashboard()
+        controller = getattr(self, "_coachmark_controller", None)
+        if controller is not None:
+            controller.start()
+
     # ── Debug log ──────────────────────────────────────────────────────
 
     def _open_debug_log(self) -> None:
         from src.utils.paths import get_debug_log_path
+        self._open_log(
+            get_debug_log_path(),
+            "No debug log found",
+            "Run lil_bro at least once to generate a log.",
+        )
+
+    def _open_action_log(self) -> None:
+        from src.utils.paths import get_action_log_path
+        self._open_log(
+            get_action_log_path(),
+            "No action log found",
+            "Run an optimization at least once to generate a log.",
+        )
+
+    def _open_log(self, path, missing_title: str, missing_msg: str) -> None:
+        """Open a log file in the default viewer, or show an info card if absent.
+
+        Shared by _open_debug_log (lil_bro_debug.log) and _open_action_log
+        (lil_bro_actions.log) — only the path and the missing-file copy differ.
+        """
         from src.gui.widgets.dialogs import CardDialog
-        path = get_debug_log_path()
         if path.exists():
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
         else:
-            CardDialog(
-                "No debug log found",
-                "Run lil_bro at least once to generate a log.",
-                tone="info",
-                parent=self,
-            ).exec()
+            CardDialog(missing_title, missing_msg, tone="info", parent=self).exec()
 
     # ── Lifecycle ──────────────────────────────────────────────────────
 
@@ -379,3 +428,16 @@ class MainWindow(QMainWindow):
         if self._settings is not None:
             self._settings.save_geometry(self)
         super().closeEvent(event)
+
+    def showEvent(self, event):  # noqa: N802  Qt override
+        super().showEvent(event)
+        # Kick the one-time first-run coachmark tour on the first show. show() is
+        # called from app.run() AFTER splash.exec() returns, so this runs in the
+        # app.exec() lead-in -- the QTimer scheduled by schedule_first_run is not
+        # dropped in the bundled exe (the splash-loop trap; see scroll_hint.py).
+        if getattr(self, "_coachmark_first_show", False):
+            return
+        self._coachmark_first_show = True
+        controller = getattr(self, "_coachmark_controller", None)
+        if controller is not None:
+            controller.schedule_first_run()

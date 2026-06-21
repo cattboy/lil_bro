@@ -29,22 +29,27 @@ from src.gui.startup import StartupOrchestrator
 from src.gui.startup_coordinator import StartupCompleter, StartupCoordinator
 from src.gui.windows.main_window import MainWindow
 from src.agent_tools.game_mode import analyze_game_mode
+from src.agent_tools.hags import analyze_hags
 from src.agent_tools.nvidia_profile import analyze_nvidia_profile
 from src.agent_tools.power_plan import analyze_power_plan
 from src.utils.action_logger import action_logger
 
 
 def _install_exception_hooks(log) -> None:
-    """Route uncaught main-thread and worker-thread exceptions to the debug log."""
+    """Route uncaught main-thread and worker-thread exceptions to the debug log.
+
+    Records go through log_crash so each carries the app version — in error-only
+    mode the SESSION banner is filtered, so this is the only build identifier on
+    a normal-mode crash log.
+    """
+    from src.utils.debug_logger import log_crash
+
     def _main_excepthook(exc_type, exc_value, exc_tb):
-        log.error("Uncaught exception", exc_info=(exc_type, exc_value, exc_tb))
+        log_crash(log, "uncaught exception", (exc_type, exc_value, exc_tb))
 
     def _thread_excepthook(args):
-        log.error(
-            "Uncaught exception in thread %s",
-            args.thread.name if args.thread else "unknown",
-            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
-        )
+        where = f"uncaught exception in thread {args.thread.name if args.thread else 'unknown'}"
+        log_crash(log, where, (args.exc_type, args.exc_value, args.exc_traceback))
 
     sys.excepthook = _main_excepthook
     threading.excepthook = _thread_excepthook
@@ -159,8 +164,9 @@ def run(debug: bool = False) -> int:
     import secrets
     from src.utils.debug_logger import enable_debug_logging, get_debug_logger
 
-    level = logging.DEBUG if debug else logging.INFO
-    enable_debug_logging(level=level)
+    # Error-only fallback: no file on a clean run; a crash still writes the
+    # traceback to lil_bro_debug.log. --debug gives the full verbose DEBUG log.
+    enable_debug_logging(level=logging.DEBUG if debug else logging.ERROR)
     log = get_debug_logger()
     _install_exception_hooks(log)
 
@@ -168,6 +174,11 @@ def run(debug: bool = False) -> int:
     # (a locked file -> the at-exit "Failed to remove temporary directory" dialog,
     # which is unloggable in-process). Record it now, on the next launch, then
     # delete it. No-op in dev mode (no _MEI*).
+    # Open the single per-launch action-log SESSION here (mirrors terminal
+    # main()): startup, fixes, reverts, and shutdown cleanup all log into this
+    # one banner-stamped session; it is closed after app.exec() returns.
+    action_logger.log_session_start()
+
     from src.pipeline.post_run_cleanup import cleanup_orphaned_mei_at_startup
     cleanup_orphaned_mei_at_startup()
 
@@ -210,7 +221,7 @@ def run(debug: bool = False) -> int:
 
     from src.gui.settings import Settings
     settings = Settings()
-    main = MainWindow(settings=settings)
+    main = MainWindow(settings=settings, debug=debug)
 
     # ── Session identity ───────────────────────────────────────────────
     session_id = secrets.token_hex(4)
@@ -285,6 +296,7 @@ def run(debug: bool = False) -> int:
     # Sidebar revert button navigates to the revert page (wired in _build_sidebar).
     # The in-page revert action button triggers the actual revert run.
     main._revert_view.revert_requested.connect(pipeline.start_revert)
+    main._revert_view.revert_one_requested.connect(pipeline.start_revert_one)
     main._revert_view.system_restore_requested.connect(pipeline.open_system_restore)
 
     app.aboutToQuit.connect(
@@ -355,6 +367,7 @@ def run(debug: bool = False) -> int:
         _specs = runtime.get("preloaded_specs", {}) or {}
         try:
             main._dashboard.set_monitor_data(_specs.get("DisplayCapabilities", []))
+            main._dashboard.set_hdr_data(_specs)
             main._dashboard.monitor_fix_requested.connect(startup.on_monitor_fix_requested)
             main._dashboard.monitor_refresh_requested.connect(startup.refresh_monitor_card)
             main._dashboard.seed_dlss_priority(_specs)
@@ -363,12 +376,19 @@ def run(debug: bool = False) -> int:
             main._dashboard.nvidia_fix_requested.connect(startup.on_nvidia_fix_requested)
             main._dashboard.set_power_plan_data(_specs.get("PowerPlan"))
             main._dashboard.set_game_mode_data(_specs.get("GameMode"))
+            main._dashboard.set_hags_data(_specs.get("HAGS"))
             main._dashboard.set_power_plan_findings(analyze_power_plan(_specs))
             main._dashboard.set_game_mode_findings(analyze_game_mode(_specs))
+            main._dashboard.set_hags_findings(analyze_hags(_specs))
             main._dashboard.power_plan_fix_requested.connect(startup.on_power_plan_fix_requested)
             main._dashboard.game_mode_fix_requested.connect(startup.on_game_mode_fix_requested)
+            main._dashboard.hags_fix_requested.connect(startup.on_hags_fix_requested)
             runtime["_monitor_wired"] = True
         except Exception as exc:
             log.warning("Could not wire monitor card: %s", exc, exc_info=True)
 
-    return app.exec()
+    exit_code = app.exec()
+    # Close the per-launch action-log SESSION. aboutToQuit (_run_app_cleanup)
+    # has already run inside app.exec(), so shutdown entries precede the END.
+    action_logger.log_session_end()
+    return exit_code

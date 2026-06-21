@@ -96,11 +96,12 @@ class TestDispatchNvidiaDlssPreset:
         from src.pipeline.fix_dispatch import FIX_REGISTRY
         assert "nvidia_dlss_preset" in FIX_REGISTRY
 
+    @patch("src.utils.revert.get_session_nvidia_backup_path", return_value=None)
     @patch("src.utils.revert.append_fix_to_manifest")
     @patch("src.agent_tools.nvidia_profile_setter.fix_nvidia_dlss_preset", return_value=True)
     @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="b.nip")
     @patch("src.utils.nvidia_npi.find_npi_exe", return_value="npi.exe")
-    def test_execute_records_revertible(self, _npi, _backup, _fix, mock_append):
+    def test_execute_records_revertible(self, _npi, _backup, _fix, mock_append, _pin):
         from src.pipeline.fix_dispatch import execute_fix
         assert execute_fix("nvidia_dlss_preset", _SPECS_5090) is True
         mock_append.assert_called_once()
@@ -108,6 +109,20 @@ class TestDispatchNvidiaDlssPreset:
         assert entry["fix"] == "nvidia_dlss_preset"
         assert entry["revertible"] is True
         assert entry["before_backup"] == "b.nip"
+
+    @patch("src.utils.revert.get_session_nvidia_backup_path", return_value="pinned.nip")
+    @patch("src.utils.revert.append_fix_to_manifest")
+    @patch("src.agent_tools.nvidia_profile_setter.fix_nvidia_dlss_preset", return_value=True)
+    @patch("src.agent_tools.nvidia_profile_setter.backup_nvidia_profile", return_value="fresh.nip")
+    @patch("src.utils.nvidia_npi.find_npi_exe", return_value="npi.exe")
+    def test_execute_reuses_pinned_nvidia_backup(self, _npi, mock_backup, _fix, mock_append, _pin):
+        """v2: when a session pristine backup is already pinned, the DLSS fix
+        REUSES it (no fresh export) and records it as before_backup."""
+        from src.pipeline.fix_dispatch import execute_fix
+        assert execute_fix("nvidia_dlss_preset", _SPECS_5090) is True
+        mock_backup.assert_not_called()
+        entry = mock_append.call_args[0][0]
+        assert entry["before_backup"] == "pinned.nip"
 
     @patch("src.utils.revert.append_fix_to_manifest")
     @patch("src.agent_tools.nvidia_profile_setter.fix_nvidia_dlss_preset", side_effect=Exception("boom"))

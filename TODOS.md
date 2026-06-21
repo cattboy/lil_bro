@@ -7,6 +7,67 @@ Format: Priority | Effort (human / CC) | Context
 
 ## Open
 
+### T-044 — PawnIO ownership: two residual leak edges (boot-gating miss + non-admin install)
+**Priority:** P3
+**Effort:** S human / S with CC
+**Why:** The cross-run PawnIO ownership marker (`src/utils/pawnio_ownership.py`) decides "is this PawnIO lil_bro's leftover?" by boot-session gating — a marker older than the last boot is treated as stale and the driver is left alone (errs toward never removing a third-party HWiNFO/LibreHardwareMonitor PawnIO). Two narrow cases still leak a lil_bro-owned PawnIO: (1) **boot-gating miss** — lil_bro installs PawnIO then hard-crashes BEFORE cleanup runs `sc delete`, so it survives the reboot as a normal service; the next run's marker is now pre-boot (stale) → treated as third-party and never removed. (2) **non-admin install gap** — when `lil_bro.exe` runs without admin, `lhm_sidecar.start()` elevates `lhm-server.exe` via `ShellExecuteW` with no captured stdout, so install detection (and the ownership marker write) never fires; a PawnIO installed on that path is invisible in the action log and unmarked.
+**Fix:** For (1), consider also clearing/refreshing the marker on a confirmed-absent probe at startup, or accept it (rare — needs a crash in the install→quit window; the safe failure). For (2), give the elevated path a way to report PawnIO install status back (e.g. lhm-server writes a small status file, or a post-launch service-presence probe diffs against the pre-launch `pawnio_was_preinstalled` snapshot) and write the marker from that.
+**Blocked by:** none. Reference: `src/utils/pawnio_ownership.py`, `src/collectors/sub/lhm_sidecar.py` (`start`, ShellExecuteW branch), `src/pipeline/post_run_cleanup.py:_uninstall_pawnio`.
+**Added:** 2026-06-21 (deferred from /investigate on the PawnIO uninstall-not-logged fix)
+
+---
+
+### T-043 — faulthandler under --debug for native/Qt crash traces
+**Priority:** P3
+**Effort:** S human / S with CC
+**Why:** The error-only debug log + `sys.excepthook`/`threading.excepthook` only catch Python-level exceptions. A native crash (Qt/C++ access violation, e.g. the cross-test `thermal_chart.paintEvent` segfault, or a driver-layer fault) bypasses Python's hooks entirely and leaves no trace. `faulthandler.enable(file=...)` would capture the C-level traceback.
+**Fix:** In `src/gui/app.py:run()`, when `debug` is True, `faulthandler.enable(file=<open lil_bro_debug.log handle>)`. Gate strictly behind `--debug` only — faulthandler needs a session-long open file handle, so it must never run in normal mode (which must stay file-free on a clean run). Note the GUI build is `console=False` (`sys.stderr` is None), so a real file handle is required, not stderr. Low priority; capture only became relevant if a field native crash is reported.
+**Blocked by:** none. Reference: `src/utils/debug_logger.py` (error-only logging), `src/gui/app.py:_install_exception_hooks`.
+**Added:** 2026-06-20 (deferred from /plan-eng-review on the debug-log gating plan)
+
+---
+
+### T-041 — Consolidate duplicated fix-label maps
+**Priority:** P3
+**Effort:** S human / S with CC
+**Why:** Two separate maps translate internal fix keys → human labels and already disagree: `_FIX_LABELS` in `src/gui/widgets/last_run_card.py:32` ("Temp Folders") vs the `names` dict in `phase_revert._display_name` `src/pipeline/phase_revert.py:162` ("Temp cleanup") for the same `temp_folders` key. Cosmetic today, but they drift independently as fixes are added.
+**Fix:** Consolidate into one shared fix-label map (e.g. a small constant in `src/utils/revert.py` or a tiny constants module) consumed by both the card and the terminal display. Keep the unknown-key title-case fallback.
+**Blocked by:** Nothing. Low priority, do opportunistically.
+**Added:** 2026-06-20 (deferred from /plan-eng-review on the per-item revert plan)
+
+---
+
+### T-039 — HDR auto-fix: Auto HDR one-click write (Windows registry)
+**Priority:** P2
+**Effort:** M human / M with CC
+**Why:** The HDR Optimization card ships detection-only in v1 (recommend + deep-link). This is the deferred one-click "turn Auto HDR on" write. Saves the zero-think user one trip into Windows Settings, but carries the largest risk surface in the HDR feature, so it was split out for hardware verification + research.
+**Fix:** Add a PURE `set_auto_hdr_token(current: str|None, enabled: bool) -> str` that edits the `AutoHDREnable` token inside `HKCU\Software\Microsoft\DirectX\UserGpuPreferences\DirectXUserGlobalSettings` (a shared semicolon REG_SZ) without disturbing `VRROptimizeEnable`/`SwapEffectUpgradeEnable`/`DXGIEffects`; exhaustively unit-test it (token present/absent/empty/None, other-tokens-preserved, trailing-semicolon). Thin winreg wrapper mocked once. Route the fix through the existing generic `_CardFixWorker("hdr", ...)` → `_apply_card_fix` (manifest + restore point + `execute_fix`) and `@register_fix("hdr")` in `fix_dispatch.py`. Revert payload = FULL prior REG_SZ string, or an "absent" sentinel (never re-introduce a token Windows never had).
+**Research / verify before shipping (outside-voice findings):**
+  - `scripts/probe_hdr.py` must confirm on real Win11 HW: the exact before/after `DirectXUserGlobalSettings` string, whether the Settings toggle sets `SwapEffectUpgradeEnable=1` alongside `AutoHDREnable=1`, and whether a raw `winreg` write is honored live vs next-game-launch vs sign-out (Open Q1). Success copy must match (likely "applies next time you launch a game").
+  - #4 stale-gate race: re-check LIVE `advancedColorEnabled` inside the fix handler — between collection and the click (esp. after deep-linking the user to Settings) HDR may now be off, making the write silently inert.
+  - #8 HKCU hive under elevation: lil_bro runs elevated (restore points). Confirm the write lands in the intended user's hive, not the elevated account's, under any runas/admin split. First per-user HKCU write in the project (all others are HKLM/machine) — no precedent.
+  - Per-app overrides: `UserGpuPreferences` per-exe values override the global; success copy says "set as your global default," never "every game."
+**Blocked by:** `probe_hdr.py` green on real Win11 + HDR hardware. Deferred from /plan-eng-review D11 (detection-only v1).
+**Added:** 2026-06-19 (deferred from /plan-eng-review on the HDR Optimization card plan)
+
+---
+
+### T-040 — HDR auto-fix: RTX HDR one-click enable (NPI driver flags)
+**Priority:** P2
+**Effort:** L human / M with CC
+**Why:** For RTX 20/30/40/50 owners, RTX HDR is the top-priority HDR path (best quality). This is the deferred one-click "enable RTX HDR" write via NVIDIA Profile Inspector driver flags — what the NVIDIA App makes a multi-step manual chore. Highest-risk path in the feature: undocumented flags, reboot-gated, global scope, mutually exclusive with Auto HDR.
+**Fix:** Write the 4 driver flags into the Base Profile via the NPI machinery (`nvidia_npi.py` / `nvidia_profile_setter.py` / `build_optimized_nip`): `0x00DD48FB=1`, `0x00432F84=2or3` (or `0x06` no-deband), `0x00980896=1`, `0x1077A11A=1`; then reboot. Reuse `_CardFixWorker`/`_apply_card_fix`. Mutual exclusivity: enabling RTX HDR must also turn Auto HDR OFF (compound fix), and vice versa. Add the `applied-pending-reboot` card state persisted in `QSettings`.
+**Research / verify before shipping (outside-voice findings):**
+  - #1 inject-vs-toggle: `build_optimized_nip` only MODIFIES setting IDs already present in the export. A box that never enabled RTX HDR has no such nodes — the write must INJECT 4 setting-nodes, unlike the existing DLSS/ReBAR toggles. `SETTING_IDS` in `nvidia_npi.py` is missing 2 of the 4 flags (`0x00980896`, `0x1077A11A`) — add them. Probe must confirm NPI imports injected (not just modified) settings.
+  - #2 compound atomic rollback: the RTX-path fix is NPI write + HKCU Auto-HDR-off write as ONE manifest entry. Define succeed-or-rollback-together semantics; if half fails you land in the exact `Auto HDR ON + RTX HDR ON` conflict the one-card design prevents.
+  - #5 reboot-flag invalidation: a revert (or the NVIDIA App disabling it) makes the flags not-live while the QSettings "awaiting reboot" flag persists → card stuck on "Restart required" forever. Revert must also clear the flag.
+  - NVIDIA App drift: re-derive RTX HDR state from a fresh `NVIDIAProfile` export every scan (never cached); the App can clobber lil_bro's flags. Cross-check repo `NPI_CustomSettingNames.xml` (2 flags) vs the wild NvTrueHDR recipe (4 flags) on real HW.
+  - Global scope: Base Profile applies RTX HDR to EVERY game (double-tonemaps HDR-native titles, ~10-15% FPS cost). Approval copy must disclose this; exclude low-end RTX (xx50/xx60) from "highest priority" or add an FPS-cost note.
+**Blocked by:** T-039 patterns (shared `_apply_card_fix` route, probe) + `probe_hdr.py` confirming the 4 flags against a known-good NVIDIA-App-enabled profile on real RTX hardware.
+**Added:** 2026-06-19 (deferred from /plan-eng-review D11 on the HDR Optimization card plan)
+
+---
+
 ### T-006 — Observability & Instrumentation
 **Priority:** P3
 **Effort:** L human / L with CC
@@ -150,6 +211,18 @@ Format: Priority | Effort (human / CC) | Context
 ---
 
 ## Completed
+
+### T-042 — NVIDIA granular (per-item) revert via single-source-of-truth .nip
+**Priority:** P2 — **COMPLETED 2026-06-21** (v0.5.1.0)
+Shipped the safe NVIDIA group revert. The first NVIDIA fix of a session pins one pristine pre-lil_bro `.nip` (`get_session_nvidia_backup_path()` in `src/utils/revert.py`); every NVIDIA fix records that single backup, and reverting either `nvidia_profile` or `nvidia_dlss_preset` restores that one pristine snapshot and clears BOTH NVIDIA rows from the manifest (group revert + confirmation dialog), replacing the unsafe stacked per-item `.nip` backups. The per-row Revert buttons are now enabled for the NVIDIA rows in `last_run_card`. v1 (per-line revert) landed in `805493c`; v2 (shared pristine backup + group revert) in `b894c67`.
+
+---
+
+### T-038 — Populate mock OutputView for a real pipeline screenshot
+**Priority:** P3 — **COMPLETED 2026-06-22** (closed per user direction)
+Closed without the originally-scoped artifacts. The README onboarding documents the **Start Optimization** flow with a prose walkthrough plus real widget screenshots (`dashboard.png` hero, the Dashboard quick-fix coachmark, and the revert menu); a dedicated populated-pipeline capture (`docs/screenshots/pipeline.png`) and the OutputView mock fixtures described in the original Fix were **not** added — judged unnecessary given the existing onboarding screenshots.
+
+---
 
 ### T-028 — DLSS V2 config overrides (target_mode / forced_letter)
 **Priority:** P3 — **CLOSED (WONTFIX) 2026-06-15**
