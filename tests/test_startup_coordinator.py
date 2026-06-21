@@ -106,7 +106,7 @@ class TestRefreshMonitorCard:
         runtime: dict = {}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._MonitorRefreshWorker") as mock_worker_cls, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+             patch("src.gui._startup_dashboard_refresh.QThread") as mock_thread_cls:
             coord.refresh_monitor_card()
         mock_worker_cls.assert_called_once_with()
         mock_thread_cls.assert_called_once_with()
@@ -323,7 +323,7 @@ class TestRefreshDashboardFixCards:
         runtime: dict = {}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+             patch("src.gui._startup_dashboard_refresh.QThread") as mock_thread_cls:
             coord.refresh_dashboard_fix_cards()
         # None scope = full re-collect; worker is constructed with sections=None.
         mock_worker_cls.assert_called_once_with(sections=None)
@@ -412,7 +412,7 @@ class TestRefreshDashboardFixCards:
         runtime: dict = {}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
-             patch("src.gui.startup_coordinator.QThread"):
+             patch("src.gui._startup_dashboard_refresh.QThread"):
             coord.refresh_dashboard_fix_cards({"PowerPlan"})
         mock_worker_cls.assert_called_once_with(sections={"PowerPlan"})
 
