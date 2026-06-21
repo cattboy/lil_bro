@@ -68,16 +68,6 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
-### T-038 — Populate mock OutputView for a real pipeline screenshot
-**Priority:** P3
-**Effort:** M human / S-M with CC
-**Why:** `scripts/mock_gui.py --screenshots` renders the Dashboard beautifully (real widgets + fixtures), but the pipeline / Output view is unpopulated in mock mode, so the README's headline flow ("Start Optimization") is documented with prose + the first-run callout instead of a real screenshot.
-**Fix:** Add fixture data for the OutputView (phase-card states + output-panel lines) to `scripts/mock_fixtures.py`; drive it via `MockDriver` in `scripts/mock_gui.py`; capture a `docs/screenshots/pipeline.png` in `_run_screenshots` and embed it in the README "Start Optimization" section.
-**Blocked by:** Nothing. Deferred from the FAQ-Instructions onboarding PR (the Dashboard + coachmark screenshots shipped; the populated pipeline screenshot was out of scope).
-**Added:** 2026-06-17 (deferred from /plan-eng-review on the FAQ-Instructions coachmark plan)
-
----
-
 ### T-006 — Observability & Instrumentation
 **Priority:** P3
 **Effort:** L human / L with CC
@@ -225,6 +215,12 @@ Format: Priority | Effort (human / CC) | Context
 ### T-042 — NVIDIA granular (per-item) revert via single-source-of-truth .nip
 **Priority:** P2 — **COMPLETED 2026-06-21** (v0.5.1.0)
 Shipped the safe NVIDIA group revert. The first NVIDIA fix of a session pins one pristine pre-lil_bro `.nip` (`get_session_nvidia_backup_path()` in `src/utils/revert.py`); every NVIDIA fix records that single backup, and reverting either `nvidia_profile` or `nvidia_dlss_preset` restores that one pristine snapshot and clears BOTH NVIDIA rows from the manifest (group revert + confirmation dialog), replacing the unsafe stacked per-item `.nip` backups. The per-row Revert buttons are now enabled for the NVIDIA rows in `last_run_card`. v1 (per-line revert) landed in `805493c`; v2 (shared pristine backup + group revert) in `b894c67`.
+
+---
+
+### T-038 — Populate mock OutputView for a real pipeline screenshot
+**Priority:** P3 — **COMPLETED 2026-06-22** (closed per user direction)
+Closed without the originally-scoped artifacts. The README onboarding documents the **Start Optimization** flow with a prose walkthrough plus real widget screenshots (`dashboard.png` hero, the Dashboard quick-fix coachmark, and the revert menu); a dedicated populated-pipeline capture (`docs/screenshots/pipeline.png`) and the OutputView mock fixtures described in the original Fix were **not** added — judged unnecessary given the existing onboarding screenshots.
 
 ---
 
