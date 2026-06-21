@@ -145,15 +145,10 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
         pass  # safe: polling worker may already be stopped or never started
     try:
         from src.pipeline.post_run_cleanup import post_run_cleanup
-        from src.utils.action_logger import action_logger
-        # Lazy action-log session: shutdown cleanup ([PawnIO] uninstall + temp/
-        # _MEI removal) lands inside a banner-stamped SESSION block. GUI shutdown
-        # has no app-level session like terminal main().
-        with action_logger.session():
-            post_run_cleanup(
-                runtime["lhm"],
-                pawnio_was_preinstalled=pawnio_was_preinstalled,
-            )
+        post_run_cleanup(
+            runtime["lhm"],
+            pawnio_was_preinstalled=pawnio_was_preinstalled,
+        )
     except Exception:
         pass  # safe: cleanup is best-effort on quit; failures should not block shutdown
     try:
@@ -179,12 +174,13 @@ def run(debug: bool = False) -> int:
     # (a locked file -> the at-exit "Failed to remove temporary directory" dialog,
     # which is unloggable in-process). Record it now, on the next launch, then
     # delete it. No-op in dev mode (no _MEI*).
+    # Open the single per-launch action-log SESSION here (mirrors terminal
+    # main()): startup, fixes, reverts, and shutdown cleanup all log into this
+    # one banner-stamped session; it is closed after app.exec() returns.
+    action_logger.log_session_start()
+
     from src.pipeline.post_run_cleanup import cleanup_orphaned_mei_at_startup
-    from src.utils.action_logger import action_logger
-    # Lazy action-log session so a [Cleanup] of a stale _MEI* dir from a prior
-    # crash is bracketed by a banner. Usually no-op at boot -> writes nothing.
-    with action_logger.session():
-        cleanup_orphaned_mei_at_startup()
+    cleanup_orphaned_mei_at_startup()
 
     log.debug("GUI Startup: app.run() entry")
 
@@ -391,4 +387,8 @@ def run(debug: bool = False) -> int:
         except Exception as exc:
             log.warning("Could not wire monitor card: %s", exc, exc_info=True)
 
-    return app.exec()
+    exit_code = app.exec()
+    # Close the per-launch action-log SESSION. aboutToQuit (_run_app_cleanup)
+    # has already run inside app.exec(), so shutdown entries precede the END.
+    action_logger.log_session_end()
+    return exit_code

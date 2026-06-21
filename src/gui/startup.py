@@ -24,7 +24,6 @@ class StartupOrchestrator(QObject):
     finished = Signal(object)     # startup_lhm tuple or None on partial failure
 
     def run(self) -> None:
-        from src.utils.action_logger import action_logger
         from src.collectors.sub.lhm_sidecar import LHMSidecar
         from src.agent_tools.thermal_guidance import derive_cpu_temp
         from src.benchmarks.thermal_monitor import fetch_snapshot
@@ -46,81 +45,76 @@ class StartupOrchestrator(QObject):
         # ride the payload -- the coordinator reads it off the orchestrator instead.
         self.lhm_failure_reason: str = ""
         startup_lhm = None
-        # Lazy action-log session so a first-launch [PawnIO] install (Step 1) is
-        # bracketed by a SESSION banner -- GUI boot has no app-level session like
-        # terminal main(). Read-only steps log nothing, so a normal boot (PawnIO
-        # already present) writes no empty block.
-        with action_logger.session():
+        try:
+            # ── Step 1: LHM Monitor — PawnIO install + sidecar launch ───────
+            self.init_step.emit("LHM Monitor", "running")
+            lhm = LHMSidecar()
+            lhm_available = False
             try:
-                # ── Step 1: LHM Monitor — PawnIO install + sidecar launch ───────
-                self.init_step.emit("LHM Monitor", "running")
-                lhm = LHMSidecar()
-                lhm_available = False
-                try:
-                    lhm_available = lhm.start()
-                    self.init_step.emit("LHM Monitor", "done" if lhm_available else "fail")
-                    if lhm_available:
-                        startup_lhm = lhm
-                        # Trigger dashboard polling now so by splash-close the cards
-                        # are already populated. See plan
-                        # `when-starting-lil-bro-exe-sometimes-smooth-puzzle.md`.
-                        self.lhm_ready.emit(lhm)
-                    else:
-                        self.lhm_failure_reason = _describe(lhm)
-                except Exception:
-                    self.init_step.emit("LHM Monitor", "fail")
-                    self.lhm_failure_reason = _describe(lhm)
-
-                # ── Step 2: Sensors — wait for CPU/GPU readings to appear ───────
-                self.init_step.emit("Sensors", "running")
-                sensors_ok = False
+                lhm_available = lhm.start()
+                self.init_step.emit("LHM Monitor", "done" if lhm_available else "fail")
                 if lhm_available:
-                    try:
-                        for _ in range(_SENSOR_RETRIES):
-                            temps = fetch_snapshot()
-                            if temps and derive_cpu_temp(temps) is not None:
-                                sensors_ok = True
-                                break
-                            sleep(_SENSOR_RETRY_DELAY)
-                    except Exception:
-                        pass  # safe: thermal probe retry loop tolerates transient sidecar errors
-                    if not sensors_ok:
-                        # LHM is UP but no CPU sensor enumerated -- the PawnIO /
-                        # Secure-Boot case (start() returned True). Attribute it so
-                        # the card explains the blank temps instead of staying on the
-                        # stale "not started" default.
-                        self.lhm_failure_reason = _describe(lhm, no_sensors=True)
-                self.init_step.emit("Sensors", "done")
-
-                # ── Step 3: System Specs — collect full hardware profile ─────────
-                self.init_step.emit("System Specs", "running")
-                try:
-                    from src.collectors.spec_dumper import dump_system_specs
-                    path = dump_system_specs()
-                    self.specs_path = path if path else None
-                    # Load the JSON into memory here on the worker thread so
-                    # on_finished doesn't block the GUI on a 50-200 KB file
-                    # read once the splash closes -- HDD / network-drive jank
-                    # risk for the post-splash transition.
-                    if self.specs_path:
-                        try:
-                            import json
-                            with open(self.specs_path, encoding="utf-8") as f:
-                                loaded = json.load(f)
-                            if isinstance(loaded, dict):
-                                self.preloaded_specs = loaded
-                        except Exception:
-                            pass  # safe: best-effort preload; consumers tolerate {}
-                    self.init_step.emit("System Specs", "done" if path else "fail")
-                except Exception:
-                    self.specs_path = None
-                    self.init_step.emit("System Specs", "fail")
-
+                    startup_lhm = lhm
+                    # Trigger dashboard polling now so by splash-close the cards
+                    # are already populated. See plan
+                    # `when-starting-lil-bro-exe-sometimes-smooth-puzzle.md`.
+                    self.lhm_ready.emit(lhm)
+                else:
+                    self.lhm_failure_reason = _describe(lhm)
             except Exception:
-                from src.utils.debug_logger import get_debug_logger
-                get_debug_logger().error("StartupOrchestrator unhandled exception", exc_info=True)
-            finally:
-                self.finished.emit(startup_lhm)
+                self.init_step.emit("LHM Monitor", "fail")
+                self.lhm_failure_reason = _describe(lhm)
+
+            # ── Step 2: Sensors — wait for CPU/GPU readings to appear ───────
+            self.init_step.emit("Sensors", "running")
+            sensors_ok = False
+            if lhm_available:
+                try:
+                    for _ in range(_SENSOR_RETRIES):
+                        temps = fetch_snapshot()
+                        if temps and derive_cpu_temp(temps) is not None:
+                            sensors_ok = True
+                            break
+                        sleep(_SENSOR_RETRY_DELAY)
+                except Exception:
+                    pass  # safe: thermal probe retry loop tolerates transient sidecar errors
+                if not sensors_ok:
+                    # LHM is UP but no CPU sensor enumerated -- the PawnIO /
+                    # Secure-Boot case (start() returned True). Attribute it so
+                    # the card explains the blank temps instead of staying on the
+                    # stale "not started" default.
+                    self.lhm_failure_reason = _describe(lhm, no_sensors=True)
+            self.init_step.emit("Sensors", "done")
+
+            # ── Step 3: System Specs — collect full hardware profile ─────────
+            self.init_step.emit("System Specs", "running")
+            try:
+                from src.collectors.spec_dumper import dump_system_specs
+                path = dump_system_specs()
+                self.specs_path = path if path else None
+                # Load the JSON into memory here on the worker thread so
+                # on_finished doesn't block the GUI on a 50-200 KB file
+                # read once the splash closes -- HDD / network-drive jank
+                # risk for the post-splash transition.
+                if self.specs_path:
+                    try:
+                        import json
+                        with open(self.specs_path, encoding="utf-8") as f:
+                            loaded = json.load(f)
+                        if isinstance(loaded, dict):
+                            self.preloaded_specs = loaded
+                    except Exception:
+                        pass  # safe: best-effort preload; consumers tolerate {}
+                self.init_step.emit("System Specs", "done" if path else "fail")
+            except Exception:
+                self.specs_path = None
+                self.init_step.emit("System Specs", "fail")
+
+        except Exception:
+            from src.utils.debug_logger import get_debug_logger
+            get_debug_logger().error("StartupOrchestrator unhandled exception", exc_info=True)
+        finally:
+            self.finished.emit(startup_lhm)
 
 
 def run_startup_in_thread(parent: QObject | None = None) -> tuple[QThread, StartupOrchestrator]:
