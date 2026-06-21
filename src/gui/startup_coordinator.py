@@ -10,6 +10,13 @@ from __future__ import annotations
 
 from PySide6.QtCore import QObject, QThread, Slot
 
+# Re-exported so existing imports (tests + pipeline_controller) keep resolving
+# against this module after the map moved to a leaf module.
+from src.gui._startup_sections import (  # noqa: F401
+    _FIX_TO_SECTIONS,
+    _sections_for_fixes,
+)
+
 
 class StartupCompleter(QObject):
     """Hosts an orchestrator slot on the main thread.
@@ -27,28 +34,6 @@ class StartupCompleter(QObject):
     @Slot(object)
     def on_finished(self, startup_lhm) -> None:
         self._on_done(startup_lhm)
-
-
-# Maps a fix-dispatch check name (the @register_fix key in fix_dispatch.py) to the
-# spec sections its card reads. Used to scope the post-apply dashboard re-collect to
-# only what changed this session. Any NEW dashboard fix card must extend this map.
-_FIX_TO_SECTIONS: dict[str, set[str]] = {
-    "display": {"DisplayCapabilities", "HDRStatus"},
-    "nvidia_profile": {"NVIDIA", "NVIDIAProfile"},
-    "nvidia_dlss_preset": {"NVIDIA", "NVIDIAProfile"},
-    "power_plan": {"PowerPlan"},
-    "game_mode": {"GameMode"},
-    "hags": {"HAGS"},
-    # temp_folders has no dashboard card -> no section to refresh.
-}
-
-
-def _sections_for_fixes(fix_keys) -> set[str]:
-    """Union the fix->section map over an iterable of fix-dispatch check names."""
-    out: set[str] = set()
-    for key in fix_keys:
-        out |= _FIX_TO_SECTIONS.get(key, set())
-    return out
 
 
 class StartupCoordinator(QObject):
