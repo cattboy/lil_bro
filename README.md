@@ -29,7 +29,7 @@ lil_bro ships as a **single, self-contained `.exe`** — there is nothing extra 
 
 ## Status
 
-🟢 **v0.5.0.1 — Dashboard fix cards + one-click optimization** — Full windowed app with a live dashboard (thermals, mouse polling, monitor refresh tiles) and one-click fix cards for NVIDIA driver profile, NVIDIA DLSS preset (with a Quality/FPS switch), Power Plan, Game Mode, and monitor refresh rate — each approval-gated, revertible, and showing live "Applying…" feedback while it runs. Optimization pipeline with phase-card progress and a batch fix selection dialog; session-level revert with a Windows System Restore fallback. CLI mode preserved via `--terminal`. 1106 tests passing.
+🟢 **v0.5.1.0 — HDR & HAGS cards, guided first-run tour** — Full windowed app with a live dashboard (thermals, mouse polling, monitor refresh tiles) and one-click fix cards for NVIDIA driver profile, NVIDIA DLSS preset (with a Quality/FPS switch), Power Plan, Game Mode, Hardware-Accelerated GPU Scheduling, and monitor refresh rate, plus an HDR optimization card (detection) — each approval-gated, revertible, and showing live "Applying…" feedback while it runs. A first-run guided tour with arrow callouts and a Help/FAQ, hoverable info markers explaining good vs bad temps and mouse polling, and a safer NVIDIA group revert. Optimization pipeline with phase-card progress and a batch fix selection dialog; session-level revert with a Windows System Restore fallback. CLI mode preserved via `--terminal`. 1229 tests passing.
 
 ## Getting Started
 

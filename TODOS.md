@@ -27,16 +27,6 @@ Format: Priority | Effort (human / CC) | Context
 
 ---
 
-### T-042 — NVIDIA granular (per-item) revert via single-source-of-truth .nip
-**Priority:** P2
-**Effort:** M human / M with CC
-**Why:** The per-item revert page (v1) withholds per-row "Revert" buttons from the two NVIDIA rows (`nvidia_profile`, `nvidia_dlss_preset`) because their reverts are unsafe out of order. Each calls `backup_nvidia_profile()` independently, which writes a fresh timestamped `.nip` right before its own change — so the second NVIDIA fix's backup is a MID-state that already contains the first fix's changes. Reverting them one-by-one with whole-profile re-imports lets a later revert resurrect an earlier reverted change. "Revert All" is safe (reverse-applied order); per-item is not. This TODO makes NVIDIA per-item revert safe so those rows can get buttons too.
-**Fix:** Treat the NVIDIA pair as a unit. Identify the earliest pre-NVIDIA-change `.nip` of the session (oldest `before_backup` by `applied_at` among NVIDIA entries) as the single canonical restore point; reverting either NVIDIA item restores that one pristine snapshot and clears BOTH NVIDIA rows from the manifest. Define the boundary for the dashboard case (the `nvidia_profile_card` / `nvidia_dlss_card` can be triggered minutes apart, each making its own backup) and for fixes spanning multiple pipeline runs in one app session. Then enable the per-row button for NVIDIA rows in `last_run_card._build_row`.
-**Blocked by:** v1 per-item revert (this PR) landing first. Reference: `src/agent_tools/nvidia_profile_setter.py:34` (backup), `src/utils/revert.py:165` (`_revert_nvidia_profile`).
-**Added:** 2026-06-20 (deferred from /plan-eng-review on the per-item revert plan)
-
----
-
 ### T-041 — Consolidate duplicated fix-label maps
 **Priority:** P3
 **Effort:** S human / S with CC
@@ -231,6 +221,12 @@ Format: Priority | Effort (human / CC) | Context
 ---
 
 ## Completed
+
+### T-042 — NVIDIA granular (per-item) revert via single-source-of-truth .nip
+**Priority:** P2 — **COMPLETED 2026-06-21** (v0.5.1.0)
+Shipped the safe NVIDIA group revert. The first NVIDIA fix of a session pins one pristine pre-lil_bro `.nip` (`get_session_nvidia_backup_path()` in `src/utils/revert.py`); every NVIDIA fix records that single backup, and reverting either `nvidia_profile` or `nvidia_dlss_preset` restores that one pristine snapshot and clears BOTH NVIDIA rows from the manifest (group revert + confirmation dialog), replacing the unsafe stacked per-item `.nip` backups. The per-row Revert buttons are now enabled for the NVIDIA rows in `last_run_card`. v1 (per-line revert) landed in `805493c`; v2 (shared pristine backup + group revert) in `b894c67`.
+
+---
 
 ### T-028 — DLSS V2 config overrides (target_mode / forced_letter)
 **Priority:** P3 — **CLOSED (WONTFIX) 2026-06-15**
