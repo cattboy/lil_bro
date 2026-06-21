@@ -45,10 +45,6 @@ The home view (**◆ Dashboard (1)**) shows live CPU/GPU temperatures, RAM, and 
 
 ![A Dashboard quick-fix card with its callout](docs/screenshots/dashboard-coachmark-fix.png)
 
-When everything is already healthy, the cards step back and the Dashboard is simply your live monitor:
-
-![Dashboard in the all-optimal state](docs/screenshots/dashboard-optimal.png)
-
 ### Start Optimization — the guided pipeline
 
 **▶ Start Optimization (2)** runs the full guided pass:
@@ -60,6 +56,8 @@ When everything is already healthy, the cards step back and the Dashboard is sim
 5. **Apply + benchmark** — the selected fixes run, with an optional before/after benchmark.
 
 Changed your mind? **↩ Revert Changes (R)** rolls back everything from the session in one click, with the restore point as the safety net behind it.
+
+![Revert Menu](docs/screenshots/revert-menu.png)
 
 ### CLI Mode (Terminal)
 
