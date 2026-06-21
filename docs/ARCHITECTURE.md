@@ -33,13 +33,25 @@ src/
       ai_setup_dialog.py     — AI model download dialog
       batch_selection_dialog.py — Batch fix selection
       benchmark_row.py       — Benchmark result row
+      coachmarks.py          — First-run tutorial coachmark overlay (arrow callouts + bubbles)
       confirm_dialog.py      — Generic confirm/approval dialog (Yes/No, Approve/Deny)
-      dashboard.py           — Dashboard with live stat tiles
+      dashboard.py           — Dashboard with live stat tiles + fix cards
+      dialogs.py             — Shared CardDialog template (DESIGN.md card, tone icon, WASD (W)/(S), Esc)
+      game_mode_card.py      — Windows Game Mode card + Fix Now button
+      hags_card.py           — Hardware-Accelerated GPU Scheduling card + Fix Now button
+      hdr_card.py            — HDR optimization card (detection: RTX HDR / Auto HDR / base HDR)
+      info_marker.py         — Hoverable "?" info marker with styled flyout (temps, polling)
+      last_run_card.py       — Read-only applied-fixes / last-run panel (mirrors session manifest)
       monitor_refresh_card.py — Monitor refresh rate card + Fix Now button
       mouse_poll_card.py     — Mouse polling card + Fix Now button
       mouse_ready_dialog.py  — Mouse polling readiness prompt
+      nvidia_dlss_card.py    — NVIDIA DLSS preset card + Quality/FPS pill switch
+      nvidia_profile_card.py — NVIDIA driver-profile card (G-Sync/VSync/FPS cap/ReBar/power) + Fix Now
       output_panel.py        — ANSI-aware output panel
       output_view.py         — Output view container
+      power_plan_card.py     — Power plan card + Fix Now button
+      revert_view.py         — Session revert view (per-item + revert-all, System Restore fallback)
+      scroll_hint.py         — Pulsing down-arrow hint when dashboard cards overflow
       splash.py              — Animated splash screen
       stat_card.py           — Reusable stat/metric card
       status_bar_widget.py   — Status bar with phase state
@@ -70,11 +82,14 @@ src/
       lhm_discovery.py   — LHM install + binary discovery
       lhm_process_utils.py — LHM process start/stop/readiness helpers
       nvidia_profile_dumper.py — NVIDIA Profile collector (uses utils/nvidia_npi.py for shared export + setting-ID surface)
+      hdr_dumper.py      — HDR display state collector (DisplayConfig advanced-color via ctypes)
   agent_tools/           — Modular system checks (one file per check)
     display.py           — Monitor refresh rate analysis
     display_setter.py    — Applies refresh rate changes via Win32 ChangeDisplaySettingsEx
     game_mode.py         — Windows Game Mode registry
     power_plan.py        — Power plan detection + switching
+    hags.py              — Hardware-Accelerated GPU Scheduling (HKLM HwSchMode) detection + toggle
+    hdr.py               — HDR state analysis (RTX HDR / Auto HDR / base HDR); detection-only v1
     xmp_check.py         — RAM XMP/EXPO detection
     rebar.py             — Resizable BAR detection
     temp_audit.py        — Temp folder bloat + cleanup
@@ -109,6 +124,7 @@ src/
     display_utils.py     — Win32 DEVMODE struct + display mode enumeration via ctypes
     subprocess_utils.py  — Centralized subprocess runner with timeout and error handling
     pawnio_check.py      — PawnIO kernel driver installation detection (registry check)
+    pawnio_ownership.py  — Boot-session-gated marker: did lil_bro install the active PawnIO (gates uninstall)
 build.py               — Automated build pipeline (5 steps: PawnIO update → lhm-server → PyInstaller → integrity manifest)
 lil_bro.spec           — PyInstaller onefile build specification (hiddenimports covers all src/gui/widgets/* plus the lazily-imported src/gui/input/wasd_filter)
 install_deps.ps1       — One-command dev setup (Python, uv, .NET 8, WDK, submodules)
