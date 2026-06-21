@@ -7,6 +7,16 @@ Format: Priority | Effort (human / CC) | Context
 
 ## Open
 
+### T-044 — PawnIO ownership: two residual leak edges (boot-gating miss + non-admin install)
+**Priority:** P3
+**Effort:** S human / S with CC
+**Why:** The cross-run PawnIO ownership marker (`src/utils/pawnio_ownership.py`) decides "is this PawnIO lil_bro's leftover?" by boot-session gating — a marker older than the last boot is treated as stale and the driver is left alone (errs toward never removing a third-party HWiNFO/LibreHardwareMonitor PawnIO). Two narrow cases still leak a lil_bro-owned PawnIO: (1) **boot-gating miss** — lil_bro installs PawnIO then hard-crashes BEFORE cleanup runs `sc delete`, so it survives the reboot as a normal service; the next run's marker is now pre-boot (stale) → treated as third-party and never removed. (2) **non-admin install gap** — when `lil_bro.exe` runs without admin, `lhm_sidecar.start()` elevates `lhm-server.exe` via `ShellExecuteW` with no captured stdout, so install detection (and the ownership marker write) never fires; a PawnIO installed on that path is invisible in the action log and unmarked.
+**Fix:** For (1), consider also clearing/refreshing the marker on a confirmed-absent probe at startup, or accept it (rare — needs a crash in the install→quit window; the safe failure). For (2), give the elevated path a way to report PawnIO install status back (e.g. lhm-server writes a small status file, or a post-launch service-presence probe diffs against the pre-launch `pawnio_was_preinstalled` snapshot) and write the marker from that.
+**Blocked by:** none. Reference: `src/utils/pawnio_ownership.py`, `src/collectors/sub/lhm_sidecar.py` (`start`, ShellExecuteW branch), `src/pipeline/post_run_cleanup.py:_uninstall_pawnio`.
+**Added:** 2026-06-21 (deferred from /investigate on the PawnIO uninstall-not-logged fix)
+
+---
+
 ### T-043 — faulthandler under --debug for native/Qt crash traces
 **Priority:** P3
 **Effort:** S human / S with CC
