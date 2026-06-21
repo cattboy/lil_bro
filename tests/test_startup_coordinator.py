@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 from PySide6.QtCore import QObject, QThread
 
-from src.gui.startup_coordinator import StartupCoordinator
+from src.gui.startup_coordinator import StartupCompleter, StartupCoordinator
 
 
 def _make_coordinator(runtime: dict | None = None) -> StartupCoordinator:
@@ -645,3 +645,361 @@ class TestSettingFixFlow:
             "setting_fix_worker",
         ):
             assert key not in runtime
+
+
+# ── Characterization tests for previously-untested symbols (Refactor/v0.5.1.0) ──
+# Added before the startup_coordinator god-class decomposition so the relocation
+# of these methods into mixins is behavior-locked (a paste error can't land green).
+
+
+class TestStartupCompleter:
+    def test_forwards_lhm_to_wrapped_callback(self):
+        received: list = []
+        sc = StartupCompleter(received.append)
+        sc.on_finished("LHM_SENTINEL")
+        assert received == ["LHM_SENTINEL"]
+
+
+class TestOnStep:
+    def test_ok_status_sets_run_state_with_ellipsis(self):
+        coord = _make_coordinator({})
+        coord.on_step("Collecting specs", "ok")
+        coord._main.status_bar_widget.set_state.assert_called_once_with(
+            "run", "Collecting specs…"
+        )
+
+    def test_fail_status_labels_continuing(self):
+        coord = _make_coordinator({})
+        coord.on_step("PawnIO", "fail")
+        coord._main.status_bar_widget.set_state.assert_called_once_with(
+            "run", "PawnIO: failed (continuing)"
+        )
+
+    def test_swallows_exception_and_logs_error(self):
+        coord = _make_coordinator({})
+        coord._main.status_bar_widget.set_state.side_effect = RuntimeError("boom")
+        coord.on_step("x", "ok")  # must not raise
+        coord._log.error.assert_called_once()
+
+
+class TestOnLhmReady:
+    def test_stores_lhm_and_starts_polling(self):
+        runtime: dict = {}
+        coord = _make_coordinator(runtime)
+        coord.on_lhm_ready("LHM")
+        assert runtime["lhm"] == "LHM"
+        coord._main._dashboard.start_polling.assert_called_once_with()
+
+    def test_swallows_polling_exception_and_logs_error(self):
+        coord = _make_coordinator({})
+        coord._main._dashboard.start_polling.side_effect = RuntimeError("boom")
+        coord.on_lhm_ready("LHM")  # must not raise
+        coord._log.error.assert_called_once()
+
+
+class TestReloadLastRun:
+    def test_feeds_loaded_manifest_to_card(self):
+        coord = _make_coordinator({})
+        with patch("src.utils.revert.load_manifest", return_value={"x": 1}):
+            coord._reload_last_run()
+        coord._main._revert_view.set_last_run.assert_called_once_with({"x": 1})
+
+    def test_swallows_exception_and_logs_warning(self):
+        coord = _make_coordinator({})
+        with patch("src.utils.revert.load_manifest", side_effect=RuntimeError("boom")):
+            coord._reload_last_run()  # must not raise
+        coord._log.warning.assert_called_once()
+
+
+class TestEnsureRestorePointChoice:
+    def test_skipped_when_already_created_this_session(self):
+        coord = _make_coordinator({})
+        with patch("src.utils.revert.load_manifest",
+                   return_value={"restore_point_created": True}), \
+             patch("src.gui.widgets.confirm_dialog.ConfirmDialog") as mock_dlg:
+            assert coord._ensure_restore_point_choice(coord._main) is False
+        mock_dlg.assert_not_called()  # no prompt when one already exists
+
+    def test_prompts_and_returns_true_on_accept(self):
+        coord = _make_coordinator({})
+        with patch("src.utils.revert.load_manifest", return_value=None), \
+             patch("src.gui.widgets.confirm_dialog.ConfirmDialog") as mock_dlg:
+            mock_dlg.return_value.exec.return_value = True
+            assert coord._ensure_restore_point_choice(coord._main) is True
+        mock_dlg.assert_called_once()
+
+    def test_prompts_and_returns_false_on_reject(self):
+        coord = _make_coordinator({})
+        with patch("src.utils.revert.load_manifest",
+                   return_value={"restore_point_created": False}), \
+             patch("src.gui.widgets.confirm_dialog.ConfirmDialog") as mock_dlg:
+            mock_dlg.return_value.exec.return_value = False
+            assert coord._ensure_restore_point_choice(coord._main) is False
+
+
+class TestCardFixResult:
+    def test_success_shows_no_dialog(self):
+        coord = _make_coordinator({})
+        with patch("src.gui.widgets.dialogs.CardDialog") as mock_dialog:
+            coord._on_card_fix_result("display", True)
+        mock_dialog.assert_not_called()
+
+    def test_failure_shows_error_toned_dialog(self):
+        coord = _make_coordinator({})
+        with patch("src.gui.widgets.dialogs.CardDialog") as mock_dialog:
+            coord._on_card_fix_result("display", False)
+        mock_dialog.assert_called_once()
+        assert mock_dialog.call_args.kwargs.get("tone") == "error"
+
+
+class TestCardFixResultWrappers:
+    def test_monitor_result_delegates_to_card_fix_result(self):
+        coord = _make_coordinator({})
+        with patch.object(coord, "_on_card_fix_result") as m:
+            coord._on_monitor_fix_result(True)
+        m.assert_called_once_with("display", True)
+
+    def test_nvidia_result_ok_full_profile_marks_findings_ok(self):
+        coord = _make_coordinator({})
+        coord._nvidia_fix_check_name = "nvidia_profile"
+        with patch("src.gui.widgets.dialogs.CardDialog"):
+            coord._on_nvidia_fix_result(True)
+        coord._main._dashboard.set_nvidia_profile_findings.assert_called_once_with(
+            {"status": "OK"}
+        )
+
+    def test_nvidia_result_ok_dlss_preset_leaves_profile_findings(self):
+        coord = _make_coordinator({})
+        coord._nvidia_fix_check_name = "nvidia_dlss_preset"
+        with patch("src.gui.widgets.dialogs.CardDialog"):
+            coord._on_nvidia_fix_result(True)
+        coord._main._dashboard.set_nvidia_profile_findings.assert_not_called()
+
+    def test_nvidia_result_failure_shows_dialog_no_findings(self):
+        coord = _make_coordinator({})
+        coord._nvidia_fix_check_name = "nvidia_profile"
+        with patch("src.gui.widgets.dialogs.CardDialog") as mock_dialog:
+            coord._on_nvidia_fix_result(False)
+        mock_dialog.assert_called_once()
+        coord._main._dashboard.set_nvidia_profile_findings.assert_not_called()
+
+
+class TestHagsFixRequested:
+    def test_delegates_to_setting_fix_with_hags_key(self):
+        coord = _make_coordinator({})
+        with patch.object(coord, "_start_setting_fix") as m:
+            coord.on_hags_fix_requested()
+        m.assert_called_once_with("hags", "HAGS", "HAGS")
+
+
+class TestRefreshThreadFinished:
+    def test_clears_refresh_runtime_keys(self):
+        runtime = {
+            "monitor_refresh_thread": MagicMock(),
+            "monitor_refresh_worker": MagicMock(),
+        }
+        coord = _make_coordinator(runtime)
+        coord._on_refresh_thread_finished()
+        assert "monitor_refresh_thread" not in runtime
+        assert "monitor_refresh_worker" not in runtime
+
+
+class TestThermalRetry:
+    def test_suppressed_when_already_in_progress(self):
+        runtime = {"thermal_retry_thread": MagicMock()}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._ThermalRetryWorker") as mock_worker, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread:
+            coord.on_thermal_retry_requested()
+        mock_worker.assert_not_called()
+        mock_thread.assert_not_called()
+        coord._log.warning.assert_called_once()
+
+    def test_happy_path_spawns_worker_and_disables_button(self):
+        runtime = {"lhm": "LHM"}
+        coord = _make_coordinator(runtime)
+        with patch("src.gui.worker._ThermalRetryWorker") as mock_worker_cls, \
+             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+            coord.on_thermal_retry_requested()
+        mock_worker_cls.assert_called_once_with("LHM")
+        assert runtime["thermal_retry_thread"] is mock_thread_cls.return_value
+        assert runtime["thermal_retry_worker"] is mock_worker_cls.return_value
+        coord._main._dashboard.set_thermal_retry_enabled.assert_called_once_with(False)
+        coord._main._dashboard.thermal_chart.set_offline.assert_called_once()
+        mock_thread_cls.return_value.start.assert_called_once()
+
+    def test_thread_finished_pops_only_thread_ref(self):
+        runtime = {
+            "thermal_retry_thread": MagicMock(),
+            "thermal_retry_worker": MagicMock(),
+        }
+        coord = _make_coordinator(runtime)
+        coord._on_thermal_retry_thread_finished()
+        assert "thermal_retry_thread" not in runtime
+        # _on_thermal_retry_finished owns the worker pop (it reads result first).
+        assert "thermal_retry_worker" in runtime
+
+    def test_finished_success_starts_polling_and_hides_retry(self):
+        worker = MagicMock()
+        worker.new_lhm = "NEW_LHM"
+        worker.available = True
+        runtime = {"thermal_retry_worker": worker}
+        coord = _make_coordinator(runtime)
+        coord._on_thermal_retry_finished()
+        assert runtime["lhm"] == "NEW_LHM"
+        coord._main._dashboard.start_polling.assert_called_once_with()
+        coord._main._dashboard.set_thermal_retry_visible.assert_called_once_with(False)
+        assert "thermal_retry_worker" not in runtime
+        coord._main._dashboard.set_thermal_retry_enabled.assert_called_once_with(True)
+
+    def test_finished_failure_shows_offline_and_keeps_retry_visible(self):
+        worker = MagicMock()
+        worker.new_lhm = None
+        worker.available = False
+        worker.reason = "PawnIO driver not loaded"
+        runtime = {"lhm": "OLD", "thermal_retry_worker": worker}
+        coord = _make_coordinator(runtime)
+        coord._on_thermal_retry_finished()
+        assert runtime["lhm"] == "OLD"  # new_lhm None -> unchanged
+        coord._main._dashboard.thermal_chart.set_offline.assert_called_once_with(
+            "PawnIO driver not loaded"
+        )
+        coord._main._dashboard.set_thermal_retry_visible.assert_called_once_with(True)
+        assert "thermal_retry_worker" not in runtime
+        coord._main._dashboard.set_thermal_retry_enabled.assert_called_once_with(True)
+
+    def test_finished_with_no_worker_still_reenables_button(self):
+        coord = _make_coordinator({})
+        coord._on_thermal_retry_finished()
+        coord._main._dashboard.set_thermal_retry_enabled.assert_called_once_with(True)
+
+
+class TestOnFinished:
+    """Characterization for the ~106-LOC startup-completion handler.
+
+    on_finished fires exactly once per session and wires the bulk of the
+    dashboard. It had zero tests before this; these lock its observable
+    effects so the move into StartupWiringMixin is verifiable.
+    """
+
+    def _coord(self, runtime=None, specs=None):
+        coord = _make_coordinator(runtime if runtime is not None else {})
+        coord._orchestrator.preloaded_specs = specs if specs is not None else {}
+        coord._orchestrator.lhm_failure_reason = ""  # healthy unless overridden
+        coord._main.isVisible.return_value = False  # skip late-fire unless overridden
+        return coord
+
+    def test_sets_core_runtime_flags_and_seeds_applied_fixes(self):
+        coord = self._coord(specs={"NVIDIA": [{"GPU": "RTX"}]})
+        with patch.object(coord, "_reload_last_run") as m_reload:
+            coord.on_finished("LHM")
+        assert coord._runtime["startup_done"] is True
+        assert coord._runtime["lhm"] == "LHM"
+        assert coord._runtime["preloaded_specs"] == {"NVIDIA": [{"GPU": "RTX"}]}
+        m_reload.assert_called_once_with()
+
+    def test_wires_thermal_retry_button_once(self):
+        coord = self._coord()
+        with patch.object(coord, "_reload_last_run"):
+            coord.on_finished("LHM")
+        coord._main._dashboard.thermal_retry_requested.connect.assert_called_once_with(
+            coord.on_thermal_retry_requested
+        )
+        assert coord._runtime["_thermal_retry_wired"] is True
+
+    def test_thermal_retry_not_rewired_when_already_wired(self):
+        coord = self._coord(runtime={"_thermal_retry_wired": True})
+        with patch.object(coord, "_reload_last_run"):
+            coord.on_finished("LHM")
+        coord._main._dashboard.thermal_retry_requested.connect.assert_not_called()
+
+    def test_restores_flow_controls_when_idle(self):
+        coord = self._coord()
+        with patch.object(coord, "_reload_last_run"):
+            coord.on_finished("LHM")
+        coord._pipeline.set_flow_controls.assert_called_once_with(True)
+
+    def test_does_not_restore_flow_controls_during_pipeline(self):
+        coord = self._coord(runtime={"pipeline_thread": MagicMock()})
+        with patch.object(coord, "_reload_last_run"):
+            coord.on_finished("LHM")
+        coord._pipeline.set_flow_controls.assert_not_called()
+
+    def test_thermal_offline_shown_on_failure_reason(self):
+        coord = self._coord()
+        coord._orchestrator.lhm_failure_reason = "PawnIO not loaded"
+        with patch.object(coord, "_reload_last_run"):
+            coord.on_finished("LHM")
+        coord._main._dashboard.thermal_chart.set_offline.assert_called_once_with(
+            "PawnIO not loaded"
+        )
+        coord._main._dashboard.set_thermal_retry_visible.assert_called_with(True)
+
+    def test_thermal_offline_when_lhm_none(self):
+        coord = self._coord()
+        with patch.object(coord, "_reload_last_run"):
+            coord.on_finished(None)
+        coord._main._dashboard.thermal_chart.set_offline.assert_called_once_with(
+            "Thermal monitor unavailable"
+        )
+        coord._main._dashboard.set_thermal_retry_visible.assert_called_with(True)
+
+    def test_thermal_retry_hidden_when_healthy(self):
+        coord = self._coord()
+        with patch.object(coord, "_reload_last_run"):
+            coord.on_finished("LHM")
+        coord._main._dashboard.set_thermal_retry_visible.assert_called_with(False)
+
+    def test_fallback_polling_when_lhm_ready_slot_never_delivered(self):
+        coord = self._coord()
+        coord._main._dashboard._worker = None  # early start_polling never ran
+        with patch.object(coord, "_reload_last_run"):
+            coord.on_finished("LHM")
+        coord._main._dashboard.start_polling.assert_called_once_with()
+
+    def test_late_fire_wires_cards_when_window_already_visible(self):
+        specs = {
+            "DisplayCapabilities": [{"device": "D1"}],
+            "NVIDIA": [{"GPU": "RTX"}],
+            "PowerPlan": {"name": "Balanced"},
+            "GameMode": {"enabled": True},
+            "HAGS": {"enabled": True},
+        }
+        coord = self._coord(specs=specs)
+        coord._main.isVisible.return_value = True
+        with patch.object(coord, "_reload_last_run"), \
+             patch("src.agent_tools.nvidia_profile.analyze_nvidia_profile",
+                   return_value={"status": "OK"}), \
+             patch("src.agent_tools.game_mode.analyze_game_mode",
+                   return_value={"status": "OK"}), \
+             patch("src.agent_tools.hags.analyze_hags",
+                   return_value={"status": "OK"}), \
+             patch("src.agent_tools.power_plan.analyze_power_plan",
+                   return_value={"status": "OK"}):
+            coord.on_finished("LHM")
+        d = coord._main._dashboard
+        d.set_monitor_data.assert_called_once_with([{"device": "D1"}])
+        d.set_nvidia_data.assert_called_once_with([{"GPU": "RTX"}])
+        d.monitor_fix_requested.connect.assert_called_once_with(
+            coord.on_monitor_fix_requested
+        )
+        d.nvidia_fix_requested.connect.assert_called_once_with(
+            coord.on_nvidia_fix_requested
+        )
+        d.power_plan_fix_requested.connect.assert_called_once_with(
+            coord.on_power_plan_fix_requested
+        )
+        d.game_mode_fix_requested.connect.assert_called_once_with(
+            coord.on_game_mode_fix_requested
+        )
+        d.hags_fix_requested.connect.assert_called_once_with(
+            coord.on_hags_fix_requested
+        )
+        assert coord._runtime["_monitor_wired"] is True
+
+    def test_late_fire_skipped_when_already_wired(self):
+        coord = self._coord(runtime={"_monitor_wired": True})
+        coord._main.isVisible.return_value = True
+        with patch.object(coord, "_reload_last_run"):
+            coord.on_finished("LHM")
+        coord._main._dashboard.set_monitor_data.assert_not_called()
