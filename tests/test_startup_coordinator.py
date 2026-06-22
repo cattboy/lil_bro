@@ -47,7 +47,7 @@ class TestMonitorFixGuards:
         }
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._MonitorFixWorker") as mock_worker, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread, \
+             patch("src.gui._startup_card_fixes_device.QThread") as mock_thread, \
              patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog") as mock_dialog:
             coord.on_monitor_fix_requested(r"\\.\DISPLAY1")
         mock_worker.assert_not_called()
@@ -68,7 +68,7 @@ class TestMonitorFixGuards:
         }
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._MonitorFixWorker") as mock_worker, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread, \
+             patch("src.gui._startup_card_fixes_device.QThread") as mock_thread, \
              patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog") as mock_dialog:
             coord.on_monitor_fix_requested(r"\\.\DISPLAY1")
         mock_worker.assert_not_called()
@@ -86,7 +86,7 @@ class TestMonitorFixGuards:
         runtime = {"preloaded_specs": {"DisplayCapabilities": []}}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._MonitorFixWorker") as mock_worker, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread:
+             patch("src.gui._startup_card_fixes_device.QThread") as mock_thread:
             coord.on_monitor_fix_requested(r"\\.\DISPLAY1")
         mock_worker.assert_not_called()
         mock_thread.assert_not_called()
@@ -128,7 +128,7 @@ class TestRefreshMonitorCard:
         runtime = {"pipeline_thread": MagicMock()}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._MonitorRefreshWorker") as mock_worker_cls, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+             patch("src.gui._startup_dashboard_refresh.QThread") as mock_thread_cls:
             coord.refresh_monitor_card()
         mock_worker_cls.assert_not_called()
         mock_thread_cls.assert_not_called()
@@ -144,7 +144,7 @@ class TestRefreshMonitorCard:
         runtime = {"monitor_refresh_thread": sentinel_thread}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._MonitorRefreshWorker") as mock_worker_cls, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+             patch("src.gui._startup_dashboard_refresh.QThread") as mock_thread_cls:
             coord.refresh_monitor_card()
         mock_worker_cls.assert_not_called()
         mock_thread_cls.assert_not_called()
@@ -307,7 +307,7 @@ class TestRefreshFixCardsAfterRevert:
         runtime = {"pipeline_thread": MagicMock()}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+             patch("src.gui._startup_dashboard_refresh.QThread") as mock_thread_cls:
             coord.refresh_fix_cards_after_revert()
         mock_worker_cls.assert_not_called()
         mock_thread_cls.assert_not_called()
@@ -339,7 +339,7 @@ class TestRefreshDashboardFixCards:
         runtime = {"pipeline_thread": MagicMock()}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+             patch("src.gui._startup_dashboard_refresh.QThread") as mock_thread_cls:
             coord.refresh_dashboard_fix_cards()
         mock_worker_cls.assert_not_called()
         mock_thread_cls.assert_not_called()
@@ -350,7 +350,7 @@ class TestRefreshDashboardFixCards:
         runtime = {"dashboard_rescan_thread": sentinel_thread}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+             patch("src.gui._startup_dashboard_refresh.QThread") as mock_thread_cls:
             coord.refresh_dashboard_fix_cards()
         mock_worker_cls.assert_not_called()
         mock_thread_cls.assert_not_called()
@@ -402,7 +402,7 @@ class TestRefreshDashboardFixCards:
         runtime: dict = {}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._DashboardRescanWorker") as mock_worker_cls, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+             patch("src.gui._startup_dashboard_refresh.QThread") as mock_thread_cls:
             coord.refresh_dashboard_fix_cards(set())
         mock_worker_cls.assert_not_called()
         mock_thread_cls.assert_not_called()
@@ -525,7 +525,7 @@ class TestSettingFixFlow:
         runtime = {"pipeline_thread": MagicMock(), "preloaded_specs": dict(self._POWER_SPECS)}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._CardFixWorker") as mock_worker, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread, \
+             patch("src.gui._startup_card_fixes_setting.QThread") as mock_thread, \
              patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog") as mock_dialog:
             coord.on_power_plan_fix_requested()
         mock_worker.assert_not_called()
@@ -539,7 +539,7 @@ class TestSettingFixFlow:
         runtime = {"card_fix_in_progress": True, "preloaded_specs": dict(self._GAME_SPECS)}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._CardFixWorker") as mock_worker, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread, \
+             patch("src.gui._startup_card_fixes_setting.QThread") as mock_thread, \
              patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog") as mock_dialog:
             coord.on_game_mode_fix_requested()
         mock_worker.assert_not_called()
@@ -555,7 +555,7 @@ class TestSettingFixFlow:
             runtime = {"preloaded_specs": specs}
             coord = _make_coordinator(runtime)
             with patch("src.gui.worker._CardFixWorker") as mock_worker, \
-                 patch("src.gui.startup_coordinator.QThread") as mock_thread, \
+                 patch("src.gui._startup_card_fixes_setting.QThread") as mock_thread, \
                  patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog") as mock_dialog:
                 coord.on_power_plan_fix_requested()
             mock_worker.assert_not_called()
@@ -568,7 +568,7 @@ class TestSettingFixFlow:
         runtime = {"preloaded_specs": {**self._POWER_SPECS, "GameMode": {"enabled": True}}}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._CardFixWorker") as mock_worker_cls, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls, \
+             patch("src.gui._startup_card_fixes_setting.QThread") as mock_thread_cls, \
              patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog"), \
              patch.object(coord, "_ensure_restore_point_choice", return_value=False):
             coord.on_power_plan_fix_requested()
@@ -586,7 +586,7 @@ class TestSettingFixFlow:
         runtime = {"preloaded_specs": dict(self._GAME_SPECS)}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._CardFixWorker") as mock_worker_cls, \
-             patch("src.gui.startup_coordinator.QThread"), \
+             patch("src.gui._startup_card_fixes_setting.QThread"), \
              patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog"), \
              patch.object(coord, "_ensure_restore_point_choice", return_value=False):
             coord.on_game_mode_fix_requested()
@@ -599,7 +599,7 @@ class TestSettingFixFlow:
         runtime = {"preloaded_specs": dict(self._POWER_SPECS)}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._CardFixWorker") as mock_worker_cls, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls, \
+             patch("src.gui._startup_card_fixes_setting.QThread") as mock_thread_cls, \
              patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog") as mock_dialog_cls:
             mock_dialog_cls.return_value.exec.return_value = False
             coord.on_power_plan_fix_requested()
@@ -809,7 +809,7 @@ class TestThermalRetry:
         runtime = {"thermal_retry_thread": MagicMock()}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._ThermalRetryWorker") as mock_worker, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread:
+             patch("src.gui._startup_card_fixes_setting.QThread") as mock_thread:
             coord.on_thermal_retry_requested()
         mock_worker.assert_not_called()
         mock_thread.assert_not_called()
@@ -819,7 +819,7 @@ class TestThermalRetry:
         runtime = {"lhm": "LHM"}
         coord = _make_coordinator(runtime)
         with patch("src.gui.worker._ThermalRetryWorker") as mock_worker_cls, \
-             patch("src.gui.startup_coordinator.QThread") as mock_thread_cls:
+             patch("src.gui._startup_card_fixes_setting.QThread") as mock_thread_cls:
             coord.on_thermal_retry_requested()
         mock_worker_cls.assert_called_once_with("LHM")
         assert runtime["thermal_retry_thread"] is mock_thread_cls.return_value
@@ -1003,3 +1003,45 @@ class TestOnFinished:
         with patch.object(coord, "_reload_last_run"):
             coord.on_finished("LHM")
         coord._main._dashboard.set_monitor_data.assert_not_called()
+
+
+# ── God-class decomposition guards (Refactor/v0.5.1.0) ──────────────────────
+# StartupCoordinator was split into five mixins + a sections leaf module. These
+# lock the composition so an accidental base-list/import regression is caught,
+# and give each extracted module a direct test reference.
+
+
+def test_coordinator_composes_all_startup_mixins():
+    """All five extracted mixins are folded into StartupCoordinator, with
+    QObject rightmost (Shiboken metaclass requirement) and no mixin __init__
+    (all instance state is set by StartupCoordinator.__init__)."""
+    from src.gui._startup_card_fixes_device import DeviceFixMixin
+    from src.gui._startup_card_fixes_setting import SettingThermalFixMixin
+    from src.gui._startup_dashboard_refresh import DashboardRefreshMixin
+    from src.gui._startup_manifest_watcher import ManifestWatcherMixin
+    from src.gui._startup_wiring import StartupWiringMixin
+
+    mixins = (
+        ManifestWatcherMixin,
+        StartupWiringMixin,
+        DashboardRefreshMixin,
+        DeviceFixMixin,
+        SettingThermalFixMixin,
+    )
+    for mixin in mixins:
+        assert issubclass(StartupCoordinator, mixin)
+        # Mixins must not define __init__ -- super().__init__ has to reach QObject.
+        assert "__init__" not in vars(mixin)
+    mro = StartupCoordinator.__mro__
+    # QObject must come AFTER every mixin in the MRO (rightmost concrete base).
+    assert all(mro.index(QObject) > mro.index(m) for m in mixins)
+
+
+def test_sections_module_is_reexported_from_coordinator():
+    """_startup_sections is the real home of the fix->section map;
+    startup_coordinator re-exports it so existing imports keep resolving."""
+    from src.gui import _startup_sections
+    from src.gui.startup_coordinator import _FIX_TO_SECTIONS, _sections_for_fixes
+
+    assert _sections_for_fixes is _startup_sections._sections_for_fixes
+    assert _FIX_TO_SECTIONS is _startup_sections._FIX_TO_SECTIONS
