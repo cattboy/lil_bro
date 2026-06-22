@@ -81,6 +81,14 @@ a = Analysis(
         'src.gui.signals',
         'src.gui.startup',
         'src.gui.startup_coordinator',
+        # StartupCoordinator mixin modules (god-class decomposition); imported at
+        # module top of startup_coordinator, but listed explicitly per spec policy.
+        'src.gui._startup_sections',
+        'src.gui._startup_manifest_watcher',
+        'src.gui._startup_wiring',
+        'src.gui._startup_dashboard_refresh',
+        'src.gui._startup_card_fixes_device',
+        'src.gui._startup_card_fixes_setting',
         'src.gui.theme',
         'src.gui.worker',
         'src.gui.input.wasd_filter',
