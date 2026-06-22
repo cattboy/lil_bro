@@ -10,28 +10,42 @@ import pytest
 # pawnio_check — correct registry key
 # ---------------------------------------------------------------------------
 
-class TestIsPawnioInstalled:
-    """is_pawnio_installed() must read from the Services key, not Uninstall."""
+class TestIsPawnioServiceRegistered:
+    """is_pawnio_service_registered() must read from the Services key, not Uninstall.
+
+    (Full state-matrix coverage lives in tests/test_pawnio_check.py.)"""
 
     def test_returns_true_when_service_key_exists(self):
         import winreg
-        from src.utils.pawnio_check import is_pawnio_installed, _PAWNIO_SERVICE_KEY
+        from src.utils.pawnio_check import is_pawnio_service_registered, _PAWNIO_SERVICE_KEY
         with patch("winreg.OpenKey") as mock_open:
             mock_open.return_value.__enter__ = lambda s: s
             mock_open.return_value.__exit__ = MagicMock(return_value=False)
-            assert is_pawnio_installed() is True
+            assert is_pawnio_service_registered() is True
             mock_open.assert_called_once_with(winreg.HKEY_LOCAL_MACHINE, _PAWNIO_SERVICE_KEY)
 
     def test_returns_false_when_service_key_missing(self):
-        from src.utils.pawnio_check import is_pawnio_installed
+        from src.utils.pawnio_check import is_pawnio_service_registered
         with patch("winreg.OpenKey", side_effect=FileNotFoundError):
-            assert is_pawnio_installed() is False
+            assert is_pawnio_service_registered() is False
 
     def test_checks_services_not_uninstall(self):
         """Key must be under SYSTEM\\CurrentControlSet\\Services, never Uninstall."""
         from src.utils.pawnio_check import _PAWNIO_SERVICE_KEY
         assert "Services" in _PAWNIO_SERVICE_KEY
         assert "Uninstall" not in _PAWNIO_SERVICE_KEY
+
+
+def test_ownership_snapshot_uses_service_registered_not_usable():
+    """Ownership (pawnio_was_preinstalled) MUST use is_pawnio_service_registered,
+    NOT is_pawnio_usable: a half-state box (registered+running, lib missing) reads
+    usable=False, which would make lil_bro wrongly claim a 3rd-party driver and
+    remove it on exit (install/uninstall thrash). See plan §B / DA HIGH-4."""
+    import pathlib
+    for rel in ("src/gui/app.py", "src/main.py"):
+        src = pathlib.Path(rel).read_text(encoding="utf-8")
+        assert "pawnio_was_preinstalled = is_pawnio_service_registered()" in src
+        assert "pawnio_was_preinstalled = is_pawnio_usable()" not in src
 
 
 # ---------------------------------------------------------------------------

@@ -184,9 +184,9 @@ def run(debug: bool = False) -> int:
 
     log.debug("GUI Startup: app.run() entry")
 
-    from src.utils.pawnio_check import is_pawnio_installed
+    from src.utils.pawnio_check import is_pawnio_service_registered
     try:
-        pawnio_was_preinstalled = is_pawnio_installed()
+        pawnio_was_preinstalled = is_pawnio_service_registered()
     except Exception:
         pawnio_was_preinstalled = False
 

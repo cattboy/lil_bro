@@ -303,8 +303,8 @@ def classify_sidecar_failure(
     """Map a sidecar failure ``kind`` + environmental ``probes`` to a cause+action.
 
     Pure: no I/O, no side effects. ``probes`` keys (all optional):
-        ``pawnio_installed`` (bool), ``port_owner`` (str|None),
-        ``exe_present`` (bool|None), ``is_admin`` (bool).
+        ``pawnio_installed`` (bool), ``pawnio_state`` ("usable"|"broken"|"absent"),
+        ``port_owner`` (str|None), ``exe_present`` (bool|None), ``is_admin`` (bool).
     ``returncode``/``stderr_lines`` are only consulted for the ``exited_immediately``
     branch (the one kind that actually carries them). Returns
     ``{"status": "WARNING", "message": str}``.
@@ -312,6 +312,12 @@ def classify_sidecar_failure(
     probes = probes or {}
     port_owner = probes.get("port_owner")
     pawnio = probes.get("pawnio_installed", False)
+    # Tri-state PawnIO signal. Back-compat: callers that pass only the bool leave
+    # ``pawnio_state`` None -> derive it (False -> "absent", True -> "usable");
+    # None is never treated as "broken".
+    pawnio_state = probes.get("pawnio_state")
+    if pawnio_state is None:
+        pawnio_state = "usable" if pawnio else "absent"
 
     if kind == "port_in_use":
         who = f" by {port_owner}" if port_owner else " by another application"
@@ -346,23 +352,34 @@ def classify_sidecar_failure(
                 "Add an exclusion for lhm-server.exe, then retry."
             )
     elif kind == "timeout":
-        if not pawnio:
+        if pawnio_state == "usable":
+            msg = "The thermal helper started but didn't respond in time. Retry."
+        elif pawnio_state == "broken":
+            msg = (
+                "The thermal helper started but no sensors responded -- PawnIO is "
+                "installed but not working. Retry to reinstall it."
+            )
+        else:  # absent
             msg = (
                 "The thermal helper started but no sensors responded, and the PawnIO "
-                "driver isn't installed. Retry to reinstall it."
+                "driver isn't installed. Retry to install it."
             )
-        else:
-            msg = "The thermal helper started but didn't respond in time. Retry."
     elif kind == "no_sensors":
-        if not pawnio:
-            msg = (
-                "Thermal helper is running but the PawnIO sensor driver was blocked "
-                "(often Secure Boot / driver signing). Retry to reinstall it."
-            )
-        else:
+        if pawnio_state == "usable":
             msg = (
                 "Thermal helper is running but reported no CPU sensors. "
                 "Retry, or verify PawnIO loaded."
+            )
+        elif pawnio_state == "broken":
+            msg = (
+                "Thermal helper is running but PawnIO isn't working -- its support "
+                "files are missing or the driver is blocked (often Secure Boot / "
+                "driver signing). Retry to reinstall it."
+            )
+        else:  # absent
+            msg = (
+                "Thermal helper is running but the PawnIO sensor driver isn't "
+                "installed. Retry to install it."
             )
     else:  # unknown / catch-all -- never leave the user without an action
         msg = (
@@ -395,10 +412,20 @@ def _gather_sidecar_probes() -> dict:
     path and must never raise. ``psutil.net_connections`` (inside ``_port_owner``)
     can raise AccessDenied on a non-elevated run, hence the per-probe try/except.
     """
-    probes: dict = {"pawnio_installed": False, "port_owner": None, "is_admin": False}
+    probes: dict = {
+        "pawnio_installed": False,
+        "pawnio_state": "absent",
+        "port_owner": None,
+        "is_admin": False,
+    }
     try:
-        from src.utils.pawnio_check import is_pawnio_installed
-        probes["pawnio_installed"] = is_pawnio_installed()
+        from src.utils.pawnio_check import pawnio_install_state
+        state = pawnio_install_state()
+        probes["pawnio_state"] = state
+        # Keep the bool consistent with the tri-state (single source of truth):
+        # only a fully-usable PawnIO (service running AND PawnIOLib.dll present)
+        # counts as "installed" for messaging.
+        probes["pawnio_installed"] = state == "usable"
     except Exception:
         pass  # safe: probe is best-effort
     try:

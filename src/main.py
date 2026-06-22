@@ -102,8 +102,8 @@ def main():
         from src.pipeline.post_run_cleanup import cleanup_orphaned_mei_at_startup
         cleanup_orphaned_mei_at_startup()
 
-        from src.utils.pawnio_check import is_pawnio_installed
-        pawnio_was_preinstalled = is_pawnio_installed()
+        from src.utils.pawnio_check import is_pawnio_service_registered
+        pawnio_was_preinstalled = is_pawnio_service_registered()
 
         if args.revert:
             from src.pipeline.phase_revert import run_revert_phase

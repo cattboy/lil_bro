@@ -73,6 +73,35 @@ def test_classify_no_sensors_pawnio_aware():
     assert "no cpu sensors" in running
 
 
+def test_classify_no_sensors_tristate():
+    """no_sensors message differs by pawnio_state: broken→reinstall, absent→install,
+    usable→the legacy 'verify PawnIO loaded' line (the only state that keeps it)."""
+    broken = classify_sidecar_failure("no_sensors", {"pawnio_state": "broken"})["message"].lower()
+    assert "reinstall" in broken and "pawnio" in broken
+    absent = classify_sidecar_failure("no_sensors", {"pawnio_state": "absent"})["message"].lower()
+    assert "isn't installed" in absent or "not installed" in absent
+    usable = classify_sidecar_failure("no_sensors", {"pawnio_state": "usable"})["message"].lower()
+    assert "verify pawnio loaded" in usable
+
+
+def test_classify_timeout_tristate():
+    broken = classify_sidecar_failure("timeout", {"pawnio_state": "broken"})["message"].lower()
+    assert "reinstall" in broken
+    absent = classify_sidecar_failure("timeout", {"pawnio_state": "absent"})["message"].lower()
+    assert "install" in absent
+    usable = classify_sidecar_failure("timeout", {"pawnio_state": "usable"})["message"].lower()
+    assert "respond" in usable
+
+
+def test_classify_pawnio_state_none_back_compat():
+    """Legacy callers pass only the bool: None state derives to absent (False) or
+    usable (True) -- never 'broken' (final-review nit)."""
+    false_msg = classify_sidecar_failure("no_sensors", {"pawnio_installed": False})["message"]
+    assert "PawnIO" in false_msg  # absent branch still names PawnIO
+    true_msg = classify_sidecar_failure("no_sensors", {"pawnio_installed": True})["message"].lower()
+    assert "verify pawnio loaded" in true_msg  # usable branch
+
+
 def test_classify_unknown_is_catch_all():
     msg = classify_sidecar_failure("something-new", {})["message"].lower()
     assert "unavailable" in msg
