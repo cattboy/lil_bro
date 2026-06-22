@@ -245,6 +245,37 @@ class TestUninstallPawnio:
             _uninstall_pawnio()
             mock_clear.assert_not_called()
 
+    def test_marked_for_deletion_warns_reboot(self):
+        """§F: sc delete 1072 must warn the user to reboot before relaunching, else
+        they re-enter the running-service-without-lib half-state (no CPU temps)."""
+        from src.pipeline.post_run_cleanup import _uninstall_pawnio
+        sc_found = self._make_sc_result(0, "STATE              : 1  STOPPED")
+        sc_delete_1072 = self._make_sc_result(1072)
+        setup_ok = self._make_sc_result(0)
+
+        def side_effect(*args, **kwargs):
+            cmd = args[0]
+            if "pawnio_setup" in str(cmd[0]):
+                return setup_ok
+            if len(cmd) > 1 and cmd[1] == "delete":
+                return sc_delete_1072
+            return sc_found
+
+        with patch("src.pipeline.post_run_cleanup.is_admin", return_value=True), \
+             patch("src.pipeline.post_run_cleanup._find_pawnio_setup_exe",
+                   return_value="C:/fake/pawnio_setup.exe"), \
+             patch("src.pipeline.post_run_cleanup._find_pawnio_oem_inf", return_value=None), \
+             patch("src.pipeline.post_run_cleanup.clear_pawnio_owned_marker"), \
+             patch("src.pipeline.post_run_cleanup.action_logger") as mock_log, \
+             patch("src.utils.formatting.print_warning") as mock_warn, \
+             patch("subprocess.run", side_effect=side_effect), \
+             patch("time.sleep"):
+            _uninstall_pawnio()
+            warned = " ".join(str(c) for c in mock_warn.call_args_list).lower()
+            assert "reboot" in warned
+            logged = " ".join(str(c.args) for c in mock_log.log_action.call_args_list).lower()
+            assert "reboot required" in logged
+
 
 # ---------------------------------------------------------------------------
 # pawnio_ownership — cross-run ownership marker + boot-session gating

@@ -152,7 +152,7 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
     was or was not removed -- silent early returns were the reason a deliberate skip
     (or a removal) left no trace in lil_bro_actions.log.
     """
-    from src.utils.formatting import print_step, print_step_done
+    from src.utils.formatting import print_step, print_step_done, print_warning
 
     if not is_admin():
         action_logger.log_action(
@@ -255,6 +255,22 @@ def _uninstall_pawnio(was_preinstalled: bool = False) -> None:
                 "Cleanup",
                 "PawnIO marked for deletion — will complete at next reboot; "
                 "ownership marker retained for same-boot retry",
+            )
+            # §F: -uninstall above already removed PawnIOLib.dll, but the service
+            # lingers until reboot. Warn the user so they reboot BEFORE relaunching
+            # -- otherwise lil_bro starts into the running-service-without-library
+            # half-state (registered + running, no DLL => no CPU temps).
+            try:
+                print_warning(
+                    "PawnIO will finish uninstalling after a reboot. Please reboot "
+                    "before running lil_bro again so thermal monitoring reinstalls cleanly."
+                )
+            except Exception:
+                pass  # safe: user notice is best-effort
+            action_logger.log_action(
+                "PawnIO",
+                "Reboot required to finish removal — reboot before next launch to avoid the half-installed state",
+                outcome="WARN",
             )
         else:
             action_logger.log_action(

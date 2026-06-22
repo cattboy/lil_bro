@@ -7,6 +7,16 @@ Format: Priority | Effort (human / CC) | Context
 
 ## Open
 
+### T-045 — Harden PawnIO uninstall ordering (eliminate the 1072 half-state window)
+**Priority:** P3
+**Effort:** S human / S with CC
+**Why:** `post_run_cleanup._uninstall_pawnio` runs `pawnio_setup.exe -uninstall -silent` (removes `PawnIOLib.dll` + device node) BEFORE `sc delete`. When the driver handle is still open, `sc delete` returns 1072 (marked-for-deletion-until-reboot), so the service lingers while the DLL is already gone — the running-service-without-library half-state that makes CPU temps silently unavailable on the next launch (registered + running, no DLL → no `\Device\PawnIO` consumer). §F (shipped) only DETECTS this and warns the user to reboot; it does not eliminate the window.
+**Fix:** Reorder so the service is fully stopped + deleted (or confirmed delete-pending) BEFORE the library/device-node removal, OR remove the DLL only after a clean `sc delete` (rc 0), so a 1072 can never leave a libless-but-registered driver. Higher regression risk than §F's reboot prompt (touches the proven teardown sequence) — verify against `test_pawnio_cleanup.py::TestUninstallPawnio` (esp. `test_stops_service_before_uninstall`, `test_marked_for_deletion_*`).
+**Blocked by:** none. Reference: `src/pipeline/post_run_cleanup.py:_uninstall_pawnio`.
+**Added:** 2026-06-22 (deferred "option 2" from the PawnIO verification fix; user chose the §F 1072 reboot prompt first)
+
+---
+
 ### T-044 — PawnIO ownership: two residual leak edges (boot-gating miss + non-admin install)
 **Priority:** P3
 **Effort:** S human / S with CC
