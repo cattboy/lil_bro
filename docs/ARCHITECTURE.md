@@ -12,7 +12,13 @@ src/
     app.py               — Application setup + app lifecycle
     _foreground.py       — Surfaces the main window after splash close (Qt raise + Win32 AttachThreadInput/SetForegroundWindow, taskbar-flash fallback); isolated ctypes, no-op off-Windows
     pipeline_controller.py — Wires PipelineWorker signals to UI panels
-    startup_coordinator.py — Manages splash → main window transition; owns dashboard fix threads
+    startup_coordinator.py — Slim StartupCoordinator: __init__ + restore-point/error helpers; composes the _startup_* mixins below (QObject rightmost)
+    _startup_sections.py   — _FIX_TO_SECTIONS map + _sections_for_fixes (fix → spec-section scope)
+    _startup_manifest_watcher.py — ManifestWatcherMixin: Applied Fixes card live-refresh watcher (T-016)
+    _startup_wiring.py     — StartupWiringMixin: orchestrator step/lhm-ready/finished handlers + late-fire dashboard wiring
+    _startup_dashboard_refresh.py — DashboardRefreshMixin: monitor card re-probe + fix-card live re-collect
+    _startup_card_fixes_device.py — DeviceFixMixin: monitor + NVIDIA card fixes
+    _startup_card_fixes_setting.py — SettingThermalFixMixin: power/game/HAGS card fixes + thermal sidecar retry
     bridge.py            — Qt signal bridge between pipeline and GUI
     signals.py           — Shared signal definitions
     settings.py          — QSettings persistence (window geometry, preferences)
