@@ -499,7 +499,7 @@ def test_nvidia_fix_requested_sets_busy_cue_before_start():
         patch("src.gui.widgets.batch_selection_dialog.BatchSelectionDialog") as mock_dlg,
         patch.object(coord, "_ensure_restore_point_choice", return_value=False),
         patch("src.gui.worker._CardFixWorker"),
-        patch("src.gui.startup_coordinator.QThread"),
+        patch("src.gui._startup_card_fixes_device.QThread"),
     ):
         mock_dlg.return_value.exec.return_value = True
         mock_dlg.return_value.selected_indices.return_value = [0]
