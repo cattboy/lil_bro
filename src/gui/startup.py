@@ -84,6 +84,15 @@ class StartupOrchestrator(QObject):
                     # the card explains the blank temps instead of staying on the
                     # stale "not started" default.
                     self.lhm_failure_reason = _describe(lhm, no_sensors=True)
+                    try:
+                        from src.utils.pawnio_check import pawnio_install_state, is_pawnio_lib_present
+                        from src.utils.debug_logger import get_debug_logger
+                        get_debug_logger().warning(
+                            "Sensors: no CPU temp after retries -- PawnIO state=%s (lib=%s)",
+                            pawnio_install_state(), is_pawnio_lib_present(),
+                        )
+                    except Exception:
+                        pass  # safe: diagnostic log is best-effort
             self.init_step.emit("Sensors", "done")
 
             # ── Step 3: System Specs — collect full hardware profile ─────────

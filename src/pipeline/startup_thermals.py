@@ -95,6 +95,15 @@ def run_startup_thermal_scan() -> tuple[LHMSidecar, bool]:
             print_warning(describe_sidecar_failure(lhm, no_sensors=True))
         except Exception:
             pass  # safe: attribution is best-effort
+        try:
+            from src.utils.pawnio_check import pawnio_install_state, is_pawnio_lib_present
+            from src.utils.debug_logger import get_debug_logger
+            get_debug_logger().warning(
+                "Startup thermal scan: no sensors -- PawnIO state=%s (lib=%s)",
+                pawnio_install_state(), is_pawnio_lib_present(),
+            )
+        except Exception:
+            pass  # safe: diagnostic log is best-effort
         print_accent(
             "  No sensor readings returned — temperature display skipped.  "
             "lil_bro reads sensors via LibreHardwareMonitor "

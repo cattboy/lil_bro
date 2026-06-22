@@ -492,3 +492,35 @@ def test_start_success_clears_stale_failure_kind(mock_port, mock_find, mock_pope
     sidecar.last_failure_kind = "port_in_use"  # stale from a prior attempt
     assert sidecar.start() is True
     assert sidecar.last_failure_kind is None
+
+
+# ── PawnIO log-string contract: Program.cs <-> lhm_sidecar scanner ────────────
+# The temps-restoring fix lives in tools/lhm-server/Program.cs (C#, not run by
+# pytest). These guard the COUPLING: the sidecar's stdout strings must stay in
+# sync with the substrings lhm_sidecar.py greps, or mark_pawnio_owned() / action
+# logging silently stop firing (devil's-advocate MEDIUM-6). This is a drift guard,
+# NOT a correctness test of the C# behavior (that is verified by manual integration).
+
+def _read_lower(rel):
+    import pathlib
+    return pathlib.Path(rel).read_text(encoding="utf-8", errors="ignore").lower()
+
+
+def test_pawnio_log_string_contract_in_sync():
+    cs = _read_lower("tools/lhm-server/Program.cs")
+    sidecar = _read_lower("src/collectors/sub/lhm_sidecar.py")
+    for needle in (
+        "pawnio installed and running",
+        "pawnio installed but service did not start",
+        "installing pawnio",
+    ):
+        assert needle in cs, f"Program.cs no longer emits '{needle}'"
+        assert needle in sidecar, f"lhm_sidecar.py no longer greps '{needle}'"
+
+
+def test_pawnio_repair_breadcrumb_in_sync():
+    cs = _read_lower("tools/lhm-server/Program.cs")
+    sidecar = _read_lower("src/collectors/sub/lhm_sidecar.py")
+    assert "pawniolib.dll missing" in cs
+    assert "pawniolib.dll missing" in sidecar
+    assert "repairing" in cs  # "repairing via Driver Store"

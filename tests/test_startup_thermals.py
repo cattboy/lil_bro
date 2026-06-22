@@ -74,6 +74,21 @@ class TestRunStartupThermalScan:
 
         assert "skipped" in capsys.readouterr().out.lower()
 
+    @patch("src.utils.pawnio_check.is_pawnio_lib_present", return_value=False)
+    @patch("src.utils.pawnio_check.pawnio_install_state", return_value="broken")
+    @patch("src.utils.debug_logger.get_debug_logger")
+    @patch("src.pipeline.startup_thermals.check_idle_thermals", return_value=_NO_DATA_RESULT)
+    @patch("src.pipeline.startup_thermals.fetch_snapshot", return_value={})
+    @patch("src.pipeline.startup_thermals.LHMSidecar")
+    def test_no_sensors_logs_pawnio_state(self, MockLHM, _fetch, _check, mock_get_log, _state, _lib):
+        """§D: the no-sensors path logs the PawnIO install state for diagnosis."""
+        MockLHM.return_value = _mock_lhm(True)
+        mock_logger = MagicMock()
+        mock_get_log.return_value = mock_logger
+        run_startup_thermal_scan()
+        logged = " ".join(str(c) for c in mock_logger.warning.call_args_list)
+        assert "PawnIO state" in logged
+
     # ── All temps OK ─────────────────────────────────────────────────────────
 
     @patch("src.pipeline.startup_thermals.check_idle_thermals", return_value=_SAFE_RESULT)

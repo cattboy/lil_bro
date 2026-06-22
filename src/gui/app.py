@@ -189,6 +189,14 @@ def run(debug: bool = False) -> int:
         pawnio_was_preinstalled = is_pawnio_service_registered()
     except Exception:
         pawnio_was_preinstalled = False
+    try:
+        from src.utils.pawnio_check import pawnio_install_state, is_pawnio_lib_present
+        log.info(
+            "PawnIO state at launch: %s (registered=%s lib=%s)",
+            pawnio_install_state(), pawnio_was_preinstalled, is_pawnio_lib_present(),
+        )
+    except Exception:
+        pass  # safe: launch-state log is best-effort
 
     # Boot checks ported from the terminal entry point (src/main.py); GUI mode
     # skipped these before. Run at boot so they fire regardless of exit path

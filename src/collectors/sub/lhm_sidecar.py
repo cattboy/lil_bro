@@ -171,6 +171,15 @@ class LHMSidecar:
                     )
                     return False
                 self._elevated = True
+                # The elevated lhm-server has no captured stdout, so the PawnIO
+                # install/repair outcome (and the ownership marker) cannot be
+                # observed on this path -- log the gap so a later "no temps" report
+                # is not a mystery. (Non-admin runs only; the admin path captures
+                # stdout and logs the PawnIO outcome above.)
+                log.warning(
+                    "LHM Sidecar: launched elevated (ShellExecuteW) -- PawnIO install "
+                    "outcome is not observable on this path (stdout not captured)."
+                )
         except Exception as e:
             self.last_failure_kind = "launch_error"
             print_step_done(False)
@@ -191,6 +200,18 @@ class LHMSidecar:
                 # entry exists even when the service failed to start -- so cleanup
                 # removes our own leftover on a same-boot re-run (covers the fast
                 # path where readiness beat the "installing pawnio" line below).
+                # Half-install repair breadcrumb: lhm-server reinstalls PawnIO when
+                # the service runs but PawnIOLib.dll is gone. Informational -- the
+                # terminal PASS/FAIL outcome is recorded by the loop below.
+                for line in self._stdout_lines:
+                    low = line.lower()
+                    if "pawniolib.dll missing" in low or "repairing via driver store" in low:
+                        action_logger.log_action(
+                            "PawnIO",
+                            "Half-install detected (PawnIOLib.dll missing) -- repairing via Driver Store",
+                        )
+                        log.warning("LHM Sidecar: PawnIO repair -- %s", line.strip())
+                        break
                 for line in self._stdout_lines:
                     if "pawnio installed and running" in line.lower():
                         mark_pawnio_owned()

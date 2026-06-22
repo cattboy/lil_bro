@@ -84,21 +84,46 @@ static SensorNode HardwareToNode(IHardware hw)
  // Solution: run pawnio_setup.exe -install -silent, which handles the
 // full Driver Store + device node setup correctly. pawnio_setup.exe is
 // embedded as a resource and extracted to a temp dir at runtime.
+//
+// LOG-STRING CONTRACT: lil_bro's src/collectors/sub/lhm_sidecar.py scans this
+// function's stdout (lower-cased). Keep these substrings intact when editing:
+//   "pawnio installed and running"                -> lil_bro marks PawnIO owner (PASS)
+//   "pawnio installed but service did not start"  -> owner + FAIL
+//   "installing pawnio"                           -> install-progress UI step
+//   "pawniolib.dll missing" / "repairing"         -> half-install repair breadcrumb
 
 static bool EnsurePawnIoInstalled()
 {
     var (serviceExists, serviceRunning) = QueryPawnIoService();
-    if (serviceExists && serviceRunning)
+
+    // A *usable* PawnIO needs BOTH the running kernel driver (which creates the
+    // \Device\PawnIO node) AND the user-mode PawnIOLib.dll that LHM loads to open
+    // it. A running service with the DLL removed (a prior half-uninstall) yields no
+    // CPU sensors -- so verify the library too, not just the service state.
+    if (serviceExists && serviceRunning && PawnIoLibPresent())
         return true;
 
-    if (serviceExists && !serviceRunning)
+    if (serviceExists)
     {
-        // Service registered but stopped — try to start (demand-start after reboot).
-        if (RunSc("start PawnIO"))
-            return true;
-        // Stale entry (wrong arch, previous failed install, etc.) — remove and retry.
-        Console.Error.WriteLine("[lhm-server] PawnIO service exists but failed to start " +
-                                "-- removing stale entry.");
+        if (!serviceRunning)
+        {
+            // Registered but stopped — try to start (demand-start after reboot);
+            // only trust it when PawnIOLib.dll is also present.
+            if (RunSc("start PawnIO") && PawnIoLibPresent())
+                return true;
+            Console.Error.WriteLine("[lhm-server] PawnIO service exists but is not usable " +
+                                    "(failed to start, or PawnIOLib.dll missing) -- removing to reinstall.");
+        }
+        else
+        {
+            // Running but PawnIOLib.dll is gone — the half-installed state that made
+            // CPU temps silently unavailable.
+            Console.WriteLine("[lhm-server] PawnIO service running but PawnIOLib.dll missing " +
+                              "-- repairing via Driver Store.");
+        }
+        // Tear down the broken/stale service so pawnio_setup.exe lays down a clean
+        // install (Driver Store entry + device node + PawnIOLib.dll). Safe here:
+        // this runs before computer.Open(), so no PawnIO handle is held yet.
         RunSc("stop PawnIO");
         RunSc("delete PawnIO");
     }
@@ -193,22 +218,31 @@ static bool EnsurePawnIoInstalled()
     {
         Thread.Sleep(500);
         var (exists, running) = QueryPawnIoService();
-        if (exists && running)
+        if (exists && running && PawnIoLibPresent())
         {
-            Console.WriteLine("[lhm-server] PawnIO installed and running via Driver Store.");
+            Console.WriteLine("[lhm-server] PawnIO installed and running (via Driver Store).");
             return true;
         }
     }
 
-    // pawnio_setup.exe may use StartType=demand — try an explicit sc start.
-    if (RunSc("start PawnIO"))
+    // pawnio_setup.exe may use StartType=demand — try an explicit sc start, but only
+    // declare success once PawnIOLib.dll is also present (service alone is not enough).
+    if (RunSc("start PawnIO") && PawnIoLibPresent())
     {
-        Console.WriteLine("[lhm-server] PawnIO service started.");
+        Console.WriteLine("[lhm-server] PawnIO installed and running (service started).");
         return true;
     }
 
-    Console.Error.WriteLine("[lhm-server] PawnIO installed but service did not start.");
+    Console.Error.WriteLine("[lhm-server] PawnIO installed but service did not start, or PawnIOLib.dll still missing.");
     return false;
+}
+
+static bool PawnIoLibPresent()
+{
+    // LHM (LibreHardwareMonitorLib) opens the ring-0 interface through
+    // PawnIOLib.dll in System32; the kernel service alone is not sufficient.
+    var system = Environment.GetFolderPath(Environment.SpecialFolder.System);
+    return File.Exists(Path.Combine(system, "PawnIOLib.dll"));
 }
 
 static (bool exists, bool running) QueryPawnIoService()
