@@ -201,14 +201,14 @@ class LHMSidecar:
                 # removes our own leftover on a same-boot re-run (covers the fast
                 # path where readiness beat the "installing pawnio" line below).
                 # Half-install repair breadcrumb: lhm-server reinstalls PawnIO when
-                # the service runs but PawnIOLib.dll is gone. Informational -- the
+                # the service runs but the device node is gone. Informational -- the
                 # terminal PASS/FAIL outcome is recorded by the loop below.
                 for line in self._stdout_lines:
                     low = line.lower()
-                    if "pawniolib.dll missing" in low or "repairing via driver store" in low:
+                    if "device node unavailable" in low or "repairing via driver store" in low:
                         action_logger.log_action(
                             "PawnIO",
-                            "Half-install detected (PawnIOLib.dll missing) -- repairing via Driver Store",
+                            "Half-install detected (device node unavailable) -- repairing via Driver Store",
                         )
                         log.warning("LHM Sidecar: PawnIO repair -- %s", line.strip())
                         break

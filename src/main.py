@@ -105,11 +105,11 @@ def main():
         from src.utils.pawnio_check import is_pawnio_service_registered
         pawnio_was_preinstalled = is_pawnio_service_registered()
         try:
-            from src.utils.pawnio_check import pawnio_install_state, is_pawnio_lib_present
+            from src.utils.pawnio_check import pawnio_install_state, is_pawnio_device_present
             from src.utils.debug_logger import get_debug_logger
             get_debug_logger().info(
-                "PawnIO state at launch: %s (registered=%s lib=%s)",
-                pawnio_install_state(), pawnio_was_preinstalled, is_pawnio_lib_present(),
+                "PawnIO state at launch: %s (registered=%s device=%s)",
+                pawnio_install_state(), pawnio_was_preinstalled, is_pawnio_device_present(),
             )
         except Exception:
             pass  # safe: launch-state log is best-effort

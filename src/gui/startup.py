@@ -85,11 +85,11 @@ class StartupOrchestrator(QObject):
                     # stale "not started" default.
                     self.lhm_failure_reason = _describe(lhm, no_sensors=True)
                     try:
-                        from src.utils.pawnio_check import pawnio_install_state, is_pawnio_lib_present
+                        from src.utils.pawnio_check import pawnio_install_state, is_pawnio_device_present
                         from src.utils.debug_logger import get_debug_logger
                         get_debug_logger().warning(
-                            "Sensors: no CPU temp after retries -- PawnIO state=%s (lib=%s)",
-                            pawnio_install_state(), is_pawnio_lib_present(),
+                            "Sensors: no CPU temp after retries -- PawnIO state=%s (device=%s)",
+                            pawnio_install_state(), is_pawnio_device_present(),
                         )
                     except Exception:
                         pass  # safe: diagnostic log is best-effort

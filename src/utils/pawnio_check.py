@@ -1,36 +1,48 @@
-"""Lightweight PawnIO install-state checks — read-only, no side effects.
+r"""Lightweight PawnIO install-state checks — read-only, no side effects.
 
-A *usable* PawnIO requires TWO things, not just a registered service:
-  1. the kernel driver service is registered AND RUNNING — the running driver
-     creates the ``\\Device\\PawnIO`` node that ``PawnIOLib.dll`` opens; a
-     registered-but-stopped service has no device node yet, and
-  2. the user-mode ``PawnIOLib.dll`` is present in ``System32`` —
-     LibreHardwareMonitorLib (and lil_bro's lhm-server sidecar) load it to open
-     the ring-0 interface.
+A *usable* PawnIO is determined by the **device node** ``\\.\PawnIO`` — the ring-0
+interface LibreHardwareMonitor and lil_bro's lhm-server open to read CPU sensors
+(``PawnIOLib.cpp`` opens ``\Device\PawnIO``). The kernel driver creates that node
+only when it is installed AND running AND bound to its PnP device, so the node's
+presence — not a registered service key, and not any ``PawnIOLib.dll`` file — is the
+reliable "is PawnIO usable" signal.
 
-Checking only the service registry key is a false-positive trap: an uninstall
-that removes ``PawnIOLib.dll`` but leaves the service behind (e.g. ``sc delete``
-returning 1072 = marked-for-deletion-until-reboot) yields a registered+running
-driver with no usable library. The old service-only check reported that as
-"installed" while LibreHardwareMonitor itself correctly reported "not installed".
+Why not check ``PawnIOLib.dll``: the official installer puts it in
+``C:\Program Files\PawnIO`` (NOT System32), apps may bundle their own copy, and the
+path is arch-/install-dir-dependent. The device node is location-independent and
+tests the actual interface. ``pawnio_setup.exe`` installs the DLL and the device node
+atomically, so a present device node implies a complete install.
+
+Checking only the service registry key is a false-positive trap: an uninstall can
+remove the device node + ``C:\Program Files\PawnIO`` while leaving the
+``Services\PawnIO`` key behind (e.g. ``sc delete`` returning 1072 =
+marked-for-deletion-until-reboot), which the old service-only check reported as
+"installed" while LibreHardwareMonitor correctly reported "not installed".
 
 All functions are best-effort and never raise — they run on diagnostic / startup
 paths that must not crash the app.
 """
 
-import os
-import subprocess
+import ctypes
 
 # PawnIO is a kernel driver service — its registry presence is under Services,
 # not the Uninstall hive (which is only for MSI/NSIS installers).
 _PAWNIO_SERVICE_KEY = r"SYSTEM\CurrentControlSet\Services\PawnIO"
-_PAWNIO_SERVICE = "PawnIO"
-# Hidden-window flag so the sc.exe probe never flashes a console window.
-_CREATE_NO_WINDOW = 0x08000000
+# Win32 path to the PawnIO device object (\DosDevices\PawnIO -> \Device\PawnIO).
+_PAWNIO_DEVICE_PATH = r"\\.\PawnIO"
+# CreateFile / error constants.
+_OPEN_EXISTING = 3
+_FILE_SHARE_RW = 0x00000001 | 0x00000002  # FILE_SHARE_READ | FILE_SHARE_WRITE
+_INVALID_HANDLE = ctypes.c_void_p(-1).value
+_ERROR_ACCESS_DENIED = 5
 
 
 def is_pawnio_service_registered() -> bool:
-    """Return True if the PawnIO kernel driver service is registered with the SCM."""
+    """Return True if the PawnIO kernel driver service is registered with the SCM.
+
+    Used only for the ownership snapshot and to distinguish "broken" from "absent" —
+    it is NOT a usability signal (the key can outlive a removed device node).
+    """
     import winreg
     try:
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _PAWNIO_SERVICE_KEY):
@@ -41,56 +53,51 @@ def is_pawnio_service_registered() -> bool:
         return False
 
 
-def is_pawnio_running() -> bool:
-    """Return True if the PawnIO service is currently RUNNING (best-effort, never raises).
+def is_pawnio_device_present() -> bool:
+    r"""Return True if the PawnIO ring-0 device ``\\.\PawnIO`` exists (never raises).
 
-    Mirrors lhm-server's ``QueryPawnIoService``: parse ``sc query PawnIO`` stdout for
-    the RUNNING state. The running driver is what creates the ``\\Device\\PawnIO``
-    node that ``PawnIOLib.dll`` opens, so a registered-but-stopped service is not
-    yet usable.
+    Opens the device requesting no access. A valid handle (closed immediately) OR
+    ``ERROR_ACCESS_DENIED`` both mean the device EXISTS — access-denied only fires
+    when the object is present but the caller lacks rights (a non-elevated process).
+    Only FILE_NOT_FOUND / PATH_NOT_FOUND (or any other failure) means "not present".
+    This existence test is therefore admin-independent.
     """
     try:
-        result = subprocess.run(
-            ["sc", "query", _PAWNIO_SERVICE],
-            capture_output=True, timeout=10, text=True,
-            creationflags=_CREATE_NO_WINDOW,
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        create_file = kernel32.CreateFileW
+        create_file.restype = ctypes.c_void_p
+        create_file.argtypes = [
+            ctypes.c_wchar_p, ctypes.c_uint32, ctypes.c_uint32,
+            ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p,
+        ]
+        handle = create_file(
+            _PAWNIO_DEVICE_PATH, 0, _FILE_SHARE_RW, None, _OPEN_EXISTING, 0, None
         )
     except Exception:
         return False
-    if result.returncode != 0:
-        return False
-    return "RUNNING" in (result.stdout or "")
-
-
-def is_pawnio_lib_present() -> bool:
-    """Return True if the user-mode ``PawnIOLib.dll`` is installed in ``System32``.
-
-    This is the signal LibreHardwareMonitor itself uses; it is removed on uninstall
-    while the service key can linger, so it is the reliable "is PawnIO usable" check.
-    Never raises — a missing ``%SystemRoot%`` falls back to ``C:\\Windows``.
-    """
-    system_root = os.environ.get("SystemRoot", r"C:\Windows")
-    return os.path.isfile(os.path.join(system_root, "System32", "PawnIOLib.dll"))
+    if handle is not None and handle != _INVALID_HANDLE:
+        try:
+            kernel32.CloseHandle(ctypes.c_void_p(handle))
+        except Exception:
+            pass  # safe: a handle leak on shutdown is harmless
+        return True
+    return ctypes.get_last_error() == _ERROR_ACCESS_DENIED
 
 
 def pawnio_install_state() -> str:
-    """Classify the PawnIO install into ``"usable"`` | ``"broken"`` | ``"absent"``.
+    r"""Classify the PawnIO install into ``"usable"`` | ``"broken"`` | ``"absent"``.
 
-    - ``"absent"``: service not registered and no library (nothing installed).
-    - ``"usable"``: service registered AND running AND ``PawnIOLib.dll`` present.
-    - ``"broken"``: installed but it won't read sensors — registered yet not
-      running or missing the library (the half-installed state), OR the rare
-      ``PawnIOLib.dll``-without-service artifact of a partial manual uninstall.
+    - ``"usable"``: the ``\\.\PawnIO`` device node is present (driver installed +
+      running + bound — CPU sensors will read).
+    - ``"broken"``: no device node, but the service key is still registered (the
+      half-installed leftover — installed-but-won't-work).
+    - ``"absent"``: no device node and no service key (nothing installed).
     """
-    registered = is_pawnio_service_registered()
-    lib = is_pawnio_lib_present()
-    if not registered:
-        return "broken" if lib else "absent"
-    if is_pawnio_running() and lib:
+    if is_pawnio_device_present():
         return "usable"
-    return "broken"
+    return "broken" if is_pawnio_service_registered() else "absent"
 
 
 def is_pawnio_usable() -> bool:
-    """Return True only if PawnIO is fully usable (service running AND library present)."""
-    return pawnio_install_state() == "usable"
+    """Return True only if PawnIO is fully usable (the ring-0 device node is present)."""
+    return is_pawnio_device_present()

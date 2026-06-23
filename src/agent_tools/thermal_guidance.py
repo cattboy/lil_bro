@@ -372,9 +372,9 @@ def classify_sidecar_failure(
             )
         elif pawnio_state == "broken":
             msg = (
-                "Thermal helper is running but PawnIO isn't working -- its support "
-                "files are missing or the driver is blocked (often Secure Boot / "
-                "driver signing). Retry to reinstall it."
+                "Thermal helper is running but PawnIO isn't providing the sensor "
+                "interface -- its driver is half-installed or blocked (often Secure "
+                "Boot / driver signing). Retry to reinstall it."
             )
         else:  # absent
             msg = (

@@ -74,7 +74,7 @@ class TestRunStartupThermalScan:
 
         assert "skipped" in capsys.readouterr().out.lower()
 
-    @patch("src.utils.pawnio_check.is_pawnio_lib_present", return_value=False)
+    @patch("src.utils.pawnio_check.is_pawnio_device_present", return_value=False)
     @patch("src.utils.pawnio_check.pawnio_install_state", return_value="broken")
     @patch("src.utils.debug_logger.get_debug_logger")
     @patch("src.pipeline.startup_thermals.check_idle_thermals", return_value=_NO_DATA_RESULT)

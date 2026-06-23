@@ -1,11 +1,15 @@
-"""Unit tests for src/utils/pawnio_check.py — PawnIO install-state checks.
+r"""Unit tests for src/utils/pawnio_check.py — PawnIO install-state checks.
 
-Covers the false-positive bug that caused the "no temps" report: a registered +
-RUNNING PawnIO service with PawnIOLib.dll MISSING must classify as "broken"
-(not usable), not "installed". Every check is best-effort and must never raise.
+The reliable "usable" signal is the ``\\.\PawnIO`` device node (NOT a System32 /
+Program Files ``PawnIOLib.dll`` path): a registered service whose device node is
+gone (a half-uninstall leftover) must classify as "broken", not "installed". Every
+check is best-effort and must never raise.
 """
 
+import ctypes
 from unittest.mock import MagicMock, patch
+
+_INVALID = ctypes.c_void_p(-1).value
 
 
 # ── is_pawnio_service_registered (registry key) ───────────────────────────────
@@ -36,103 +40,76 @@ class TestServiceRegistered:
         assert "Uninstall" not in _PAWNIO_SERVICE_KEY
 
 
-# ── is_pawnio_running (sc query → RUNNING) ────────────────────────────────────
+# ── is_pawnio_device_present (\\.\PawnIO openability) ──────────────────────────
 
-class TestServiceRunning:
+class TestDevicePresent:
     @staticmethod
-    def _result(returncode=0, stdout=""):
-        r = MagicMock()
-        r.returncode = returncode
-        r.stdout = stdout
-        return r
+    def _kernel32(handle):
+        k = MagicMock()
+        k.CreateFileW.return_value = handle
+        return k
 
-    def test_true_when_running(self):
-        from src.utils.pawnio_check import is_pawnio_running
-        out = "SERVICE_NAME: PawnIO\n        STATE   : 4  RUNNING"
-        with patch("src.utils.pawnio_check.subprocess.run", return_value=self._result(0, out)):
-            assert is_pawnio_running() is True
+    def test_true_when_handle_valid(self):
+        from src.utils.pawnio_check import is_pawnio_device_present
+        k = self._kernel32(0x1234)
+        with patch("src.utils.pawnio_check.ctypes.WinDLL", return_value=k):
+            assert is_pawnio_device_present() is True
+            k.CloseHandle.assert_called_once()
 
-    def test_false_when_stopped(self):
-        from src.utils.pawnio_check import is_pawnio_running
-        out = "SERVICE_NAME: PawnIO\n        STATE   : 1  STOPPED"
-        with patch("src.utils.pawnio_check.subprocess.run", return_value=self._result(0, out)):
-            assert is_pawnio_running() is False
+    def test_true_when_access_denied_means_exists(self):
+        """Non-admin open of an EXISTING device returns ERROR_ACCESS_DENIED (5)."""
+        from src.utils.pawnio_check import is_pawnio_device_present
+        k = self._kernel32(_INVALID)
+        with patch("src.utils.pawnio_check.ctypes.WinDLL", return_value=k), \
+             patch("src.utils.pawnio_check.ctypes.get_last_error", return_value=5):
+            assert is_pawnio_device_present() is True
+            k.CloseHandle.assert_not_called()
 
-    def test_false_when_service_absent_rc1060(self):
-        from src.utils.pawnio_check import is_pawnio_running
-        with patch("src.utils.pawnio_check.subprocess.run", return_value=self._result(1060, "")):
-            assert is_pawnio_running() is False
+    def test_false_when_file_not_found(self):
+        from src.utils.pawnio_check import is_pawnio_device_present
+        k = self._kernel32(_INVALID)
+        with patch("src.utils.pawnio_check.ctypes.WinDLL", return_value=k), \
+             patch("src.utils.pawnio_check.ctypes.get_last_error", return_value=2):
+            assert is_pawnio_device_present() is False
 
     def test_false_and_no_raise_on_exception(self):
-        from src.utils.pawnio_check import is_pawnio_running
-        with patch("src.utils.pawnio_check.subprocess.run", side_effect=OSError("boom")):
-            assert is_pawnio_running() is False
-
-
-# ── is_pawnio_lib_present (System32\PawnIOLib.dll) ────────────────────────────
-
-class TestLibPresent:
-    def test_true_when_dll_exists(self):
-        from src.utils.pawnio_check import is_pawnio_lib_present
-        with patch("os.path.isfile", return_value=True) as mock_isfile:
-            assert is_pawnio_lib_present() is True
-            called = mock_isfile.call_args[0][0]
-            assert called.lower().endswith("system32\\pawniolib.dll")
-
-    def test_false_when_dll_missing(self):
-        from src.utils.pawnio_check import is_pawnio_lib_present
-        with patch("os.path.isfile", return_value=False):
-            assert is_pawnio_lib_present() is False
-
-    def test_no_raise_when_systemroot_unset(self):
-        from src.utils.pawnio_check import is_pawnio_lib_present
-        with patch.dict("os.environ", {}, clear=True), \
-             patch("os.path.isfile", return_value=False) as mock_isfile:
-            assert is_pawnio_lib_present() is False
-            called = mock_isfile.call_args[0][0]
-            assert called.lower().startswith("c:\\windows")
+        from src.utils.pawnio_check import is_pawnio_device_present
+        with patch("src.utils.pawnio_check.ctypes.WinDLL", side_effect=OSError("boom")):
+            assert is_pawnio_device_present() is False
 
 
 # ── pawnio_install_state / is_pawnio_usable (the tri-state) ──────────────────
 
 class TestInstallState:
     @staticmethod
-    def _patch(registered, running, lib):
+    def _patch(device, registered):
         return patch.multiple(
             "src.utils.pawnio_check",
+            is_pawnio_device_present=MagicMock(return_value=device),
             is_pawnio_service_registered=MagicMock(return_value=registered),
-            is_pawnio_running=MagicMock(return_value=running),
-            is_pawnio_lib_present=MagicMock(return_value=lib),
         )
 
-    def test_usable_when_registered_running_lib(self):
+    def test_usable_when_device_present(self):
         from src.utils.pawnio_check import pawnio_install_state, is_pawnio_usable
-        with self._patch(True, True, True):
+        with self._patch(device=True, registered=True):
             assert pawnio_install_state() == "usable"
             assert is_pawnio_usable() is True
 
-    def test_broken_when_running_but_no_lib(self):
-        """THE bug: service running, PawnIOLib.dll missing -> broken, NOT usable."""
-        from src.utils.pawnio_check import pawnio_install_state, is_pawnio_usable
-        with self._patch(True, True, False):
-            assert pawnio_install_state() == "broken"
-            assert is_pawnio_usable() is False
-
-    def test_broken_when_registered_not_running(self):
-        """BLOCKER-1 edge: registered + lib present but service stopped -> broken
-        (no \\Device\\PawnIO node until the driver actually runs)."""
-        from src.utils.pawnio_check import pawnio_install_state, is_pawnio_usable
-        with self._patch(True, False, True):
-            assert pawnio_install_state() == "broken"
-            assert is_pawnio_usable() is False
-
-    def test_broken_when_lib_without_service(self):
+    def test_usable_ignores_service_key(self):
+        """Device present is sufficient even if the service-key probe disagrees."""
         from src.utils.pawnio_check import pawnio_install_state
-        with self._patch(False, False, True):
-            assert pawnio_install_state() == "broken"
+        with self._patch(device=True, registered=False):
+            assert pawnio_install_state() == "usable"
 
-    def test_absent_when_nothing_installed(self):
+    def test_broken_when_no_device_but_registered(self):
+        """THE bug: service key lingers, device node gone -> broken, NOT usable."""
         from src.utils.pawnio_check import pawnio_install_state, is_pawnio_usable
-        with self._patch(False, False, False):
+        with self._patch(device=False, registered=True):
+            assert pawnio_install_state() == "broken"
+            assert is_pawnio_usable() is False
+
+    def test_absent_when_no_device_no_service(self):
+        from src.utils.pawnio_check import pawnio_install_state, is_pawnio_usable
+        with self._patch(device=False, registered=False):
             assert pawnio_install_state() == "absent"
             assert is_pawnio_usable() is False

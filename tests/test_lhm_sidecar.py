@@ -521,6 +521,6 @@ def test_pawnio_log_string_contract_in_sync():
 def test_pawnio_repair_breadcrumb_in_sync():
     cs = _read_lower("tools/lhm-server/Program.cs")
     sidecar = _read_lower("src/collectors/sub/lhm_sidecar.py")
-    assert "pawniolib.dll missing" in cs
-    assert "pawniolib.dll missing" in sidecar
+    assert "device node unavailable" in cs
+    assert "device node unavailable" in sidecar
     assert "repairing" in cs  # "repairing via Driver Store"

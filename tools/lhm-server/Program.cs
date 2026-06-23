@@ -8,6 +8,7 @@
 using System.Diagnostics;
 using System.Net;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -90,43 +91,33 @@ static SensorNode HardwareToNode(IHardware hw)
 //   "pawnio installed and running"                -> lil_bro marks PawnIO owner (PASS)
 //   "pawnio installed but service did not start"  -> owner + FAIL
 //   "installing pawnio"                           -> install-progress UI step
-//   "pawniolib.dll missing" / "repairing"         -> half-install repair breadcrumb
+//   "device node unavailable" / "repairing"      -> half-install repair breadcrumb
 
 static bool EnsurePawnIoInstalled()
 {
     var (serviceExists, serviceRunning) = QueryPawnIoService();
 
-    // A *usable* PawnIO needs BOTH the running kernel driver (which creates the
-    // \Device\PawnIO node) AND the user-mode PawnIOLib.dll that LHM loads to open
-    // it. A running service with the DLL removed (a prior half-uninstall) yields no
-    // CPU sensors -- so verify the library too, not just the service state.
-    if (serviceExists && serviceRunning && PawnIoLibPresent())
+    // A *usable* PawnIO is defined by the ring-0 device node \\.\PawnIO, which the
+    // driver creates only when installed AND running AND bound to its PnP device.
+    // The registered service key and the PawnIOLib.dll file are NOT sufficient: a
+    // half-uninstall can leave the service key while the device node + the
+    // C:\Program Files\PawnIO payload are gone, yielding no CPU sensors.
+    if (PawnIoDevicePresent())
         return true;
 
-    if (serviceExists)
+    if (serviceExists && !serviceRunning)
     {
-        if (!serviceRunning)
-        {
-            // Registered but stopped — try to start (demand-start after reboot);
-            // only trust it when PawnIOLib.dll is also present.
-            if (RunSc("start PawnIO") && PawnIoLibPresent())
-                return true;
-            Console.Error.WriteLine("[lhm-server] PawnIO service exists but is not usable " +
-                                    "(failed to start, or PawnIOLib.dll missing) -- removing to reinstall.");
-        }
-        else
-        {
-            // Running but PawnIOLib.dll is gone — the half-installed state that made
-            // CPU temps silently unavailable.
-            Console.WriteLine("[lhm-server] PawnIO service running but PawnIOLib.dll missing " +
-                              "-- repairing via Driver Store.");
-        }
-        // Tear down the broken/stale service so pawnio_setup.exe lays down a clean
-        // install (Driver Store entry + device node + PawnIOLib.dll). Safe here:
-        // this runs before computer.Open(), so no PawnIO handle is held yet.
-        RunSc("stop PawnIO");
-        RunSc("delete PawnIO");
+        // Registered but stopped — a demand-start may bring the device node up.
+        if (RunSc("start PawnIO") && PawnIoDevicePresent())
+            return true;
     }
+    if (serviceExists)
+        Console.WriteLine("[lhm-server] PawnIO present but device node unavailable " +
+                          "-- repairing via Driver Store.");
+
+    // Reinstall in place via pawnio_setup.exe -install -silent. No sc stop/delete
+    // teardown: the installer repairs a registered-but-no-device-node state in place
+    // (empirically confirmed), and a teardown carried its own sc-delete-1072 risk.
 
     // Locate pawnio_setup.exe — embedded resource first, then disk fallback
     // (PyInstaller bundles it next to lhm-server.exe in _MEIPASS/tools/).
@@ -212,13 +203,12 @@ static bool EnsurePawnIoInstalled()
         catch { /* non-fatal */ }
     }
 
-    // Poll for the PawnIO service to appear — Driver Store install and sc start
-    // happen asynchronously inside pawnio_setup.exe.
+    // Poll for the PawnIO device node to appear — the Driver Store install + sc
+    // start happen asynchronously inside pawnio_setup.exe.
     for (int i = 0; i < 20; i++)
     {
         Thread.Sleep(500);
-        var (exists, running) = QueryPawnIoService();
-        if (exists && running && PawnIoLibPresent())
+        if (PawnIoDevicePresent())
         {
             Console.WriteLine("[lhm-server] PawnIO installed and running (via Driver Store).");
             return true;
@@ -226,23 +216,41 @@ static bool EnsurePawnIoInstalled()
     }
 
     // pawnio_setup.exe may use StartType=demand — try an explicit sc start, but only
-    // declare success once PawnIOLib.dll is also present (service alone is not enough).
-    if (RunSc("start PawnIO") && PawnIoLibPresent())
+    // declare success once the device node is present (service alone is not enough).
+    if (RunSc("start PawnIO") && PawnIoDevicePresent())
     {
         Console.WriteLine("[lhm-server] PawnIO installed and running (service started).");
         return true;
     }
 
-    Console.Error.WriteLine("[lhm-server] PawnIO installed but service did not start, or PawnIOLib.dll still missing.");
+    Console.Error.WriteLine("[lhm-server] PawnIO installed but service did not start, or the device node is still unavailable.");
     return false;
 }
 
-static bool PawnIoLibPresent()
+[DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+static extern IntPtr CreateFileW(string lpFileName, uint dwDesiredAccess,
+    uint dwShareMode, IntPtr lpSecurityAttributes, uint dwCreationDisposition,
+    uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+
+[DllImport("kernel32.dll", SetLastError = true)]
+static extern bool CloseHandle(IntPtr hObject);
+
+static bool PawnIoDevicePresent()
 {
-    // LHM (LibreHardwareMonitorLib) opens the ring-0 interface through
-    // PawnIOLib.dll in System32; the kernel service alone is not sufficient.
-    var system = Environment.GetFolderPath(Environment.SpecialFolder.System);
-    return File.Exists(Path.Combine(system, "PawnIOLib.dll"));
+    // The reliable "usable" signal: can the ring-0 device \\.\PawnIO be resolved?
+    // A valid handle OR ERROR_ACCESS_DENIED (5) both mean it EXISTS; FILE_NOT_FOUND
+    // means it does not. lhm-server runs elevated, so normally a valid handle.
+    // Requesting 0 access just probes existence (never reads/writes the device).
+    const uint OPEN_EXISTING = 3;
+    const uint FILE_SHARE_RW = 0x1 | 0x2;
+    var handle = CreateFileW(@"\\.\PawnIO", 0, FILE_SHARE_RW, IntPtr.Zero,
+                             OPEN_EXISTING, 0, IntPtr.Zero);
+    if (handle != IntPtr.Zero && handle != new IntPtr(-1))
+    {
+        CloseHandle(handle);
+        return true;
+    }
+    return Marshal.GetLastWin32Error() == 5; // ERROR_ACCESS_DENIED -> exists
 }
 
 static (bool exists, bool running) QueryPawnIoService()
