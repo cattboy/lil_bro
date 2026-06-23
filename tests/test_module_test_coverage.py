@@ -40,33 +40,9 @@ _STRUCTURAL_SUFFIXES = ("__init__", "._version", ".__main__")
 # this suite — extend the test suite, do not extend this list casually.
 # ---------------------------------------------------------------------------
 ALLOWLIST: dict[str, str] = {
-    # Exercised transitively through src.benchmarks.cinebench; no dedicated
-    # unit test for the split-out helpers yet.
-    "src.benchmarks.cinebench_discovery": "helper of cinebench.py; no dedicated test",
-    "src.benchmarks.cinebench_monitor": "helper of cinebench.py; no dedicated test",
-    "src.benchmarks.cinebench_parser": "helper of cinebench.py; no dedicated test",
-    # Sub-dumpers driven through src.collectors.spec_dumper. Vendor-specific
-    # output parsing is covered indirectly via test_spec_dumper / test_dump_parser.
-    "src.collectors.sub.amd_smi_dumper": "sub-dumper of spec_dumper.py; no dedicated test",
-    "src.collectors.sub.dxdiag_dumper": "sub-dumper of spec_dumper.py; no dedicated test",
-    "src.collectors.sub.libra_hm_dumper": "sub-dumper of spec_dumper.py; no dedicated test",
-    "src.collectors.sub.wmi_dumper": "sub-dumper of spec_dumper.py; no dedicated test",
-    "src.collectors.sub.lhm_discovery": "LHM helper exercised via test_lhm_sidecar; no dedicated test",
-    "src.collectors.sub.lhm_http": "LHM helper exercised via test_lhm_sidecar; no dedicated test",
-    # QSS string builders, exercised through src.gui.theme.stylesheet (which
-    # test_theme drives via build_stylesheet). No per-module test.
-    "src.gui.theme.stylesheet_dialogs": "QSS builder under theme.stylesheet; covered via test_theme",
-    "src.gui.theme.stylesheet_foundation": "QSS builder under theme.stylesheet; covered via test_theme",
-    "src.gui.theme.stylesheet_interactive": "QSS builder under theme.stylesheet; covered via test_theme",
-    "src.gui.theme.stylesheet_monitoring": "QSS builder under theme.stylesheet; covered via test_theme",
-    # Thin Qt signal-wiring / widget glue; no isolated test yet.
-    "src.gui.widgets.mouse_ready_dialog": "simple dialog widget; no dedicated test",
-    "src.gui.widgets.output_view": "simple view widget; no dedicated test",
-    # Heavy/offline GGUF loader — hard to unit-test without a model on disk.
-    "src.llm.model_loader": "GGUF loader; needs model artifact, no dedicated test",
-    # Low-level utility helpers.
-    "src.utils._console": "console helper; no dedicated test",
-    "src.utils.integrity": "hashing/integrity util; no dedicated test",
+    # Empty: every substantive module under src/ now has a dedicated test.
+    # Add an entry here (module -> reason) only when a module is intentionally
+    # left untested; prefer writing a dedicated test instead.
 }
 
 
