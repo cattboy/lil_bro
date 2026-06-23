@@ -24,6 +24,7 @@ from typing import Optional
 from ...utils.action_logger import action_logger
 from ...utils.debug_logger import get_debug_logger
 from ...utils.formatting import print_dim, print_info, print_step, print_step_done, print_warning
+from ...utils.pawnio_check import is_pawnio_device_present, pawnio_install_state
 from ...utils.pawnio_ownership import mark_pawnio_owned
 from ...utils.platform import is_admin
 from ...utils.subprocess_utils import CREATE_NO_WINDOW
@@ -230,6 +231,15 @@ class LHMSidecar:
                     if "pawnio" in line.lower():
                         print_warning(f"[lhm-server] {line}")
                         log.debug("LHM Sidecar: PawnIO activity -- %s", line.strip())
+                # Post-init counterpart to the app-entry "PawnIO state at launch" line:
+                # by now the sidecar has installed/repaired PawnIO if needed, so this
+                # records the state the user actually runs with (resolves the
+                # "launch=absent but temps work" gap). The device probe reads the OS, so
+                # it is accurate even on the elevated path where stdout is uncaptured.
+                log.info(
+                    "PawnIO state after sidecar init: %s (device=%s)",
+                    pawnio_install_state(), is_pawnio_device_present(),
+                )
                 return True
 
             # Surface PawnIO install progress so the user sees activity during

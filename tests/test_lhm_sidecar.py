@@ -494,6 +494,42 @@ def test_start_success_clears_stale_failure_kind(mock_port, mock_find, mock_pope
     assert sidecar.last_failure_kind is None
 
 
+# ── Post-init PawnIO state log line ──────────────────────────────────────────
+# Counterpart to the app-entry "PawnIO state at launch" line: on a successful start
+# the sidecar has installed/repaired PawnIO, so the post-init state is logged too —
+# otherwise the debug log shows only "launch: absent" even when temps work.
+
+@patch("src.collectors.sub.lhm_sidecar.is_pawnio_device_present", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.pawnio_install_state", return_value="usable")
+@patch("src.collectors.sub.lhm_sidecar.time.sleep")
+@patch("src.collectors.sub.lhm_sidecar.is_admin", return_value=True)
+@patch("src.collectors.sub.lhm_sidecar.time.monotonic")
+@patch("src.collectors.sub.lhm_sidecar._is_lhm_responding")
+@patch("src.collectors.sub.lhm_sidecar.subprocess.Popen")
+@patch("src.collectors.sub.lhm_sidecar.find_lhm_executable", return_value=(r"C:\tools\lhm-server.exe", True))
+@patch("src.collectors.sub.lhm_sidecar._is_port_in_use", return_value=False)
+def test_start_logs_post_init_pawnio_state(
+    mock_port, mock_find, mock_popen, mock_resp, mock_mono, mock_admin, mock_sleep, mock_state, mock_device
+):
+    """Successful start() logs a 'PawnIO state after sidecar init' line so the debug log
+    records the post-install state (resolves the 'launch=absent but temps work' gap)."""
+    mock_proc = MagicMock()
+    mock_proc.pid = 321
+    mock_proc.stderr = None
+    mock_proc.poll.return_value = None
+    mock_popen.return_value = mock_proc
+    mock_mono.side_effect = [0.0, 0.5, 1.0]
+    mock_resp.side_effect = [False, True]
+
+    sidecar = LHMSidecar()
+    with patch("src.collectors.sub.lhm_sidecar.log") as mock_log:
+        assert sidecar.start() is True
+
+    fmts = [call.args[0] for call in mock_log.info.call_args_list if call.args]
+    assert any("PawnIO state after sidecar init" in f for f in fmts), \
+        f"post-init state line not logged; got {fmts}"
+
+
 # ── PawnIO log-string contract: Program.cs <-> lhm_sidecar scanner ────────────
 # The temps-restoring fix lives in tools/lhm-server/Program.cs (C#, not run by
 # pytest). These guard the COUPLING: the sidecar's stdout strings must stay in
