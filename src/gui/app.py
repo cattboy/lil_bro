@@ -94,11 +94,11 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
         except Exception:
             pass  # safe: revert-on-quit best-effort; thread may already be done
 
-    # Wait for an in-flight dashboard monitor fix so we don't tear down LHM /
-    # the manifest writer while _MonitorFixWorker is mid execute_fix(). The
-    # atomic-write in revert._write_manifest survives a hard kill; this wait
-    # still lets the worker land its append cleanly so the user's "Fix Now"
-    # click is reflected in the next session's Revert.
+    # Wait for in-flight dashboard fix workers so we don't tear down LHM /
+    # the manifest writer while a worker is mid execute_fix(). The atomic-write
+    # in revert._write_manifest survives a hard kill; this wait still lets the
+    # worker land its append cleanly so the user's "Fix Now" click is reflected
+    # in the next session's Revert.
     # Restore-point creation (Checkpoint-Computer) can take up to 60s; use a
     # longer wait when one is in progress so the manifest entry lands cleanly.
     # Falls back to 5s when only a fast NPI import is in flight.
@@ -116,6 +116,20 @@ def _run_app_cleanup(main, bridge, runtime: dict, log, settings,
             nvidia_fix_thread.wait(_rp_wait)
         except Exception:
             pass  # safe: nvidia-fix-on-quit best-effort
+
+    setting_fix_thread = runtime.get("setting_fix_thread")
+    if setting_fix_thread is not None:
+        try:
+            setting_fix_thread.wait(_rp_wait)
+        except Exception:
+            pass  # safe: setting-fix-on-quit best-effort
+
+    thermal_retry_thread = runtime.get("thermal_retry_thread")
+    if thermal_retry_thread is not None:
+        try:
+            thermal_retry_thread.wait(2000)
+        except Exception:
+            pass  # safe: thermal-retry-on-quit best-effort
 
     # Wait for an in-flight monitor refresh (200-800 ms ctypes
     # EnumDisplayDevicesW probe) so we don't tear down Qt while the

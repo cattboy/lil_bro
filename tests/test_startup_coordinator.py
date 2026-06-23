@@ -621,6 +621,14 @@ class TestSettingFixFlow:
         coord._main._dashboard.set_game_mode_findings.assert_called_once_with({"status": "OK"})
         coord._main._dashboard.set_power_plan_findings.assert_not_called()
 
+    def test_result_true_marks_hags_applied(self):
+        coord = _make_coordinator({})
+        coord._setting_fix_check_name = "hags"
+        coord._on_setting_fix_result(True)
+        coord._main._dashboard.set_hags_findings.assert_called_once_with({"status": "OK"})
+        coord._main._dashboard.set_power_plan_findings.assert_not_called()
+        coord._main._dashboard.set_game_mode_findings.assert_not_called()
+
     def test_result_false_shows_error_dialog_and_keeps_card(self):
         coord = _make_coordinator({})
         coord._setting_fix_check_name = "power_plan"

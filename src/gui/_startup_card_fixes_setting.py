@@ -124,7 +124,7 @@ class SettingThermalFixMixin:
 
     @Slot(bool)
     def _on_setting_fix_result(self, ok: bool) -> None:
-        """Queued (main-thread) wrapper for the Power Plan / Game Mode result.
+        """Queued (main-thread) wrapper for the Power Plan / Game Mode / HAGS result.
 
         Reads the check_name captured in _start_setting_fix rather than
         self.sender() -- the latter is unreliable for queued connections and
@@ -137,6 +137,8 @@ class SettingThermalFixMixin:
             # refresh_fix_cards_after_revert.
             if check_name == "game_mode":
                 self._main._dashboard.set_game_mode_findings({"status": "OK"})
+            elif check_name == "hags":
+                self._main._dashboard.set_hags_findings({"status": "OK"})
             else:
                 self._main._dashboard.set_power_plan_findings({"status": "OK"})
 
@@ -188,6 +190,7 @@ class SettingThermalFixMixin:
         thread.finished.connect(self._on_thermal_retry_thread_finished)
         thread.start()
 
+    @Slot()
     def _on_thermal_retry_finished(self) -> None:
         """Main-thread handler: apply the retry result, re-enable the button.
 
